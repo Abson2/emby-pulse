@@ -43,7 +43,6 @@ def query_db(query, args=(), one=False):
         conn.close()
         return (rv[0] if rv else None) if one else rv
     except Exception as e:
-        print(f"SQL Error: {e}")
         return None
 
 def get_user_map():
@@ -108,7 +107,7 @@ async def api_dashboard(user_id: Optional[str] = None):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# === 🔥 深度搜索版 API: 最近播放 ===
+# === API: 最近播放 (限制 20) ===
 @app.get("/api/stats/recent")
 async def api_recent_activity(user_id: Optional[str] = None):
     try:
@@ -118,8 +117,6 @@ async def api_recent_activity(user_id: Optional[str] = None):
             where += " AND UserId = ?"
             params.append(user_id)
         
-        # 🔥 修改点1：LIMIT 增大到 300！
-        # 这样即使你连看 50 集同一部剧，我们也能挖到 300 条以前的记录，找到不同的剧
         sql = f"""
         SELECT DateCreated, UserId, ItemId, ItemName, ItemType, PlayDuration 
         FROM PlaybackActivity 
@@ -133,11 +130,8 @@ async def api_recent_activity(user_id: Optional[str] = None):
         raw_items = [dict(row) for row in results]
         user_map = get_user_map()
         
-        # 批量查元数据 (分批处理)
         metadata_map = {}
         all_ids = [item['ItemId'] for item in raw_items]
-        
-        # 只查前 60 个 item 的元数据，节省 API 资源 (通常前 60 个就够凑齐显示了)
         ids_to_check = all_ids[:100] 
         
         if EMBY_API_KEY:
@@ -166,7 +160,6 @@ async def api_recent_activity(user_id: Optional[str] = None):
             
             meta = metadata_map.get(item['ItemId'])
             
-            # API 识别
             if meta:
                 if meta.get('Type') == 'Episode':
                     is_episode = True
@@ -175,13 +168,11 @@ async def api_recent_activity(user_id: Optional[str] = None):
                         if meta.get('SeriesName'):
                              display_title = meta.get('SeriesName')
             
-            # 文本兜底识别
             if not meta or (is_episode and display_id == item['ItemId']):
                 original_name = item['ItemName']
                 if ' - ' in original_name:
                     display_title = original_name.split(' - ')[0]
 
-            # 确定唯一键
             if is_episode and meta and meta.get('SeriesId'):
                 unique_key = meta.get('SeriesId')
             else:
@@ -193,8 +184,8 @@ async def api_recent_activity(user_id: Optional[str] = None):
                 item['DisplayTitle'] = display_title
                 final_data.append(item)
             
-            # 🔥 修改点2：目标是填满 24 个格子 (即使是大屏幕也够了)
-            if len(final_data) >= 24: 
+            # 🔥 修改：只取前 20 个
+            if len(final_data) >= 20: 
                 break
                 
         return {"status": "success", "data": final_data}
@@ -267,7 +258,11 @@ async def proxy_image(item_id: str, img_type: str):
     suffix = "/Images/Backdrop?maxWidth=800" if img_type == 'backdrop' else "/Images/Primary?maxHeight=400"
     try:
         resp = requests.get(f"{EMBY_HOST}/emby/Items/{target_id}{suffix}", timeout=5)
-        return Response(content=resp.content, media_type=resp.headers.get("Content-Type", "image/jpeg"))
+        # 如果 Emby 返回 200 才透传，否则 404
+        if resp.status_code == 200:
+            return Response(content=resp.content, media_type=resp.headers.get("Content-Type", "image/jpeg"))
+        else:
+            return Response(status_code=404)
     except:
         return Response(status_code=404)
 
