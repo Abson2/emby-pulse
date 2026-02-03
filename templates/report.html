@@ -4,7 +4,6 @@
 
 {% block head %}
 <style>
-    /* 手机海报固定比例 375x667 */
     .poster-container {
         width: 375px; height: 667px;
         background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
@@ -14,6 +13,11 @@
         background: rgba(255, 255, 255, 0.1); 
         backdrop-filter: blur(10px); 
         border: 1px solid rgba(255, 255, 255, 0.2); 
+    }
+    /* 选中的用户高亮 */
+    .user-option.selected {
+        border-color: #16a34a; /* green-600 */
+        background-color: #f0fdf4; /* green-50 */
     }
 </style>
 {% endblock %}
@@ -27,22 +31,16 @@
         <div class="space-y-6 flex-1">
             <div>
                 <label class="block text-sm font-bold text-gray-700 mb-2">选择用户</label>
-                <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                    <label class="flex items-center cursor-pointer">
-                        <input type="checkbox" checked class="text-green-600 rounded focus:ring-green-500" disabled>
-                        <span class="ml-2 text-sm text-gray-700">当前：管理员</span>
-                    </label>
+                <div id="user-list-container" class="space-y-2 text-sm max-h-60 overflow-y-auto pr-1">
+                    <p class="text-gray-400 text-xs">正在加载用户...</p>
                 </div>
-                <p class="text-xs text-gray-400 mt-2">*多用户选择功能开发中</p>
             </div>
 
             <div>
                 <label class="block text-sm font-bold text-gray-700 mb-2">时间范围</label>
                 <select id="time-range" class="w-full border-gray-300 rounded-lg shadow-sm focus:border-green-500 focus:ring-green-500 p-2 border">
-                    <option value="week">本周</option>
-                    <option value="month" selected>本月</option>
-                    <option value="year">2026年度</option>
-                </select>
+                    <option value="all" selected>全部历史</option>
+                    </select>
             </div>
 
             <div>
@@ -62,34 +60,33 @@
         <div class="absolute inset-0 opacity-10 pointer-events-none" style="background-image: radial-gradient(#94a3b8 1px, transparent 1px); background-size: 20px 20px;"></div>
         
         <div id="capture-area" class="poster-container flex flex-col relative shrink-0">
-            
-            <div class="absolute inset-0 z-0 opacity-40 blur-sm bg-cover bg-center" style="background-image: url('https://image.tmdb.org/t/p/w500/r2J02Z2OpLYct205OE24DkQnhZ0.jpg');"></div>
+            <div id="poster-bg" class="absolute inset-0 z-0 opacity-40 blur-sm bg-cover bg-center transition-all duration-1000" style="background-image: url('https://image.tmdb.org/t/p/w500/r2J02Z2OpLYct205OE24DkQnhZ0.jpg');"></div>
             <div class="absolute inset-0 z-0 bg-gradient-to-t from-gray-900 via-gray-900/80 to-transparent"></div>
 
             <div class="relative z-10 p-6 flex-1 flex flex-col text-white">
                 <div class="flex justify-between items-center mb-8">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center font-bold text-white shadow-lg border border-white/20">
-                            <i class="fa-solid fa-heart-pulse"></i>
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center font-bold text-white shadow-lg border border-white/20" id="poster-avatar">
+                            U
                         </div>
                         <div>
                             <div class="text-sm font-black tracking-wide">EmbyPulse</div>
                             <div class="text-[10px] text-gray-300 font-bold uppercase tracking-widest">映 迹 · 洞 察</div>
                         </div>
                     </div>
-                    <div class="px-2 py-1 border border-white/20 rounded text-xs text-gray-300 font-mono">2026</div>
+                    <div class="px-2 py-1 border border-white/20 rounded text-xs text-gray-300 font-mono" id="poster-user">Guest</div>
                 </div>
 
                 <div class="mb-8">
                     <div class="text-green-400 text-sm font-bold mb-1 tracking-wider uppercase">专注时长</div>
-                    <div class="text-6xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-300">42.5</div>
-                    <div class="text-sm text-gray-400 mt-2">小时 · 击败了 85% 的用户</div>
+                    <div class="text-6xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-300" id="poster-hours">0</div>
+                    <div class="text-sm text-gray-400 mt-2">小时 · 探索光影世界</div>
                 </div>
 
                 <div class="glass-card p-4 grid grid-cols-2 gap-4 rounded-xl mb-6">
                     <div class="text-center border-r border-white/10">
-                        <div class="text-2xl font-bold">12</div>
-                        <div class="text-xs text-gray-400 uppercase mt-1">播放影片</div>
+                        <div class="text-2xl font-bold" id="poster-count">0</div>
+                        <div class="text-xs text-gray-400 uppercase mt-1">播放次数</div>
                     </div>
                     <div class="text-center">
                         <div class="text-2xl font-bold">Night</div>
@@ -98,15 +95,15 @@
                 </div>
 
                 <div class="flex-1">
-                    <div class="text-xs font-bold text-gray-500 uppercase mb-4 tracking-wider">本月最爱 Top 1</div>
+                    <div class="text-xs font-bold text-gray-500 uppercase mb-4 tracking-wider">本期最爱 Top 1</div>
                     <div class="flex gap-4 items-center group">
                         <div class="w-16 h-24 bg-gray-700 rounded-lg shadow-2xl overflow-hidden shrink-0 border border-white/10 transform group-hover:scale-105 transition">
-                            <img src="https://image.tmdb.org/t/p/w200/gPbM0MK8CP8A174rmUwGsADNYKD.jpg" class="w-full h-full object-cover">
+                            <img id="poster-top-img" src="" class="w-full h-full object-cover opacity-50">
                         </div>
                         <div>
-                            <h4 class="font-bold text-lg leading-tight">狂飙</h4>
+                            <h4 class="font-bold text-lg leading-tight line-clamp-2" id="poster-top-title">暂无数据</h4>
                             <div class="text-sm text-gray-400 mt-1">
-                                <i class="fa-solid fa-rotate-right text-green-500 mr-1"></i> 反复观看了 5 次
+                                <i class="fa-solid fa-rotate-right text-green-500 mr-1"></i> 播放 <span id="poster-top-count">0</span> 次
                             </div>
                         </div>
                     </div>
@@ -126,33 +123,107 @@
 
 {% block scripts %}
 <script>
+    async function init() {
+        await loadUsers();
+    }
+
+    // 1. 加载用户列表
+    async function loadUsers() {
+        const container = document.getElementById('user-list-container');
+        try {
+            const res = await fetch('/api/users');
+            const json = await res.json();
+            container.innerHTML = ''; // 清空 loading
+
+            if(json.status === 'success') {
+                json.data.forEach((user, index) => {
+                    const div = document.createElement('div');
+                    div.className = `user-option p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition flex items-center ${index===0?'selected':''}`;
+                    div.innerHTML = `
+                        <div class="w-6 h-6 rounded-full bg-green-100 text-green-700 text-xs flex items-center justify-center font-bold mr-3">${user.UserName[0].toUpperCase()}</div>
+                        <span class="text-gray-700 font-medium">${user.UserName}</span>
+                    `;
+                    div.onclick = () => selectUser(div, user);
+                    container.appendChild(div);
+
+                    // 默认选中第一个用户并加载数据
+                    if (index === 0) selectUser(div, user);
+                });
+            }
+        } catch (e) {
+            container.innerHTML = '<p class="text-red-500 text-xs">加载失败</p>';
+        }
+    }
+
+    // 2. 选中用户逻辑
+    function selectUser(element, user) {
+        // 样式切换
+        document.querySelectorAll('.user-option').forEach(el => {
+            el.classList.remove('selected');
+            el.classList.remove('bg-green-50');
+            el.classList.remove('border-green-600');
+        });
+        element.classList.add('selected');
+        
+        // 更新海报上的用户信息
+        document.getElementById('poster-user').innerText = user.UserName;
+        document.getElementById('poster-avatar').innerText = user.UserName[0].toUpperCase();
+
+        // 加载该用户的数据
+        loadUserData(user.UserId);
+    }
+
+    // 3. 加载用户具体数据更新海报
+    async function loadUserData(userId) {
+        // 获取基础统计
+        const resStats = await fetch(`/api/stats/dashboard?user_id=${userId}`);
+        const stats = await resStats.json();
+        
+        if (stats.status === 'success') {
+            document.getElementById('poster-count').innerText = stats.data.total_plays;
+            document.getElementById('poster-hours').innerText = Math.round(stats.data.total_duration / 3600);
+        }
+
+        // 获取 Top 1 电影
+        const resTop = await fetch(`/api/stats/top_movies?user_id=${userId}`);
+        const top = await resTop.json();
+
+        if (top.status === 'success' && top.data.length > 0) {
+            const item = top.data[0];
+            document.getElementById('poster-top-title').innerText = item.ItemName;
+            document.getElementById('poster-top-count').innerText = item.PlayCount;
+            
+            const imgUrl = `/api/proxy/image/${item.ItemId}/primary`;
+            const bgUrl = `/api/proxy/image/${item.ItemId}/backdrop`;
+            
+            document.getElementById('poster-top-img').src = imgUrl;
+            document.getElementById('poster-top-img').classList.remove('opacity-50');
+            // 更新大背景
+            document.getElementById('poster-bg').style.backgroundImage = `url('${bgUrl}')`;
+        } else {
+            document.getElementById('poster-top-title').innerText = "暂无播放";
+            document.getElementById('poster-top-img').src = "";
+            document.getElementById('poster-top-img').classList.add('opacity-50');
+        }
+    }
+
     function downloadPoster() {
         const node = document.getElementById('capture-area');
         const btn = document.getElementById('dl-btn');
         const originalText = btn.innerHTML;
+        const userName = document.getElementById('poster-user').innerText;
 
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> 生成中...';
-        btn.disabled = true;
-
-        html2canvas(node, { 
-            scale: 2, 
-            useCORS: true, 
-            backgroundColor: null 
-        }).then(canvas => {
+        
+        html2canvas(node, { scale: 2, useCORS: true, backgroundColor: null }).then(canvas => {
             const link = document.createElement('a');
-            // 修改下载文件名
-            link.download = 'EmbyPulse_Report_2026.png';
+            link.download = `EmbyPulse_Report_${userName}.png`;
             link.href = canvas.toDataURL('image/png');
             link.click();
-            
             btn.innerHTML = originalText;
-            btn.disabled = false;
-        }).catch(err => {
-            console.error(err);
-            alert('生成失败，请检查控制台');
-            btn.innerHTML = originalText;
-            btn.disabled = false;
         });
     }
+
+    init();
 </script>
 {% endblock %}
