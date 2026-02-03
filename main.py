@@ -2,7 +2,7 @@ import sqlite3
 import os
 import uvicorn
 import requests
-from fastapi import FastAPI, Request, Response, Query
+from fastapi import FastAPI, Request, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,10 +14,9 @@ DB_PATH = os.getenv("DB_PATH", "/emby-data/playback_reporting.db")
 EMBY_HOST = os.getenv("EMBY_HOST", "http://127.0.0.1:8096").rstrip('/')
 EMBY_API_KEY = os.getenv("EMBY_API_KEY", "")
 
-# 启动日志
 print(f"--- EmbyPulse 启动 ---")
-print(f"数据库路径: {DB_PATH}")
-print(f"API Key: {'✅ 已加载' if EMBY_API_KEY else '❌ 未加载'}")
+print(f"DB: {DB_PATH}")
+print(f"API: {'✅ 已加载' if EMBY_API_KEY else '❌ 未加载'}")
 
 app = FastAPI()
 
@@ -34,9 +33,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 def query_db(query, args=(), one=False):
-    if not os.path.exists(DB_PATH): 
-        print(f"❌ 错误: 找不到数据库文件 {DB_PATH}")
-        return None
+    if not os.path.exists(DB_PATH): return None
     try:
         conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
         conn.row_factory = sqlite3.Row
@@ -46,7 +43,7 @@ def query_db(query, args=(), one=False):
         conn.close()
         return (rv[0] if rv else None) if one else rv
     except Exception as e:
-        print(f"❌ SQL执行错误: {e}")
+        print(f"SQL Error: {e}")
         return None
 
 # === 页面路由 ===
@@ -62,43 +59,44 @@ async def page_content(request: Request):
 async def page_report(request: Request):
     return templates.TemplateResponse("report.html", {"request": request, "active_page": "report"})
 
-# === API: 用户列表 (暴力修复版) ===
+# === API: 用户列表 (API 补全版) ===
 @app.get("/api/users")
 async def api_get_users():
     try:
-        print("🔍 正在扫描用户列表...")
-        # 1. 简单粗暴：只查 UserId 和 UserName，不分组
-        sql = "SELECT UserId, UserName FROM PlaybackActivity"
+        # 1. 从数据库只查 UserId (避开 UserName 不存在的问题)
+        sql = "SELECT DISTINCT UserId FROM PlaybackActivity"
         results = query_db(sql)
         
         if not results:
-            print("⚠️ 警告: 数据库没有返回任何播放记录")
             return {"status": "success", "data": []}
 
-        # 2. 在 Python 内存中去重 (由 Python 处理最稳妥)
-        users_map = {}
+        # 2. 从 Emby API 获取所有真实用户，建立 ID->Name 映射
+        user_map = {}
+        if EMBY_API_KEY:
+            try:
+                res = requests.get(f"{EMBY_HOST}/emby/Users?api_key={EMBY_API_KEY}", timeout=3)
+                if res.status_code == 200:
+                    for u in res.json():
+                        user_map[u['Id']] = u['Name']
+            except Exception as e:
+                print(f"Emby User API Failed: {e}")
+
+        # 3. 组装数据
+        data = []
         for row in results:
             uid = row['UserId']
-            name = row['UserName']
-            
-            # 跳过空ID
             if not uid: continue
             
-            # 如果名字为空，给个默认名
-            if not name: name = f"User {str(uid)[:5]}"
-            
-            # 存入字典 (自动去重，保留最后一次遇到的名字)
-            users_map[uid] = name
+            # 如果 API 查到了名字就用 API 的，否则用 ID 截取
+            name = user_map.get(uid, f"User {str(uid)[:5]}")
+            data.append({"UserId": uid, "UserName": name})
 
-        # 3. 转回列表并排序
-        data = [{"UserId": k, "UserName": v} for k, v in users_map.items()]
-        data.sort(key=lambda x: x['UserName']) # 按名字排序
-        
-        print(f"✅ 成功找到 {len(data)} 个用户: {[u['UserName'] for u in data]}")
+        # 按名字排序
+        data.sort(key=lambda x: x['UserName'])
         return {"status": "success", "data": data}
         
     except Exception as e:
-        print(f"❌ 用户API严重错误: {e}")
+        print(f"API Error: {e}")
         return {"status": "error", "message": str(e)}
 
 # === API: 仪表盘 ===
@@ -153,8 +151,6 @@ async def api_top_movies(user_id: Optional[str] = None):
 @app.get("/api/proxy/image/{item_id}/{img_type}")
 async def proxy_image(item_id: str, img_type: str):
     target_id = item_id
-    
-    # 智能搜图
     if img_type == 'primary' and EMBY_API_KEY:
         try:
             info_url = f"{EMBY_HOST}/emby/Items?Ids={item_id}&Fields=SeriesId,ParentId&Limit=1&api_key={EMBY_API_KEY}"
@@ -162,20 +158,15 @@ async def proxy_image(item_id: str, img_type: str):
             if info_resp.status_code == 200:
                 data = info_resp.json()
                 if data.get("Items"):
-                    item_info = data["Items"][0]
-                    if item_info.get('Type') == 'Episode':
-                        if item_info.get('SeriesId'): target_id = item_info.get('SeriesId')
-                        elif item_info.get('ParentId'): target_id = item_info.get('ParentId')
-        except Exception:
-            pass
+                    item = data["Items"][0]
+                    if item.get('Type') == 'Episode':
+                        if item.get('SeriesId'): target_id = item.get('SeriesId')
+                        elif item.get('ParentId'): target_id = item.get('ParentId')
+        except: pass
 
-    if img_type == 'backdrop':
-        emby_url = f"{EMBY_HOST}/emby/Items/{target_id}/Images/Backdrop?maxWidth=800&quality=80"
-    else:
-        emby_url = f"{EMBY_HOST}/emby/Items/{target_id}/Images/Primary?maxHeight=400&quality=90"
-    
+    suffix = "/Images/Backdrop?maxWidth=800" if img_type == 'backdrop' else "/Images/Primary?maxHeight=400"
     try:
-        resp = requests.get(emby_url, timeout=5)
+        resp = requests.get(f"{EMBY_HOST}/emby/Items/{target_id}{suffix}", timeout=5)
         return Response(content=resp.content, media_type=resp.headers.get("Content-Type", "image/jpeg"))
     except:
         return Response(status_code=404)

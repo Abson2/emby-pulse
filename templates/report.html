@@ -9,7 +9,6 @@
 {% endblock %}
 {% block content %}
 <div class="flex h-full flex-col md:flex-row overflow-hidden">
-    
     <div class="w-full md:w-80 bg-white border-b md:border-b-0 md:border-r border-gray-200 p-4 md:p-6 flex flex-col z-20 shrink-0 max-h-[40vh] md:max-h-full overflow-y-auto">
         <h2 class="text-lg md:text-xl font-bold text-gray-800 mb-4">配置报告</h2>
         <div class="space-y-4 flex-1">
@@ -68,20 +67,17 @@
 {% endblock %}
 {% block scripts %}
 <script>
-    /* JS 保持不变，但增加一个自动缩放函数 */
     function resizePoster() {
         if (window.innerWidth < 768) {
             const wrapper = document.getElementById('preview-wrapper');
-            const scale = (wrapper.clientWidth - 32) / 375; // 32是padding
+            const scale = (wrapper.clientWidth - 32) / 375;
             const el = document.getElementById('scale-wrapper');
             if (scale < 1) el.style.transform = `scale(${scale})`;
         }
     }
     window.addEventListener('resize', resizePoster);
-    // 初始化调用
     setTimeout(resizePoster, 100);
 
-    /* 原有 JS 逻辑复用... */
     async function init() { await loadUsers(); }
     async function loadUsers() {
         const container = document.getElementById('user-list-container');
@@ -92,7 +88,6 @@
             if(json.status === 'success') {
                 json.data.forEach((user, index) => {
                     const div = document.createElement('div');
-                    // 样式调整：手机端横向排列
                     div.className = `user-option min-w-[140px] md:min-w-0 p-2 md:p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition flex items-center ${index===0?'selected':''}`;
                     div.innerHTML = `<div class="w-6 h-6 rounded-full bg-green-100 text-green-700 text-xs flex items-center justify-center font-bold mr-2 md:mr-3 shrink-0">${user.UserName[0].toUpperCase()}</div><span class="text-gray-700 font-medium truncate text-sm">${user.UserName}</span>`;
                     div.onclick = () => selectUser(div, user);
@@ -110,7 +105,6 @@
         loadUserData(user.UserId);
     }
     async function loadUserData(userId) {
-        // ... (同之前的逻辑)
         const resStats = await fetch(`/api/stats/dashboard?user_id=${userId}`);
         const stats = await resStats.json();
         if (stats.status === 'success') {
@@ -134,4 +128,5 @@
         const node = document.getElementById('capture-area');
         const btn = document.getElementById('dl-btn');
         const originalText = btn.innerHTML;
-        const userName = document.getElementById('poster-
+        const userName = document.getElementById('poster-user').innerText;
+        btn.innerHTML = '
