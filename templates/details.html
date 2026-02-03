@@ -1,5 +1,16 @@
 {% extends "layout.html" %}
 {% block title %}数据洞察 - EmbyPulse{% endblock %}
+{% block head %}
+<style>
+    /* 热力图格子 */
+    .heatmap-grid { display: grid; grid-template-rows: repeat(7, 1fr); grid-auto-flow: column; gap: 3px; height: 100px; }
+    .heatmap-cell { width: 10px; height: 10px; border-radius: 2px; background-color: #ebedf0; }
+    .hm-l1 { background-color: #9be9a8; }
+    .hm-l2 { background-color: #40c463; }
+    .hm-l3 { background-color: #30a14e; }
+    .hm-l4 { background-color: #216e39; }
+</style>
+{% endblock %}
 {% block content %}
 <div class="max-w-7xl mx-auto w-full px-4 md:px-8 py-6 pb-20">
     
@@ -8,7 +19,6 @@
             <h1 class="text-2xl font-black text-gray-900">数据洞察</h1>
             <p class="text-xs text-gray-500 mt-1">深度分析用户行为画像</p>
         </div>
-        
         <div class="w-full md:w-auto bg-white p-1 rounded-xl shadow-sm border border-gray-200">
              <select id="user-select" onchange="changeUser()" class="w-full md:w-48 appearance-none bg-transparent text-gray-700 py-2 pl-4 pr-10 rounded-lg text-sm font-bold focus:outline-none cursor-pointer">
                 <option value="all">🌏 全服数据</option>
@@ -23,32 +33,35 @@
 
     <div id="content-area" class="hidden animate-fade-in space-y-6">
         
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div class="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center">
                 <h3 class="font-bold text-gray-800 mb-4 text-sm flex items-center">
-                    <i class="fa-regular fa-clock text-blue-500 mr-2"></i> 24小时作息分布
+                    <i class="fa-solid fa-medal text-yellow-500 mr-2"></i> 用户成就
                 </h3>
-                <div class="relative h-60 w-full">
-                    <canvas id="hourlyChart"></canvas>
+                <div id="badges-container" class="flex flex-wrap gap-2">
+                    <p class="text-xs text-gray-400">暂无勋章，继续加油！</p>
                 </div>
             </div>
-
-            <div class="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                <h3 class="font-bold text-gray-800 mb-4 text-sm flex items-center">
-                    <i class="fa-solid fa-mobile-screen-button text-purple-500 mr-2"></i> 观看设备分布
+            
+            <div class="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <h3 class="font-bold text-gray-800 mb-4 text-sm flex items-center justify-between">
+                    <span><i class="fa-solid fa-calendar-days text-green-600 mr-2"></i> 年度观影热力图</span>
+                    <span class="text-xs text-gray-400 font-normal">Less <span class="inline-block w-2 h-2 bg-[#ebedf0] mx-1"></span> <span class="inline-block w-2 h-2 bg-[#216e39] mx-1"></span> More</span>
                 </h3>
-                <div class="relative h-60 w-full flex justify-center">
-                    <canvas id="deviceChart"></canvas>
+                <div class="overflow-x-auto pb-2">
+                    <div id="heatmap-container" class="heatmap-grid min-w-max"></div>
                 </div>
             </div>
         </div>
 
-        <div class="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-            <h3 class="font-bold text-gray-800 mb-4 text-sm flex items-center">
-                <i class="fa-solid fa-chart-line text-green-500 mr-2"></i> 近30天观看时长趋势 (分钟)
-            </h3>
-            <div class="relative h-64 w-full">
-                <canvas id="dailyChart"></canvas>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                <h3 class="font-bold text-gray-800 mb-4 text-sm flex items-center"><i class="fa-regular fa-clock text-blue-500 mr-2"></i> 24小时作息分布</h3>
+                <div class="relative h-60 w-full"><canvas id="hourlyChart"></canvas></div>
+            </div>
+            <div class="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                <h3 class="font-bold text-gray-800 mb-4 text-sm flex items-center"><i class="fa-solid fa-mobile-screen-button text-purple-500 mr-2"></i> 观看设备分布</h3>
+                <div class="relative h-60 w-full flex justify-center"><canvas id="deviceChart"></canvas></div>
             </div>
         </div>
 
@@ -59,16 +72,9 @@
             <div class="overflow-x-auto">
                 <table class="w-full text-sm text-left text-gray-500">
                     <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                        <tr>
-                            <th class="px-6 py-3">时间</th>
-                            <th class="px-6 py-3">用户</th>
-                            <th class="px-6 py-3">内容</th>
-                            <th class="px-6 py-3">设备</th>
-                            <th class="px-6 py-3 text-right">时长</th>
-                        </tr>
+                        <tr><th class="px-6 py-3">时间</th><th class="px-6 py-3">用户</th><th class="px-6 py-3">内容</th><th class="px-6 py-3">设备</th><th class="px-6 py-3 text-right">时长</th></tr>
                     </thead>
-                    <tbody id="logs-table-body">
-                        </tbody>
+                    <tbody id="logs-table-body"></tbody>
                 </table>
             </div>
         </div>
@@ -82,6 +88,8 @@
     async function init() {
         await loadUsers();
         loadData('all');
+        loadBadges('all');
+        loadHeatmap('all');
     }
 
     async function loadUsers() {
@@ -103,155 +111,118 @@
     function changeUser() {
         const userId = document.getElementById('user-select').value;
         loadData(userId);
+        loadBadges(userId);
+        loadHeatmap(userId);
+    }
+
+    async function loadBadges(userId) {
+        const container = document.getElementById('badges-container');
+        try {
+            const res = await fetch(`/api/stats/badges?user_id=${userId}`);
+            const json = await res.json();
+            if(json.status === 'success' && json.data.length > 0) {
+                let html = '';
+                json.data.forEach(b => {
+                    html += `
+                    <div class="flex items-center space-x-2 px-3 py-2 rounded-lg border border-gray-100 bg-gray-50 hover:bg-white hover:shadow-sm transition cursor-default group">
+                        <div class="w-8 h-8 rounded-full ${b.bg} flex items-center justify-center shrink-0">
+                            <i class="fa-solid ${b.icon} ${b.color}"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold text-gray-800">${b.name}</p>
+                            <p class="text-[10px] text-gray-400 group-hover:text-gray-500">${b.desc}</p>
+                        </div>
+                    </div>`;
+                });
+                container.innerHTML = html;
+            } else {
+                container.innerHTML = '<p class="text-xs text-gray-400">暂无特殊成就，继续观看以解锁！</p>';
+            }
+        } catch(e) {}
+    }
+
+    async function loadHeatmap(userId) {
+        const container = document.getElementById('heatmap-container');
+        try {
+            const res = await fetch(`/api/stats/heatmap?user_id=${userId}`);
+            const json = await res.json();
+            const data = json.data || {};
+            
+            // 生成过去365天
+            let html = '';
+            const today = new Date();
+            for(let i=364; i>=0; i--) {
+                const d = new Date();
+                d.setDate(today.getDate() - i);
+                const key = d.toISOString().split('T')[0];
+                const count = data[key] || 0;
+                
+                let cls = 'heatmap-cell';
+                if(count > 0) cls += ' hm-l1';
+                if(count > 1800) cls += ' hm-l2'; // 30min
+                if(count > 7200) cls += ' hm-l3'; // 2h
+                if(count > 14400) cls += ' hm-l4'; // 4h
+                
+                html += `<div class="${cls}" title="${key}: ${Math.round(count/60)} mins"></div>`;
+            }
+            container.innerHTML = html;
+        } catch(e) {}
     }
 
     async function loadData(userId) {
         document.getElementById('loading').classList.remove('hidden');
         document.getElementById('content-area').classList.add('hidden');
-
         try {
             const res = await fetch(`/api/stats/user_details?user_id=${userId}`);
             const json = await res.json();
-            
             if(json.status === 'success') {
                 const data = json.data;
                 renderHourlyChart(data.hourly);
                 renderDeviceChart(data.devices);
-                renderDailyChart(data.daily);
                 renderLogs(data.logs);
-                
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('content-area').classList.remove('hidden');
             }
         } catch (e) { console.error(e); }
     }
 
-    // 1. 渲染24小时图
     function renderHourlyChart(dataObj) {
         const ctx = document.getElementById('hourlyChart').getContext('2d');
-        const labels = Object.keys(dataObj); // ["00", "01", ...]
-        const values = Object.values(dataObj);
-
         if(charts.hourly) charts.hourly.destroy();
-
         charts.hourly = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: labels,
-                datasets: [{
-                    label: '播放次数',
-                    data: values,
-                    backgroundColor: 'rgba(59, 130, 246, 0.6)',
-                    borderRadius: 4
-                }]
+                labels: Object.keys(dataObj),
+                datasets: [{ label: '播放', data: Object.values(dataObj), backgroundColor: 'rgba(59, 130, 246, 0.6)', borderRadius: 4 }]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: { grid: {display: false} },
-                    y: { beginAtZero: true, border: {display: false} }
-                },
-                plugins: { legend: {display: false} }
-            }
+            options: { responsive: true, maintainAspectRatio: false, scales: { x: {grid:{display:false}}, y: {beginAtZero:true, border:{display:false}} }, plugins: {legend:{display:false}} }
         });
     }
 
-    // 2. 渲染设备图
     function renderDeviceChart(dataList) {
         const ctx = document.getElementById('deviceChart').getContext('2d');
-        // 只取前5个设备，其他的归为“其他”
-        let labels = [], values = [];
-        let others = 0;
-        
+        let labels = [], values = [], others = 0;
         dataList.forEach((d, i) => {
-            if(i < 5) {
-                labels.push(d.Device);
-                values.push(d.Plays);
-            } else {
-                others += d.Plays;
-            }
+            if(i < 5) { labels.push(d.Device); values.push(d.Plays); } else { others += d.Plays; }
         });
         if(others > 0) { labels.push('其他'); values.push(others); }
-
         if(charts.device) charts.device.destroy();
-
         charts.device = new Chart(ctx, {
             type: 'doughnut',
-            data: {
-                labels: labels,
-                datasets: [{
-                    data: values,
-                    backgroundColor: [
-                        '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#cbd5e1'
-                    ],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { 
-                    legend: { position: 'right', labels: {boxWidth: 10} }
-                }
-            }
+            data: { labels: labels, datasets: [{ data: values, backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#cbd5e1'], borderWidth: 0 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: {boxWidth: 10} } } }
         });
     }
 
-    // 3. 每日时长图
-    function renderDailyChart(dataList) {
-        const ctx = document.getElementById('dailyChart').getContext('2d');
-        const labels = dataList.map(d => d.Day.slice(5)); // 去掉年份 MM-DD
-        const values = dataList.map(d => Math.round(d.Duration / 60)); // 转分钟
-
-        if(charts.daily) charts.daily.destroy();
-
-        charts.daily = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: '观看时长 (分钟)',
-                    data: values,
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: { grid: {display: false} },
-                    y: { beginAtZero: true }
-                },
-                plugins: { legend: {display: false} }
-            }
-        });
-    }
-
-    // 4. 渲染日志表格
     function renderLogs(logs) {
         const tbody = document.getElementById('logs-table-body');
         let html = '';
         logs.forEach(log => {
             const date = new Date(log.DateCreated + 'Z').toLocaleString('zh-CN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
-            const duration = Math.round(log.PlayDuration / 60) + 'm';
-            
-            html += `
-            <tr class="bg-white border-b hover:bg-gray-50">
-                <td class="px-6 py-3 font-medium text-gray-900 whitespace-nowrap">${date}</td>
-                <td class="px-6 py-3">${log.UserName}</td>
-                <td class="px-6 py-3 font-bold text-gray-800 line-clamp-1 max-w-xs" title="${log.ItemName}">${log.ItemName}</td>
-                <td class="px-6 py-3 text-xs"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded">${log.Device}</span></td>
-                <td class="px-6 py-3 text-right font-bold text-green-600">${duration}</td>
-            </tr>
-            `;
+            html += `<tr class="bg-white border-b hover:bg-gray-50"><td class="px-6 py-3 font-medium text-gray-900 whitespace-nowrap">${date}</td><td class="px-6 py-3">${log.UserName}</td><td class="px-6 py-3 font-bold text-gray-800 line-clamp-1 max-w-xs" title="${log.ItemName}">${log.ItemName}</td><td class="px-6 py-3 text-xs"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded">${log.Device}</span></td><td class="px-6 py-3 text-right font-bold text-green-600">${Math.round(log.PlayDuration/60)}m</td></tr>`;
         });
         tbody.innerHTML = html;
     }
-
     init();
 </script>
 {% endblock %}
