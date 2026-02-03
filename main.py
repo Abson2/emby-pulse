@@ -16,7 +16,7 @@ EMBY_HOST = os.getenv("EMBY_HOST", "http://127.0.0.1:8096").rstrip('/')
 EMBY_API_KEY = os.getenv("EMBY_API_KEY", "").strip()
 FALLBACK_IMAGE_URL = "https://img.hotimg.com/a444d32a033994d5b.png"
 
-print(f"--- EmbyPulse Ultimate ---")
+print(f"--- EmbyPulse Ultimate v2 ---")
 print(f"DB: {DB_PATH}")
 print(f"API: {'✅ 已加载' if EMBY_API_KEY else '❌ 未加载'}")
 
@@ -95,7 +95,8 @@ async def api_recent_activity(user_id: Optional[str] = None):
     try:
         where, params = "WHERE 1=1", []
         if user_id and user_id != 'all': where += " AND UserId = ?"; params.append(user_id)
-        # 查 300 条
+        
+        # 查 300 条供筛选
         results = query_db(f"SELECT DateCreated, UserId, ItemId, ItemName, ItemType, PlayDuration FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 300", params)
         if not results: return {"status": "success", "data": []}
 
@@ -140,9 +141,8 @@ async def api_recent_activity(user_id: Optional[str] = None):
                 item['DisplayTitle'] = display_title
                 final_data.append(item)
             
-            # 🔥🔥 严格限制 20 个 🔥🔥
-            if len(final_data) >= 20: break 
-                
+            # 🔥 提供 50 个备胎给前端，让前端去剔除裂图
+            if len(final_data) >= 50: break 
         return {"status": "success", "data": final_data}
     except Exception as e: return {"status": "error", "message": str(e)}
 
@@ -170,23 +170,50 @@ async def api_live_sessions():
         return {"status": "success", "data": sessions}
     except Exception as e: return {"status": "error", "message": str(e)}
 
-# === 🔥 替换原热力图接口 -> 月度统计 ===
-@app.get("/api/stats/monthly_stats")
-async def api_monthly_stats(user_id: Optional[str] = None):
+# === 🔥 新增：多维度统计图表接口 ===
+@app.get("/api/stats/chart")
+async def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'month'):
+    """
+    dimension: 'year' (按年), 'month' (按月), 'day' (按日-近30天)
+    """
     try:
-        where, params = "WHERE DateCreated > date('now', '-12 months')", []
-        if user_id and user_id != 'all': where += " AND UserId = ?"; params.append(user_id)
+        where, params = "WHERE 1=1", []
+        if user_id and user_id != 'all': 
+            where += " AND UserId = ?"
+            params.append(user_id)
         
-        # 按月分组: YYYY-MM
-        sql = f"""
-        SELECT strftime('%Y-%m', DateCreated) as Month, SUM(PlayDuration) as Duration 
-        FROM PlaybackActivity {where} GROUP BY Month ORDER BY Month
-        """
+        sql = ""
+        if dimension == 'year':
+            # 按年统计所有数据
+            sql = f"""
+            SELECT strftime('%Y', DateCreated) as Label, SUM(PlayDuration) as Duration 
+            FROM PlaybackActivity {where} 
+            GROUP BY Label ORDER BY Label DESC LIMIT 5
+            """
+        elif dimension == 'day':
+            # 按日统计 (最近 30 天)
+            where += " AND DateCreated > date('now', '-30 days')"
+            sql = f"""
+            SELECT date(DateCreated) as Label, SUM(PlayDuration) as Duration 
+            FROM PlaybackActivity {where} 
+            GROUP BY Label ORDER BY Label
+            """
+        else:
+            # 默认按月统计 (最近 12 个月)
+            where += " AND DateCreated > date('now', '-12 months')"
+            sql = f"""
+            SELECT strftime('%Y-%m', DateCreated) as Label, SUM(PlayDuration) as Duration 
+            FROM PlaybackActivity {where} 
+            GROUP BY Label ORDER BY Label
+            """
+            
         results = query_db(sql, params)
         data = {}
         if results:
-            for r in results:
-                data[r['Month']] = int(r['Duration'])
+            # 如果是年份，倒序转正序显示
+            rows = results[::-1] if dimension == 'year' else results
+            for r in rows:
+                data[r['Label']] = int(r['Duration'])
         return {"status": "success", "data": data}
     except: return {"status": "error", "data": {}}
 
@@ -254,7 +281,6 @@ async def api_user_details(user_id: Optional[str] = None):
         if hourly_res:
             for r in hourly_res: hourly_data[r['Hour']] = r['Plays']
         device_res = query_db(f"SELECT COALESCE(DeviceName, ClientName, 'Unknown') as Device, COUNT(*) as Plays FROM PlaybackActivity {where} GROUP BY Device ORDER BY Plays DESC", params)
-        daily_res = query_db(f"SELECT date(DateCreated) as Day, SUM(PlayDuration) as Duration FROM PlaybackActivity {where} AND DateCreated > date('now', '-30 days') GROUP BY Day ORDER BY Day", params)
         logs_res = query_db(f"SELECT DateCreated, ItemName, PlayDuration, COALESCE(DeviceName, ClientName) as Device, UserId FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 100", params)
         user_map = get_user_map()
         logs_data = []
@@ -263,7 +289,7 @@ async def api_user_details(user_id: Optional[str] = None):
                 l = dict(r)
                 l['UserName'] = user_map.get(l['UserId'], "User")
                 logs_data.append(l)
-        return {"status": "success", "data": {"hourly": hourly_data, "devices": [dict(r) for r in device_res] if device_res else [], "daily": [dict(r) for r in daily_res] if daily_res else [], "logs": logs_data}}
+        return {"status": "success", "data": {"hourly": hourly_data, "devices": [dict(r) for r in device_res] if device_res else [], "logs": logs_data}}
     except Exception as e: return {"status": "error", "message": str(e)}
 
 @app.get("/api/proxy/image/{item_id}/{img_type}")

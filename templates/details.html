@@ -2,7 +2,6 @@
 {% block title %}数据洞察 - EmbyPulse{% endblock %}
 {% block content %}
 <div class="max-w-7xl mx-auto w-full px-4 md:px-8 py-6 pb-20">
-    
     <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
         <div>
             <h1 class="text-2xl font-black text-gray-900">数据洞察</h1>
@@ -27,17 +26,22 @@
                 <h3 class="font-bold text-gray-800 mb-4 text-sm flex items-center">
                     <i class="fa-solid fa-medal text-yellow-500 mr-2"></i> 用户成就
                 </h3>
-                <div id="badges-container" class="flex flex-wrap gap-2">
-                    <p class="text-xs text-gray-400">暂无勋章，继续加油！</p>
-                </div>
+                <div id="badges-container" class="flex flex-wrap gap-2"></div>
             </div>
             
             <div class="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                <h3 class="font-bold text-gray-800 mb-4 text-sm flex items-center">
-                    <i class="fa-solid fa-calendar-days text-green-600 mr-2"></i> 过去 12 个月观影趋势
-                </h3>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold text-gray-800 text-sm flex items-center">
+                        <i class="fa-solid fa-chart-bar text-green-600 mr-2"></i> 观影趋势统计
+                    </h3>
+                    <div class="flex bg-gray-100 rounded-lg p-1 text-xs">
+                        <button onclick="switchChart('day')" class="chart-btn px-3 py-1 rounded transition text-gray-500 hover:text-gray-900" id="btn-day">日</button>
+                        <button onclick="switchChart('month')" class="chart-btn px-3 py-1 rounded bg-white shadow-sm text-gray-900 font-bold transition" id="btn-month">月</button>
+                        <button onclick="switchChart('year')" class="chart-btn px-3 py-1 rounded transition text-gray-500 hover:text-gray-900" id="btn-year">年</button>
+                    </div>
+                </div>
                 <div class="relative h-48 w-full">
-                    <canvas id="monthlyChart"></canvas>
+                    <canvas id="trendChart"></canvas>
                 </div>
             </div>
         </div>
@@ -72,12 +76,11 @@
 {% block scripts %}
 <script>
     let charts = {};
+    let currentDim = 'month';
 
     async function init() {
         await loadUsers();
-        loadData('all');
-        loadBadges('all');
-        loadMonthly('all');
+        loadAllData();
     }
 
     async function loadUsers() {
@@ -96,60 +99,59 @@
         } catch (e) { console.error(e); }
     }
 
-    function changeUser() {
+    function changeUser() { loadAllData(); }
+
+    function switchChart(dim) {
+        currentDim = dim;
+        // 更新按钮样式
+        document.querySelectorAll('.chart-btn').forEach(btn => {
+            btn.classList.remove('bg-white', 'shadow-sm', 'text-gray-900', 'font-bold');
+            btn.classList.add('text-gray-500');
+        });
+        const activeBtn = document.getElementById(`btn-${dim}`);
+        activeBtn.classList.add('bg-white', 'shadow-sm', 'text-gray-900', 'font-bold');
+        activeBtn.classList.remove('text-gray-500');
+        
+        loadTrendChart(); // 只重新加载趋势图
+    }
+
+    async function loadAllData() {
         const userId = document.getElementById('user-select').value;
-        loadData(userId);
-        loadBadges(userId);
-        loadMonthly(userId);
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('content-area').classList.add('hidden');
+
+        await Promise.all([
+            loadTrendChart(),
+            loadDetails(userId),
+            loadBadges(userId)
+        ]);
+
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('content-area').classList.remove('hidden');
     }
 
-    async function loadBadges(userId) {
-        const container = document.getElementById('badges-container');
+    async function loadTrendChart() {
+        const userId = document.getElementById('user-select').value;
         try {
-            const res = await fetch(`/api/stats/badges?user_id=${userId}`);
-            const json = await res.json();
-            if(json.status === 'success' && json.data.length > 0) {
-                let html = '';
-                json.data.forEach(b => {
-                    html += `
-                    <div class="flex items-center space-x-2 px-3 py-2 rounded-lg border border-gray-100 bg-gray-50 hover:bg-white hover:shadow-sm transition cursor-default group">
-                        <div class="w-8 h-8 rounded-full ${b.bg} flex items-center justify-center shrink-0">
-                            <i class="fa-solid ${b.icon} ${b.color}"></i>
-                        </div>
-                        <div>
-                            <p class="text-xs font-bold text-gray-800">${b.name}</p>
-                            <p class="text-[10px] text-gray-400 group-hover:text-gray-500">${b.desc}</p>
-                        </div>
-                    </div>`;
-                });
-                container.innerHTML = html;
-            } else { container.innerHTML = '<p class="text-xs text-gray-400">暂无特殊成就，继续观看以解锁！</p>'; }
-        } catch(e) {}
-    }
-
-    // 🔥 加载新的月度柱状图
-    async function loadMonthly(userId) {
-        const ctx = document.getElementById('monthlyChart').getContext('2d');
-        try {
-            const res = await fetch(`/api/stats/monthly_stats?user_id=${userId}`);
+            const res = await fetch(`/api/stats/chart?user_id=${userId}&dimension=${currentDim}`);
             const json = await res.json();
             const data = json.data || {};
             
             const labels = Object.keys(data);
             const values = Object.values(data).map(v => Math.round(v/3600)); // 转小时
 
-            if(charts.monthly) charts.monthly.destroy();
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            if(charts.trend) charts.trend.destroy();
 
-            charts.monthly = new Chart(ctx, {
+            charts.trend = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: '观看时长 (小时)',
+                        label: '时长 (小时)',
                         data: values,
                         backgroundColor: 'rgba(16, 185, 129, 0.6)',
-                        borderRadius: 6,
-                        barThickness: 20
+                        borderRadius: 4
                     }]
                 },
                 options: {
@@ -165,9 +167,7 @@
         } catch(e) {}
     }
 
-    async function loadData(userId) {
-        document.getElementById('loading').classList.remove('hidden');
-        document.getElementById('content-area').classList.add('hidden');
+    async function loadDetails(userId) {
         try {
             const res = await fetch(`/api/stats/user_details?user_id=${userId}`);
             const json = await res.json();
@@ -176,10 +176,23 @@
                 renderHourlyChart(data.hourly);
                 renderDeviceChart(data.devices);
                 renderLogs(data.logs);
-                document.getElementById('loading').classList.add('hidden');
-                document.getElementById('content-area').classList.remove('hidden');
             }
-        } catch (e) { console.error(e); }
+        } catch (e) {}
+    }
+
+    async function loadBadges(userId) {
+        const container = document.getElementById('badges-container');
+        try {
+            const res = await fetch(`/api/stats/badges?user_id=${userId}`);
+            const json = await res.json();
+            if(json.status === 'success' && json.data.length > 0) {
+                let html = '';
+                json.data.forEach(b => {
+                    html += `<div class="flex items-center space-x-2 px-3 py-2 rounded-lg border border-gray-100 bg-gray-50 hover:bg-white hover:shadow-sm transition cursor-default group"><div class="w-8 h-8 rounded-full ${b.bg} flex items-center justify-center shrink-0"><i class="fa-solid ${b.icon} ${b.color}"></i></div><div><p class="text-xs font-bold text-gray-800">${b.name}</p><p class="text-[10px] text-gray-400 group-hover:text-gray-500">${b.desc}</p></div></div>`;
+                });
+                container.innerHTML = html;
+            } else { container.innerHTML = '<p class="text-xs text-gray-400">暂无特殊成就，继续观看以解锁！</p>'; }
+        } catch(e) {}
     }
 
     function renderHourlyChart(dataObj) {
@@ -187,10 +200,7 @@
         if(charts.hourly) charts.hourly.destroy();
         charts.hourly = new Chart(ctx, {
             type: 'bar',
-            data: {
-                labels: Object.keys(dataObj),
-                datasets: [{ label: '播放', data: Object.values(dataObj), backgroundColor: 'rgba(59, 130, 246, 0.6)', borderRadius: 4 }]
-            },
+            data: { labels: Object.keys(dataObj), datasets: [{ label: '播放', data: Object.values(dataObj), backgroundColor: 'rgba(59, 130, 246, 0.6)', borderRadius: 4 }] },
             options: { responsive: true, maintainAspectRatio: false, scales: { x: {grid:{display:false}}, y: {beginAtZero:true, border:{display:false}} }, plugins: {legend:{display:false}} }
         });
     }
