@@ -1,168 +1,102 @@
 {% extends "layout.html" %}
-
 {% block title %}内容风云榜 - EmbyPulse{% endblock %}
-
 {% block head %}
 <style>
-    .hero-mask { 
-        background: linear-gradient(to right, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.8) 40%, rgba(255,255,255,0) 100%); 
-    }
-    /* 强制下拉菜单样式，防止被遮挡 */
-    #user-select {
-        background-color: white;
-        cursor: pointer;
+    .hero-mask { background: linear-gradient(to bottom, transparent 0%, rgba(255,255,255,1) 90%); }
+    @media (min-width: 768px) {
+        .hero-mask { background: linear-gradient(to right, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.8) 40%, rgba(255,255,255,0) 100%); }
     }
 </style>
 {% endblock %}
-
 {% block content %}
-<div class="max-w-7xl mx-auto w-full px-8 py-8 relative">
-    <div class="flex flex-col md:flex-row justify-between items-end md:items-center mb-8 gap-4 relative z-40">
+<div class="max-w-7xl mx-auto w-full px-4 md:px-8 py-6 md:py-8 relative pb-20">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 gap-4 relative z-30">
         <div>
             <h1 class="text-2xl font-black text-gray-900">内容风云榜</h1>
-            <p class="text-xs text-gray-500 mt-1">查看大家都在看什么</p>
+            <p class="text-xs text-gray-500 mt-1">服务器最热播</p>
         </div>
-        
-        <div class="flex items-center gap-3">
-            <div class="relative z-50">
-                <select id="user-select" onchange="changeUser()" class="appearance-none bg-white border border-gray-300 text-gray-800 py-2 pl-4 pr-10 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm font-bold min-w-[150px]">
+        <div class="flex items-center gap-3 w-full md:w-auto">
+            <div class="relative z-40 flex-1 md:flex-none">
+                <select id="user-select" onchange="changeUser()" class="w-full md:w-auto appearance-none bg-white border border-gray-300 text-gray-800 py-2 pl-4 pr-10 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-sm font-bold">
                     <option value="all">🌏 全服数据</option>
-                    </select>
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-600">
-                    <i class="fa-solid fa-chevron-down text-xs"></i>
-                </div>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-600"><i class="fa-solid fa-chevron-down text-xs"></i></div>
             </div>
-
-            <button onclick="refreshCurrent()" class="bg-white border border-gray-300 text-gray-600 hover:text-green-600 w-9 h-9 rounded-lg shadow-sm flex items-center justify-center transition hover:bg-gray-50 z-50">
-                <i class="fa-solid fa-rotate-right"></i>
-            </button>
+            <button onclick="refreshCurrent()" class="bg-white border border-gray-300 text-gray-600 w-10 h-10 rounded-lg shadow-sm flex items-center justify-center"><i class="fa-solid fa-rotate-right"></i></button>
         </div>
     </div>
 
-    <div id="loading" class="text-center py-20 text-gray-400">
-        <i class="fa-solid fa-circle-notch fa-spin text-3xl"></i>
-        <p class="mt-4 text-sm">正在分析数据...</p>
-    </div>
+    <div id="loading" class="text-center py-20 text-gray-400"><i class="fa-solid fa-circle-notch fa-spin text-3xl"></i><p class="mt-4 text-sm">加载中...</p></div>
 
     <div id="content-area" class="hidden animate-fade-in">
         <div id="hero-section"></div>
-        <h3 class="text-xl font-bold text-gray-900 mb-4 mt-10 flex items-center">
-            <i class="fa-solid fa-fire text-red-500 mr-2"></i> 热门榜单 Top 10
-        </h3>
-        <div id="list-section" class="grid grid-cols-1 gap-4"></div>
+        <h3 class="text-lg font-bold text-gray-900 mb-4 mt-8 flex items-center"><i class="fa-solid fa-fire text-red-500 mr-2"></i> 热门榜单 Top 10</h3>
+        <div id="list-section" class="grid grid-cols-1 gap-3"></div>
     </div>
 </div>
 {% endblock %}
-
 {% block scripts %}
 <script>
+    /* JS 代码保持不变 (复用之前的逻辑) */
     let currentUser = 'all';
-
-    async function init() {
-        await loadUsers();
-        loadContent('all');
-    }
-
-    // 加载用户
+    async function init() { await loadUsers(); loadContent('all'); }
     async function loadUsers() {
         try {
-            console.log("正在加载用户列表...");
             const res = await fetch('/api/users');
             const json = await res.json();
-            
             const select = document.getElementById('user-select');
-            // 清空除第一项外的选项
             select.innerHTML = '<option value="all">🌏 全服数据</option>';
-
-            if(json.status === 'success' && json.data.length > 0) {
-                console.log(`加载成功，共 ${json.data.length} 个用户`);
+            if(json.status === 'success') {
                 json.data.forEach(user => {
                     const option = document.createElement('option');
                     option.value = user.UserId;
                     option.innerText = `👤 ${user.UserName}`;
                     select.appendChild(option);
                 });
-            } else {
-                console.warn("没有找到用户数据", json);
             }
-        } catch (e) { 
-            console.error("User Load Error:", e); 
-        }
+        } catch (e) { console.error(e); }
     }
-
-    function changeUser() {
-        currentUser = document.getElementById('user-select').value;
-        console.log("切换用户:", currentUser);
-        loadContent(currentUser);
-    }
-
-    function refreshCurrent() {
-        loadContent(currentUser);
-    }
-
+    function changeUser() { currentUser = document.getElementById('user-select').value; loadContent(currentUser); }
+    function refreshCurrent() { loadContent(currentUser); }
     async function loadContent(userId) {
         document.getElementById('loading').classList.remove('hidden');
         document.getElementById('content-area').classList.add('hidden');
-
         try {
-            const url = `/api/stats/top_movies?user_id=${userId}`;
-            const response = await fetch(url);
-            const res = await response.json();
-            
-            if(res.status === 'success' && res.data.length > 0) {
-                const list = res.data;
-                renderHero(list[0]);
-                renderList(list.slice(1));
-                
+            const res = await fetch(`/api/stats/top_movies?user_id=${userId}`);
+            const json = await res.json();
+            if(json.status === 'success' && json.data.length > 0) {
+                renderHero(json.data[0]);
+                renderList(json.data.slice(1));
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('content-area').classList.remove('hidden');
             } else {
-                document.getElementById('loading').innerHTML = `
-                    <div class="py-10">
-                        <i class="fa-solid fa-ghost text-4xl text-gray-200 mb-4"></i>
-                        <p>该用户在此期间暂无播放记录</p>
-                    </div>`;
-                // 也要隐藏内容区，防止残留
-                document.getElementById('content-area').classList.add('hidden');
+                document.getElementById('loading').innerHTML = `<div class="py-10"><i class="fa-solid fa-ghost text-4xl text-gray-200 mb-4"></i><p>无记录</p></div>`;
             }
-        } catch (e) {
-            console.error(e);
-            document.getElementById('loading').innerText = "数据加载失败";
-        }
+        } catch (e) { console.error(e); }
     }
-
+    
+    // 渲染 Hero: 手机端样式调整
     function renderHero(item) {
         const imgUrl = `/api/proxy/image/${item.ItemId}/primary`;
         const bgUrl = `/api/proxy/image/${item.ItemId}/backdrop`;
-        
-        const html = `
-        <div class="relative w-full h-80 rounded-3xl overflow-hidden shadow-xl mb-8 bg-gray-900 group">
-            <div class="absolute inset-0 bg-cover bg-center opacity-60 transition duration-1000 group-hover:scale-105" 
-                 style="background-image: url('${bgUrl}');"></div>
+        document.getElementById('hero-section').innerHTML = `
+        <div class="relative w-full h-[28rem] md:h-80 rounded-2xl md:rounded-3xl overflow-hidden shadow-xl bg-gray-900 group">
+            <div class="absolute inset-0 bg-cover bg-center opacity-60 transition duration-1000 group-hover:scale-105" style="background-image: url('${bgUrl}');"></div>
             <div class="absolute inset-0 hero-mask"></div>
-            <div class="relative z-10 h-full flex items-center px-6 md:px-10">
-                <div class="w-32 h-48 md:w-40 md:h-60 rounded-xl shadow-2xl overflow-hidden border-4 border-white transform rotate-3 transition group-hover:rotate-0 bg-gray-800 shrink-0">
+            <div class="relative z-10 h-full flex flex-col md:flex-row items-center md:px-10 justify-end md:justify-start pb-8 md:pb-0">
+                <div class="w-32 h-48 md:w-40 md:h-60 rounded-xl shadow-2xl overflow-hidden border-2 md:border-4 border-white transform rotate-3 transition group-hover:rotate-0 bg-gray-800 shrink-0 mb-4 md:mb-0">
                     <img src="${imgUrl}" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/300x450?text=No+Img'">
                 </div>
-                <div class="ml-6 md:ml-8 max-w-lg">
-                    <div class="text-yellow-600 font-bold uppercase tracking-wider text-xs md:text-sm mb-1">
-                        <i class="fa-solid fa-crown"></i> 播放冠军
-                    </div>
-                    <h2 class="text-2xl md:text-4xl font-black text-gray-900 leading-tight mb-2 md:mb-4 line-clamp-2">${item.ItemName}</h2>
-                    <div class="flex space-x-6 text-gray-700">
-                        <div>
-                            <span class="text-xl md:text-3xl font-bold block">${item.PlayCount}</span>
-                            <span class="text-xs text-gray-500 uppercase">次播放</span>
-                        </div>
-                        <div>
-                            <span class="text-xl md:text-3xl font-bold block">${Math.round(item.TotalTime/60)}</span>
-                            <span class="text-xs text-gray-500 uppercase">分钟</span>
-                        </div>
+                <div class="px-6 md:ml-8 text-center md:text-left max-w-lg">
+                    <div class="text-yellow-600 font-bold uppercase tracking-wider text-xs md:text-sm mb-1"><i class="fa-solid fa-crown"></i> 播放冠军</div>
+                    <h2 class="text-2xl md:text-4xl font-black text-gray-900 leading-tight mb-3 line-clamp-2">${item.ItemName}</h2>
+                    <div class="flex justify-center md:justify-start space-x-6 text-gray-700">
+                        <div><span class="text-xl md:text-3xl font-bold block">${item.PlayCount}</span><span class="text-xs text-gray-500 uppercase">次播放</span></div>
+                        <div><span class="text-xl md:text-3xl font-bold block">${Math.round(item.TotalTime/60)}</span><span class="text-xs text-gray-500 uppercase">分钟</span></div>
                     </div>
                 </div>
             </div>
         </div>`;
-        document.getElementById('hero-section').innerHTML = html;
     }
 
     function renderList(items) {
@@ -170,29 +104,20 @@
         items.forEach((item, index) => {
             const rank = index + 2;
             const imgUrl = `/api/proxy/image/${item.ItemId}/primary`;
-            
-            let rankStyle = "text-gray-300";
-            if(rank === 2) rankStyle = "text-gray-400";
-            if(rank === 3) rankStyle = "text-amber-700";
-
             html += `
-            <div class="bg-white rounded-xl p-3 md:p-4 shadow-sm border border-gray-100 flex items-center hover:shadow-md transition group">
-                <div class="w-8 md:w-12 text-center mr-3 md:mr-4 text-2xl md:text-3xl font-black ${rankStyle} italic">${rank}</div>
-                <div class="w-10 h-14 md:w-12 md:h-16 rounded bg-gray-200 overflow-hidden shrink-0 mr-4 shadow-sm relative">
-                     <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-500">
+            <div class="bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex items-center hover:shadow-md transition">
+                <div class="w-8 text-center mr-3 text-xl font-black ${rank <= 3 ? 'text-amber-700' : 'text-gray-300'} italic">${rank}</div>
+                <div class="w-10 h-14 rounded bg-gray-200 overflow-hidden shrink-0 mr-3 shadow-sm relative">
+                     <img src="${imgUrl}" class="w-full h-full object-cover">
                 </div>
                 <div class="flex-1 min-w-0">
-                    <h4 class="text-sm md:text-base font-bold text-gray-800 truncate">${item.ItemName}</h4>
+                    <h4 class="text-sm font-bold text-gray-800 truncate">${item.ItemName}</h4>
                     <div class="text-xs text-gray-500 mt-0.5">播放 ${item.PlayCount} 次</div>
-                </div>
-                <div class="text-right px-2 hidden sm:block">
-                     <div class="text-sm font-bold text-gray-700">${Math.round(item.TotalTime/60)}m</div>
                 </div>
             </div>`;
         });
         document.getElementById('list-section').innerHTML = html;
     }
-
     init();
 </script>
 {% endblock %}

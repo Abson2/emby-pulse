@@ -14,9 +14,10 @@ DB_PATH = os.getenv("DB_PATH", "/emby-data/playback_reporting.db")
 EMBY_HOST = os.getenv("EMBY_HOST", "http://127.0.0.1:8096").rstrip('/')
 EMBY_API_KEY = os.getenv("EMBY_API_KEY", "")
 
-print(f"--- 启动检查 ---")
+print(f"--- EmbyPulse 启动检查 ---")
+print(f"DB_PATH: {DB_PATH}")
 print(f"API_KEY: {'✅ 已加载' if EMBY_API_KEY else '❌ 未加载 (只能显示截图)'}")
-print(f"----------------")
+print(f"------------------------")
 
 app = FastAPI()
 
@@ -59,12 +60,11 @@ async def page_content(request: Request):
 async def page_report(request: Request):
     return templates.TemplateResponse("report.html", {"request": request, "active_page": "report"})
 
-# === API: 用户列表 (已修复：放宽条件) ===
+# === API: 用户列表 (已做多用户支持) ===
 @app.get("/api/users")
 async def api_get_users():
     try:
-        # 移除 UserName IS NOT NULL 限制，防止因部分记录无名导致列表为空
-        # 优先取最近的 UserName
+        # 逻辑：找出所有有过播放记录的用户
         sql = """
         SELECT UserId, MAX(UserName) as UserName 
         FROM PlaybackActivity 
@@ -72,37 +72,39 @@ async def api_get_users():
         ORDER BY UserName
         """
         users = query_db(sql)
-        # 如果 UserName 为空，用 'User {ID}' 暂代
         data = []
         if users:
             for u in users:
                 u_dict = dict(u)
+                # 处理空名用户
                 if not u_dict['UserName']:
-                    u_dict['UserName'] = f"User {u_dict['UserId'][:5]}..."
+                    u_dict['UserName'] = f"User {str(u_dict['UserId'])[:5]}"
                 data.append(u_dict)
-                
         return {"status": "success", "data": data}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# === API: 仪表盘 ===
+# === API: 仪表盘 (已做多用户支持) ===
 @app.get("/api/stats/dashboard")
 async def api_dashboard(user_id: Optional[str] = None):
     try:
         where_clause = "WHERE 1=1"
         params = []
+        # 核心：如果有 user_id 且不是 all，加过滤条件
         if user_id and user_id != 'all':
             where_clause += " AND UserId = ?"
             params.append(user_id)
 
+        # 1. 总播放
         res_plays = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where_clause}", params)
         total_plays = res_plays[0]['c'] if res_plays else 0
         
-        # 活跃用户逻辑优化
+        # 2. 活跃用户 (如果是选了单人，这里通常是1或0)
         active_sql = f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where_clause} AND DateCreated > date('now', '-30 days')"
         res_users = query_db(active_sql, params)
         active_users = res_users[0]['c'] if res_users else 0
         
+        # 3. 总时长
         res_dur = query_db(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where_clause}", params)
         total_duration = res_dur[0]['c'] if res_dur and res_dur[0]['c'] else 0
 
@@ -110,7 +112,7 @@ async def api_dashboard(user_id: Optional[str] = None):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# === API: 热门内容 ===
+# === API: 热门内容 (已做多用户支持) ===
 @app.get("/api/stats/top_movies")
 async def api_top_movies(user_id: Optional[str] = None):
     where_clause = ""
@@ -134,33 +136,26 @@ async def api_top_movies(user_id: Optional[str] = None):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# === API: 智能图片中转 (已修复：使用 Search 接口防 404) ===
+# === API: 图片代理 (已修复404问题) ===
 @app.get("/api/proxy/image/{item_id}/{img_type}")
 async def proxy_image(item_id: str, img_type: str):
     target_id = item_id
     
-    # 只有取“封面”且有 API Key 时才去查剧集 ID
+    # 智能搜图：如果是封面请求，尝试找剧集ID
     if img_type == 'primary' and EMBY_API_KEY:
         try:
-            # 🔥 核心修复：改用 Items 列表搜索接口，而不是详情接口
-            # 这种方式兼容性更强，不容易报 404
-            info_url = f"{EMBY_HOST}/emby/Items?Ids={item_id}&Fields=SeriesId,ParentId,PrimaryImageAspectRatio&Limit=1&api_key={EMBY_API_KEY}"
-            
+            info_url = f"{EMBY_HOST}/emby/Items?Ids={item_id}&Fields=SeriesId,ParentId&Limit=1&api_key={EMBY_API_KEY}"
             info_resp = requests.get(info_url, timeout=3)
             if info_resp.status_code == 200:
                 data = info_resp.json()
-                if data.get("Items") and len(data["Items"]) > 0:
+                if data.get("Items"):
                     item_info = data["Items"][0]
-                    # 如果是单集 (Episode)，优先用 SeriesId (剧集海报)
                     if item_info.get('Type') == 'Episode':
-                        if item_info.get('SeriesId'):
-                            target_id = item_info.get('SeriesId')
-                        elif item_info.get('ParentId'):
-                            target_id = item_info.get('ParentId')
-        except Exception as e:
-            print(f"Smart Image Look up failed: {e}")
+                        if item_info.get('SeriesId'): target_id = item_info.get('SeriesId')
+                        elif item_info.get('ParentId'): target_id = item_info.get('ParentId')
+        except Exception:
+            pass
 
-    # 拼接最终图片链接
     if img_type == 'backdrop':
         emby_url = f"{EMBY_HOST}/emby/Items/{target_id}/Images/Backdrop?maxWidth=800&quality=80"
     else:
@@ -168,10 +163,8 @@ async def proxy_image(item_id: str, img_type: str):
     
     try:
         resp = requests.get(emby_url, timeout=5)
-        # 透传 Emby 的图片流
         return Response(content=resp.content, media_type=resp.headers.get("Content-Type", "image/jpeg"))
-    except Exception:
-        # 如果 Emby 也没图，或者挂了
+    except:
         return Response(status_code=404)
 
 if __name__ == "__main__":
