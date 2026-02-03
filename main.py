@@ -12,7 +12,7 @@ from typing import Optional
 PORT = 10307
 DB_PATH = os.getenv("DB_PATH", "/emby-data/playback_reporting.db")
 EMBY_HOST = os.getenv("EMBY_HOST", "http://127.0.0.1:8096").rstrip('/')
-EMBY_API_KEY = os.getenv("EMBY_API_KEY", "").strip() # 去除可能存在的空格
+EMBY_API_KEY = os.getenv("EMBY_API_KEY", "").strip()
 
 print(f"--- EmbyPulse 启动 ---")
 print(f"DB: {DB_PATH}")
@@ -108,7 +108,7 @@ async def api_dashboard(user_id: Optional[str] = None):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# === 🔥 超级去重版 API: 最近播放 ===
+# === 🔥 深度搜索版 API: 最近播放 ===
 @app.get("/api/stats/recent")
 async def api_recent_activity(user_id: Optional[str] = None):
     try:
@@ -118,13 +118,14 @@ async def api_recent_activity(user_id: Optional[str] = None):
             where += " AND UserId = ?"
             params.append(user_id)
         
-        # 1. 扩大搜索范围到 60 条，保证有足够数据去重
+        # 🔥 修改点1：LIMIT 增大到 300！
+        # 这样即使你连看 50 集同一部剧，我们也能挖到 300 条以前的记录，找到不同的剧
         sql = f"""
         SELECT DateCreated, UserId, ItemId, ItemName, ItemType, PlayDuration 
         FROM PlaybackActivity 
         {where}
         ORDER BY DateCreated DESC 
-        LIMIT 60
+        LIMIT 300
         """
         results = query_db(sql, params)
         if not results: return {"status": "success", "data": []}
@@ -132,14 +133,17 @@ async def api_recent_activity(user_id: Optional[str] = None):
         raw_items = [dict(row) for row in results]
         user_map = get_user_map()
         
-        # 2. 批量查元数据 (分批处理，每批 20 个，防止 URL 过长报错)
+        # 批量查元数据 (分批处理)
         metadata_map = {}
         all_ids = [item['ItemId'] for item in raw_items]
         
+        # 只查前 60 个 item 的元数据，节省 API 资源 (通常前 60 个就够凑齐显示了)
+        ids_to_check = all_ids[:100] 
+        
         if EMBY_API_KEY:
             chunk_size = 20
-            for i in range(0, len(all_ids), chunk_size):
-                chunk_ids = all_ids[i:i + chunk_size]
+            for i in range(0, len(ids_to_check), chunk_size):
+                chunk_ids = ids_to_check[i:i + chunk_size]
                 if not chunk_ids: continue
                 try:
                     ids_str = ",".join(chunk_ids)
@@ -150,47 +154,38 @@ async def api_recent_activity(user_id: Optional[str] = None):
                             metadata_map[meta['Id']] = meta
                 except: pass
 
-        # 3. 强力去重逻辑
         final_data = []
         seen_keys = set() 
 
         for item in raw_items:
             item['UserName'] = user_map.get(item['UserId'], "Unknown")
             
-            # 默认值
             display_id = item['ItemId']
             display_title = item['ItemName']
             is_episode = False
             
-            # A. 优先尝试 API 元数据
             meta = metadata_map.get(item['ItemId'])
+            
+            # API 识别
             if meta:
                 if meta.get('Type') == 'Episode':
                     is_episode = True
                     if meta.get('SeriesId'):
-                        display_id = meta.get('SeriesId') # 用剧集ID做封面
+                        display_id = meta.get('SeriesId')
                         if meta.get('SeriesName'):
-                             display_title = meta.get('SeriesName') # 用剧集名做标题
+                             display_title = meta.get('SeriesName')
             
-            # B. 兜底策略：如果 API 没查到，但名字看起来像单集，强制文本分析
-            # 例子: "海市蜃楼 - S01E04 - xxx" -> 截取 "海市蜃楼"
+            # 文本兜底识别
             if not meta or (is_episode and display_id == item['ItemId']):
                 original_name = item['ItemName']
-                # 简单特征识别
                 if ' - ' in original_name:
-                    parts = original_name.split(' - ')
-                    # 假设第一部分是剧名
-                    display_title = parts[0]
-                    # 使用剧名作为去重键（权宜之计，虽然 ID 还是单集 ID，但至少能在列表中只保留一个名字）
-                    # 注意：如果没有 API，我们拿不到 SeriesId，只能用单集封面，但我们可以控制不显示重复的“剧名”
-                    
-            # 构造唯一键：如果是剧集，我们希望只显示一次
-            # 如果拿到了 SeriesId，用 SeriesId 去重 (完美)
-            # 如果没拿到，用 清洗后的剧名 去重 (凑合，但能防止刷屏)
+                    display_title = original_name.split(' - ')[0]
+
+            # 确定唯一键
             if is_episode and meta and meta.get('SeriesId'):
                 unique_key = meta.get('SeriesId')
             else:
-                unique_key = display_title # 文本去重
+                unique_key = display_title 
             
             if unique_key not in seen_keys:
                 seen_keys.add(unique_key)
@@ -198,8 +193,8 @@ async def api_recent_activity(user_id: Optional[str] = None):
                 item['DisplayTitle'] = display_title
                 final_data.append(item)
             
-            # 只展示 14 个，凑齐一排 (电脑端 7列 x 2行 = 14)
-            if len(final_data) >= 14: 
+            # 🔥 修改点2：目标是填满 24 个格子 (即使是大屏幕也够了)
+            if len(final_data) >= 24: 
                 break
                 
         return {"status": "success", "data": final_data}
