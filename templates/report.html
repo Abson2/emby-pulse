@@ -2,7 +2,6 @@
 {% block title %}映迹工坊 - EmbyPulse{% endblock %}
 {% block head %}
 <style>
-    /* 海报尺寸升级：更宽，更大气 */
     .poster-container { 
         width: 400px; 
         height: 750px; 
@@ -13,7 +12,6 @@
         overflow: hidden;
     }
     
-    /* 玻璃拟态卡片 */
     .glass-panel { 
         background: rgba(255, 255, 255, 0.08); 
         backdrop-filter: blur(16px); 
@@ -23,17 +21,21 @@
 
     .user-option.selected { border-color: #16a34a; background-color: #f0fdf4; }
     
-    /* 动态背景图层 */
     #poster-backdrop-layer {
         position: absolute; inset: 0; 
         background-size: cover; background-position: center; 
         filter: blur(20px) brightness(0.6);
-        transform: scale(1.1); /* 防止模糊白边 */
+        transform: scale(1.1); 
         transition: background-image 0.8s ease;
         z-index: 0;
     }
     
     .poster-content { position: relative; z-index: 10; }
+    
+    /* 背景选择球 */
+    .bg-option { width: 24px; height: 24px; border-radius: 50%; cursor: pointer; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: transform 0.2s; }
+    .bg-option:hover { transform: scale(1.2); }
+    .bg-option.active { border-color: #16a34a; transform: scale(1.1); }
 </style>
 {% endblock %}
 
@@ -50,6 +52,18 @@
                 <label class="block text-xs font-bold text-gray-500 uppercase mb-2">主角</label>
                 <div id="user-list-container" class="space-y-2 max-h-48 overflow-y-auto pr-1">
                     <p class="text-gray-400 text-xs">加载中...</p>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-2">海报氛围</label>
+                <div class="flex flex-wrap gap-3">
+                    <div class="bg-option active" style="background: linear-gradient(135deg, #1f2937 0%, #111827 100%)" onclick="setBg(this, 'linear-gradient(135deg, #1f2937 0%, #111827 100%)')"></div>
+                    <div class="bg-option" style="background: linear-gradient(to right, #434343 0%, black 100%)" onclick="setBg(this, 'linear-gradient(to right, #434343 0%, black 100%)')"></div>
+                    <div class="bg-option" style="background: linear-gradient(to top, #30cfd0 0%, #330867 100%)" onclick="setBg(this, 'linear-gradient(to top, #30cfd0 0%, #330867 100%)')"></div>
+                    <div class="bg-option" style="background: linear-gradient(to top, #5f72bd 0%, #9b23ea 100%)" onclick="setBg(this, 'linear-gradient(to top, #5f72bd 0%, #9b23ea 100%)')"></div>
+                    <div class="bg-option" style="background: linear-gradient(120deg, #d4fc79 0%, #96e6a1 100%)" onclick="setBg(this, 'linear-gradient(120deg, #d4fc79 0%, #96e6a1 100%)')"></div>
+                    <div class="bg-option" style="background: linear-gradient(to right, #fa709a 0%, #fee140 100%)" onclick="setBg(this, 'linear-gradient(to right, #fa709a 0%, #fee140 100%)')"></div>
                 </div>
             </div>
 
@@ -102,8 +116,10 @@
                         <div class="text-xs font-bold text-yellow-400 mb-3 flex items-center gap-2">
                             <i class="fa-solid fa-crown"></i> 年度最爱 Top 1
                         </div>
-                        <div class="relative w-full aspect-[16/9] rounded-2xl overflow-hidden shadow-2xl border border-white/20 group">
-                            <img id="poster-top1-img" src="" class="w-full h-full object-cover">
+                        <div class="relative w-full aspect-[16/9] rounded-2xl overflow-hidden shadow-2xl border border-white/20 group bg-black/20">
+                            <img id="poster-top1-img" src="" 
+                                 class="w-full h-full object-cover transition duration-700"
+                                 onerror="handleImgError(this, 'backdrop')">
                             <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
                             <div class="absolute bottom-4 left-4 right-4">
                                 <h3 class="text-xl font-bold leading-tight line-clamp-1" id="poster-top1-title">暂无数据</h3>
@@ -114,14 +130,18 @@
 
                     <div class="grid grid-cols-2 gap-4 mb-8">
                         <div class="glass-panel p-3 rounded-xl flex gap-3 items-center">
-                            <div class="w-10 h-14 bg-gray-700 rounded overflow-hidden shrink-0"><img id="poster-top2-img" class="w-full h-full object-cover"></div>
+                            <div class="w-10 h-14 bg-gray-700 rounded overflow-hidden shrink-0">
+                                <img id="poster-top2-img" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/100x150/374151/9ca3af?text=No'">
+                            </div>
                             <div class="min-w-0">
                                 <div class="text-[10px] text-white/40 font-bold mb-0.5">Top 2</div>
                                 <div class="text-xs font-bold truncate" id="poster-top2-title">-</div>
                             </div>
                         </div>
                         <div class="glass-panel p-3 rounded-xl flex gap-3 items-center">
-                            <div class="w-10 h-14 bg-gray-700 rounded overflow-hidden shrink-0"><img id="poster-top3-img" class="w-full h-full object-cover"></div>
+                            <div class="w-10 h-14 bg-gray-700 rounded overflow-hidden shrink-0">
+                                <img id="poster-top3-img" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/100x150/374151/9ca3af?text=No'">
+                            </div>
                             <div class="min-w-0">
                                 <div class="text-[10px] text-white/40 font-bold mb-0.5">Top 3</div>
                                 <div class="text-xs font-bold truncate" id="poster-top3-title">-</div>
@@ -155,6 +175,24 @@
 {% block scripts %}
 <script>
     const quotes = ["生活不仅有代码，还有电影。", "有些鸟儿是关不住的。", "能力越大，责任越大。", "愿原力与你同在。", "念念不忘，必有回响。", "我命由我不由天！", "为了看看阳光，我来到这世上。", "风起，唯有努力生存。", "如果不曾见过太阳，我本可以忍受黑暗。", "好的电影，是一次灵魂的洗礼。"];
+
+    // 🔥 核心修复：图片错误处理函数
+    function handleImgError(img, type) {
+        // 防止无限循环
+        img.onerror = null;
+        
+        // 如果当前是 backdrop (横图) 裂了，尝试换成 primary (竖图)
+        if (img.src.includes('backdrop')) {
+            console.log('Backdrop failed, trying primary...');
+            img.src = img.src.replace('backdrop', 'primary');
+            // 同时更新背景图也为 primary
+            const bgLayer = document.getElementById('poster-backdrop-layer');
+            bgLayer.style.backgroundImage = `url('${img.src}')`;
+        } else {
+            // 如果 primary 也裂了，显示灰色占位
+            img.src = 'https://via.placeholder.com/400x225/374151/9ca3af?text=No+Image';
+        }
+    }
 
     function resizePoster() {
         if (window.innerWidth < 1000) {
@@ -204,26 +242,30 @@
             if(json.status === 'success') {
                 const data = json.data;
                 
-                // 1. 基础数据
                 document.getElementById('poster-plays').innerText = data.plays;
                 document.getElementById('poster-hours').innerText = data.hours;
                 document.getElementById('poster-tag').innerText = data.tags[0] || "观影达人";
                 document.getElementById('poster-active-hour').innerText = data.active_hour;
 
-                // 2. Top 1
                 if(data.top3 && data.top3.length > 0) {
                     const top1 = data.top3[0];
                     document.getElementById('poster-top1-title').innerText = top1.ItemName;
                     document.getElementById('poster-top1-plays').innerText = top1.P;
                     
-                    const imgUrl = `/api/proxy/image/${top1.ItemId}/backdrop`; // 用大图
-                    document.getElementById('poster-top1-img').src = imgUrl;
+                    // 默认尝试加载 Backdrop (横图)
+                    const imgUrl = `/api/proxy/image/${top1.ItemId}/backdrop`; 
+                    const imgEl = document.getElementById('poster-top1-img');
+                    
+                    // 重置 onerror 以便再次触发
+                    imgEl.onerror = function() { handleImgError(this, 'backdrop'); };
+                    imgEl.src = imgUrl;
+                    
+                    // 背景同步
                     document.getElementById('poster-backdrop-layer').style.backgroundImage = `url('${imgUrl}')`;
                 }
 
-                // 3. Top 2 & 3
-                updateSmallCard(1, data.top3); // Top 2 (index 1)
-                updateSmallCard(2, data.top3); // Top 3 (index 2)
+                updateSmallCard(1, data.top3); 
+                updateSmallCard(2, data.top3); 
             }
         } catch(e) { console.error(e); }
     }
@@ -231,13 +273,12 @@
     function updateSmallCard(index, list) {
         const titleEl = document.getElementById(`poster-top${index+1}-title`);
         const imgEl = document.getElementById(`poster-top${index+1}-img`);
-        
         if(list && list[index]) {
             titleEl.innerText = list[index].ItemName;
-            imgEl.src = `/api/proxy/image/${list[index].ItemId}/primary`; // 用竖图
+            imgEl.src = `/api/proxy/image/${list[index].ItemId}/primary`;
         } else {
             titleEl.innerText = "-";
-            imgEl.src = ""; // 或占位图
+            imgEl.src = "";
         }
     }
 
@@ -247,13 +288,18 @@
         document.getElementById('poster-msg').innerText = quote;
     }
 
+    function setBg(el, bgStyle) {
+        document.querySelectorAll('.bg-option').forEach(opt => opt.classList.remove('active'));
+        el.classList.add('active');
+        document.getElementById('capture-area').style.background = bgStyle;
+    }
+
     function downloadPoster() {
         const node = document.getElementById('capture-area');
         const btn = document.getElementById('dl-btn');
         const originalText = btn.innerHTML;
         const userName = document.getElementById('poster-user').innerText;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> 生成中...';
-        
         html2canvas(node, { scale: 3, useCORS: true, backgroundColor: null }).then(canvas => {
             const link = document.createElement('a');
             link.download = `EmbyReport_2026_${userName}.png`;
