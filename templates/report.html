@@ -51,8 +51,19 @@
     /* Header */
     .p-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
     .user-box { display: flex; align-items: center; gap: 12px; }
-    .avatar { width: 50px; height: 50px; border-radius: 50%; background: var(--theme-card); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 900; border: 2px solid rgba(255,255,255,0.3); }
-    .user-info h1 { font-size: 24px; font-weight: 900; margin: 0; padding: 4px 0; }
+    
+    /* 🔥 智能头像 */
+    .avatar { 
+        width: 54px; height: 54px; border-radius: 50%; 
+        background: var(--theme-card); 
+        display: flex; align-items: center; justify-content: center; 
+        font-size: 22px; font-weight: 900; 
+        border: 2px solid rgba(255,255,255,0.3);
+        background-size: cover; background-position: center;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .user-info h1 { font-size: 24px; font-weight: 900; margin: 0; padding-top: 4px; padding-bottom: 4px; }
     .user-info p { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; margin: 0; padding-bottom: 2px; }
     .server-pill { background: var(--theme-card); padding: 4px 10px; border-radius: 20px; font-size: 10px; border: 1px solid rgba(255,255,255,0.1); text-align: center; }
     .server-pill span { display: block; font-weight: 900; font-size: 12px; color: #4ade80; padding-bottom: 2px; }
@@ -64,16 +75,12 @@
     .stat-label { font-size: 9px; opacity: 0.6; text-transform: uppercase; font-weight: bold; }
 
     /* Podium */
-    .podium-container { 
-        display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 10px; align-items: end; 
-        margin-bottom: 30px; margin-top: 10px;
-    }
+    .podium-container { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 10px; align-items: end; margin-bottom: 30px; margin-top: 10px; }
     .podium-item { position: relative; display: flex; flex-direction: column; align-items: center; }
     .podium-cover {
         width: 100%; aspect-ratio: 2/3; border-radius: 8px; 
         background-color: #333; background-size: cover; background-position: center;
-        box-shadow: 0 10px 20px rgba(0,0,0,0.3); position: relative;
-        border: 2px solid transparent;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.3); position: relative; border: 2px solid transparent;
     }
     .podium-item.rank-1 .podium-cover { border-color: #eab308; transform: scale(1.05); z-index: 5; box-shadow: 0 0 20px rgba(234, 179, 8, 0.4); }
     .podium-item.rank-2 .podium-cover { border-color: #94a3b8; }
@@ -81,15 +88,12 @@
     .medal { 
         position: absolute; top: -10px; left: 50%; transform: translateX(-50%); 
         width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-        font-size: 12px; font-weight: bold; color: white; z-index: 10;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        font-size: 12px; font-weight: bold; color: white; z-index: 10; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
     .medal.rank-1 { background: linear-gradient(135deg, #fcd34d, #b45309); width: 32px; height: 32px; top: -16px; font-size: 14px; }
     .medal.rank-2 { background: linear-gradient(135deg, #e2e8f0, #64748b); }
     .medal.rank-3 { background: linear-gradient(135deg, #fdba74, #9a3412); }
-    
     .podium-info { text-align: center; margin-top: 8px; width: 100%; }
-    /* 🔥 修复：增加 padding-bottom 防止切字 */
     .podium-title { font-size: 11px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; padding-bottom: 4px; }
     .podium-meta { font-size: 9px; opacity: 0.7; }
 
@@ -97,8 +101,7 @@
     .rank-list { display: flex; flex-direction: column; gap: 8px; }
     .rank-row { 
         display: flex; align-items: center; padding: 10px 10px; 
-        background: var(--theme-card); border-radius: 10px; backdrop-filter: blur(5px);
-        min-height: 50px; /* 增加高度 */
+        background: var(--theme-card); border-radius: 10px; backdrop-filter: blur(5px); min-height: 50px;
     }
     .rank-idx { font-size: 12px; font-weight: 900; opacity: 0.4; width: 25px; text-align: center; }
     .rank-poster-sm {
@@ -107,7 +110,6 @@
         margin-right: 12px; flex-shrink: 0;
     }
     .rank-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
-    /* 🔥 修复：增加 padding-bottom 防止切字 */
     .rank-name { font-size: 12px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 4px; margin-bottom: -2px; }
     .rank-meta-row { font-size: 9px; opacity: 0.7; display: flex; gap: 8px; }
 
@@ -118,9 +120,13 @@
     .btn { flex: 1; padding: 10px; border: 1px solid #ddd; background: #fff; font-weight: bold; border-radius: 8px; font-size: 12px; cursor: pointer; min-width: 60px; }
     .btn.active { background: #111827; color: white; border-color: #111827; }
     
-    .theme-dots { display: flex; gap: 10px; margin-top: 10px; }
-    .dot { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
-    .dot:hover { transform: scale(1.1); }
+    /* 🔥 8款主题色块 */
+    .theme-dots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px; }
+    .dot { 
+        height: 40px; border-radius: 8px; cursor: pointer; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
+        display: flex; align-items: center; justify-content: center; font-size: 10px; color: white; font-weight: bold; text-shadow: 0 1px 2px black;
+    }
+    .dot:hover { transform: scale(1.05); }
 </style>
 {% endblock %}
 
@@ -135,7 +141,7 @@
                 <div class="p-content">
                     <div class="p-header">
                         <div class="user-box">
-                            <div class="avatar" id="p-avatar">U</div>
+                            <div class="avatar" id="p-avatar" data-type="text">U</div>
                             <div class="user-info">
                                 <h1 id="p-user">User</h1>
                                 <p id="p-period">全量观影报告</p>
@@ -185,7 +191,6 @@
                                 </div>
                             </div>
                         </div>
-
                         <div class="rank-list" id="rank-list"></div>
                     </div>
 
@@ -216,16 +221,19 @@
 
         <label style="font-size: 12px; font-weight: bold; color: #666;">主题配色</label>
         <div class="theme-dots">
-            <div class="dot" style="background: #1a1a1a;" onclick="setTheme('#1a1a1a', 'white')"></div>
-            <div class="dot" style="background: #2e1065;" onclick="setTheme('#2e1065', 'white')"></div>
-            <div class="dot" style="background: #0f172a;" onclick="setTheme('#0f172a', 'white')"></div>
-            <div class="dot" style="background: #881337;" onclick="setTheme('#881337', 'white')"></div>
-            <div class="dot" style="background: #ffffff; border: 1px solid #ccc;" onclick="setTheme('#ffffff', '#333')"></div>
+            <div class="dot" style="background: #1a1a1a;" onclick="setTheme('#1a1a1a', 'white')">黑金</div>
+            <div class="dot" style="background: #2e1065;" onclick="setTheme('#2e1065', 'white')">赛博</div>
+            <div class="dot" style="background: #0f172a;" onclick="setTheme('#0f172a', 'white')">深海</div>
+            <div class="dot" style="background: #064e3b;" onclick="setTheme('#064e3b', 'white')">极光</div>
+            <div class="dot" style="background: #7f1d1d;" onclick="setTheme('#7f1d1d', 'white')">熔岩</div>
+            <div class="dot" style="background: linear-gradient(135deg, #c2410c, #7c2d12);" onclick="setTheme('linear-gradient(135deg, #c2410c, #7c2d12)', 'white')">落日</div>
+            <div class="dot" style="background: #525252;" onclick="setTheme('#525252', 'white')">水泥</div>
+            <div class="dot" style="background: #ffffff; color:#333; text-shadow:none; border:1px solid #ccc;" onclick="setTheme('#ffffff', '#333')">纯白</div>
         </div>
         
-        <button onclick="toggleCoverBg()" class="btn" style="width: 100%; margin-top: 10px; border: 1px dashed #999;">🖼️ 使用封面背景 (Top 1)</button>
+        <button onclick="toggleCoverBg()" class="btn" style="width: 100%; margin-top: 15px; border: 1px dashed #999;">🖼️ 使用 Top1 封面背景</button>
 
-        <button onclick="savePoster()" id="save-btn" style="width: 100%; padding: 12px; background: #16a34a; color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 14px; margin-top: 20px;">
+        <button onclick="savePoster()" id="save-btn" style="width: 100%; padding: 12px; background: #16a34a; color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 14px; margin-top: 10px;">
             保存海报
         </button>
     </div>
@@ -236,7 +244,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
     let currentUserId = '';
+    let currentUserName = 'User';
     let currentPeriod = 'month';
+    const periodMap = {'all':'全量','year':'年度','month':'本月','week':'本周'};
 
     function fitScale() {
         const wrapper = document.querySelector('.preview-area');
@@ -250,6 +260,7 @@
     async function toBase64(url) {
         try {
             const res = await fetch(url);
+            if(!res.ok) throw new Error('Network response was not ok');
             const blob = await res.blob();
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -259,12 +270,10 @@
         } catch(e) { return null; }
     }
 
-    // 🔥 智能日期计算
     function getDateLabel(period) {
         const now = new Date();
         const y = now.getFullYear();
         const m = now.getMonth() + 1;
-        
         if (period === 'year') return `${y} 年度观影报告`;
         if (period === 'month') return `${y}年${m}月 观影报告`;
         if (period === 'week') {
@@ -281,7 +290,7 @@
         const canvas = document.querySelector('.poster-canvas');
         canvas.style.background = bg;
         canvas.style.color = text;
-        document.getElementById('poster-bg-img').style.opacity = '0'; // 关背景图
+        document.getElementById('poster-bg-img').style.opacity = '0'; 
         if(text === '#333') {
             document.documentElement.style.setProperty('--theme-card', 'rgba(0,0,0,0.05)');
             document.getElementById('poster-bg-gradient').style.background = 'transparent';
@@ -300,6 +309,42 @@
             document.documentElement.style.setProperty('--theme-card', 'rgba(255,255,255,0.08)');
             document.querySelector('.poster-canvas').style.color = 'white';
             document.getElementById('poster-bg-gradient').style.background = 'linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.8) 100%)';
+        }
+    }
+
+    // 🔥 哈希渐变生成器
+    function getHashGradient(name) {
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        const hue1 = Math.abs(hash % 360);
+        const hue2 = (hue1 + 40) % 360;
+        return `linear-gradient(135deg, hsl(${hue1}, 70%, 50%), hsl(${hue2}, 70%, 50%))`;
+    }
+
+    // 🔥 头像加载逻辑
+    async function loadAvatar() {
+        const avatarEl = document.getElementById('p-avatar');
+        // 1. 先重置为初始状态 (显示文字)
+        avatarEl.style.backgroundImage = 'none';
+        avatarEl.innerText = currentUserName[0].toUpperCase();
+        avatarEl.dataset.type = 'text';
+
+        // 2. 尝试获取真实头像
+        const realUrl = `/api/proxy/user_image/${currentUserId}`;
+        const b64 = await toBase64(realUrl); // 预加载检测
+
+        if (b64) {
+            // Plan A: 真实头像
+            avatarEl.style.backgroundImage = `url('${b64}')`;
+            avatarEl.innerText = '';
+            avatarEl.dataset.type = 'image';
+            avatarEl.dataset.src = realUrl; // 供截图用
+        } else {
+            // Plan B: 哈希渐变
+            avatarEl.style.backgroundImage = getHashGradient(currentUserName);
+            avatarEl.style.color = 'white';
+            avatarEl.style.textShadow = '0 2px 4px rgba(0,0,0,0.3)';
+            avatarEl.dataset.type = 'hash';
         }
     }
 
@@ -322,8 +367,10 @@
     function changeUser(uid) {
         currentUserId = uid;
         const sel = document.getElementById('user-select');
-        document.getElementById('p-user').innerText = sel.options[sel.selectedIndex].text;
-        document.getElementById('p-avatar').innerText = sel.options[sel.selectedIndex].text[0].toUpperCase();
+        currentUserName = sel.options[sel.selectedIndex].text;
+        document.getElementById('p-user').innerText = currentUserName;
+        
+        loadAvatar(); // 加载头像
         loadData();
     }
 
@@ -340,9 +387,7 @@
         const json = await res.json();
         const data = json.data;
 
-        // 1. 动态文案
         document.getElementById('p-period').innerText = getDateLabel(currentPeriod);
-
         document.getElementById('p-plays').innerText = data.plays;
         document.getElementById('p-hours').innerText = data.hours;
         document.getElementById('p-server').innerText = data.server_plays;
@@ -357,13 +402,11 @@
             
             if(list.length > 0) {
                 podiumArea.style.display = 'grid';
-                
                 const renderRank = async (rank, idx) => {
                     const el = document.getElementById(`rank${rank}-box`);
                     if(list[idx]) {
                         el.style.visibility = 'visible';
                         document.getElementById(`rank${rank}-title`).innerText = list[idx].ItemName;
-                        // 🔥 修复：补全时长
                         const h = Math.round(list[idx].Duration/3600);
                         const t = h > 0 ? ` · ${h}小时` : '';
                         document.getElementById(`rank${rank}-meta`).innerText = `${list[idx].Count}次${t}`;
@@ -371,7 +414,6 @@
                         const imgUrl = `/api/proxy/image/${list[idx].ItemId}/primary`;
                         const b64 = await toBase64(imgUrl);
                         const coverEl = document.getElementById(`rank${rank}-img`);
-                        
                         if(b64) {
                             coverEl.style.backgroundImage = `url('${b64}')`;
                             coverEl.dataset.src = imgUrl;
@@ -379,20 +421,11 @@
                                 document.getElementById('poster-bg-img').style.backgroundImage = `url('${b64}')`;
                                 document.getElementById('poster-bg-img').dataset.src = imgUrl;
                             }
-                        } else {
-                            coverEl.style.backgroundColor = '#333';
-                        }
-                    } else {
-                        el.style.visibility = 'hidden';
-                    }
+                        } else { coverEl.style.backgroundColor = '#333'; }
+                    } else { el.style.visibility = 'hidden'; }
                 };
-
-                await renderRank(1, 0); 
-                await renderRank(2, 1); 
-                await renderRank(3, 2); 
-            } else {
-                podiumArea.style.display = 'none';
-            }
+                await renderRank(1, 0); await renderRank(2, 1); await renderRank(3, 2); 
+            } else { podiumArea.style.display = 'none'; }
 
             const listEl = document.getElementById('rank-list');
             let html = '';
@@ -401,22 +434,17 @@
                 const hours = Math.round(list[i].Duration/3600);
                 const timeText = hours > 0 ? `${hours}h` : '<1h';
                 const imgUrl = `/api/proxy/image/${list[i].ItemId}/primary`;
-                
                 html += `
                 <div class="rank-row">
                     <div class="rank-idx">${i+1}</div>
                     <div class="rank-poster-sm" style="background-image: url('${imgUrl}')" data-src="${imgUrl}"></div>
                     <div class="rank-info">
                         <div class="rank-name">${list[i].ItemName}</div>
-                        <div class="rank-meta-row">
-                            <span>${list[i].Count}次</span>
-                            <span>${timeText}</span>
-                        </div>
+                        <div class="rank-meta-row"><span>${list[i].Count}次</span><span>${timeText}</span></div>
                     </div>
                 </div>`;
             }
             listEl.innerHTML = html;
-            
             setTimeout(async () => {
                 const smPosters = listEl.querySelectorAll('.rank-poster-sm');
                 for(let el of smPosters) {
@@ -433,11 +461,20 @@
         btn.innerText = '生成中...';
         const wrapper = document.getElementById('scale-wrapper');
         const oldT = wrapper.style.transform;
-        
         wrapper.style.transform = 'none';
         await new Promise(r => setTimeout(r, 200)); 
         
         try {
+            // 🔥 截图前再次确认 Base64
+            const allImages = document.getElementById('capture-target').querySelectorAll('[data-src]');
+            const promises = Array.from(allImages).map(async (el) => {
+                if(el.dataset.src && !el.style.backgroundImage.includes('base64')) {
+                    const b64 = await toBase64(el.dataset.src);
+                    if(b64) el.style.backgroundImage = `url('${b64}')`;
+                }
+            });
+            await Promise.all(promises);
+
             const canvas = await html2canvas(document.getElementById('capture-target'), { 
                 scale: 2, useCORS: true, backgroundColor: null 
             });
