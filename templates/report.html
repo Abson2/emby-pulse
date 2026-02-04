@@ -3,93 +3,116 @@
 {% block head %}
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <style>
-    /* ================= 布局系统 ================= */
-    html, body { height: 100%; margin: 0; background: #e5e5e5; font-family: "Microsoft YaHei", -apple-system, sans-serif !important; overflow: hidden; }
-    .app-container { display: flex; flex-direction: column; height: 100%; }
-    .preview-area { flex: 1; overflow-y: auto; display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px; background-color: #f3f4f6; -webkit-overflow-scrolling: touch; }
-    .control-panel { background: white; padding: 20px; box-shadow: 0 -5px 20px rgba(0,0,0,0.1); z-index: 50; flex-shrink: 0; max-height: 40vh; overflow-y: auto; }
-    @media (min-width: 768px) { .app-container { flex-direction: row; } .control-panel { width: 360px; height: 100%; max-height: 100%; border-right: 1px solid #ddd; } .preview-area { align-items: center; } }
+    /* ================= 全局设定 ================= */
+    html, body { height: 100%; margin: 0; background: #f3f4f6; font-family: "Microsoft YaHei", -apple-system, sans-serif !important; overflow: hidden; }
+    .app-container { display: flex; height: 100%; }
     
-    /* ================= 海报本体 ================= */
-    :root {
-        --theme-bg: #1a1a1a;
-        --theme-card: rgba(255,255,255,0.08);
-        --theme-text: white;
-        --theme-sub: rgba(255,255,255,0.6);
-        --theme-highlight: #eab308;
+    /* ================= 预览区 (Preview Area) ================= */
+    .preview-area {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 40px 20px;
+        background-color: #e5e7eb;
+        -webkit-overflow-scrolling: touch;
+        /* Mobile: 给底部留出空间防止遮挡 */
+        padding-bottom: 100px;
     }
 
+    /* ================= PC端控制台 (Desktop Control) ================= */
+    .control-panel {
+        width: 360px;
+        background: white;
+        padding: 20px;
+        border-left: 1px solid #ddd;
+        z-index: 50;
+        display: block; /* Desktop default */
+        box-shadow: -5px 0 15px rgba(0,0,0,0.05);
+        overflow-y: auto;
+    }
+
+    /* ================= 📱 移动端专属交互 (Mobile UI) ================= */
+    /* 1. 悬浮按钮 (FAB) */
+    .mobile-fab {
+        display: none; /* Desktop hidden */
+        position: fixed; bottom: 30px; right: 30px;
+        width: 60px; height: 60px; border-radius: 30px;
+        background: #111827; color: white;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        align-items: center; justify-content: center;
+        font-size: 24px; z-index: 100; cursor: pointer;
+        transition: transform 0.2s;
+    }
+    .mobile-fab:active { transform: scale(0.9); }
+
+    /* 2. 底部抽屉 (Bottom Sheet) */
+    .bottom-sheet {
+        display: none; /* Logic controlled */
+        position: fixed; bottom: 0; left: 0; width: 100%;
+        background: white;
+        border-radius: 20px 20px 0 0;
+        padding: 25px;
+        box-shadow: 0 -10px 40px rgba(0,0,0,0.2);
+        z-index: 200;
+        transform: translateY(100%);
+        transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        max-height: 80vh; overflow-y: auto;
+    }
+    .bottom-sheet.active { transform: translateY(0); }
+
+    /* 3. 遮罩层 (Overlay) */
+    .overlay {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+        z-index: 150; opacity: 0; pointer-events: none;
+        transition: opacity 0.3s;
+    }
+    .overlay.active { opacity: 1; pointer-events: auto; }
+
+    /* 📱 Mobile Media Query */
+    @media (max-width: 768px) {
+        .app-container { flex-direction: column; }
+        .control-panel { display: none !important; } /* Hide PC panel */
+        .mobile-fab { display: flex; } /* Show FAB */
+        .preview-area { align-items: center; padding-top: 20px; } /* Center Poster */
+    }
+
+    /* ================= 海报样式 (保持 V24 不变) ================= */
+    :root { --theme-bg: #1a1a1a; --theme-card: rgba(255,255,255,0.08); --theme-text: white; --theme-highlight: #eab308; }
     .poster-canvas {
-        width: 400px;
-        min-height: 800px;
-        height: auto;
-        background: var(--theme-bg);
-        position: relative;
-        overflow: hidden;
+        width: 400px; min-height: 800px; height: auto;
+        background: var(--theme-bg); color: var(--theme-text);
+        position: relative; overflow: hidden; display: flex; flex-direction: column;
         box-shadow: 0 30px 60px rgba(0,0,0,0.5);
-        color: var(--theme-text);
-        display: flex; flex-direction: column;
-        line-height: 1.6;
-        font-family: "Microsoft YaHei", sans-serif !important;
+        line-height: 1.6; font-family: "Microsoft YaHei", sans-serif !important;
         transition: background 0.3s;
     }
-
-    /* 动态背景 */
-    #poster-bg-img {
-        position: absolute; inset: 0; z-index: 0;
-        background-size: cover; background-position: center;
-        filter: blur(50px) brightness(0.4); transform: scale(1.2);
-        opacity: 0; transition: opacity 0.5s;
-    }
-    #poster-bg-gradient {
-        position: absolute; inset: 0; z-index: 1;
-        background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.5) 100%);
-    }
-
+    #poster-bg-img { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; filter: blur(50px) brightness(0.4); transform: scale(1.2); opacity: 0; transition: opacity 0.5s; }
+    #poster-bg-gradient { position: absolute; inset: 0; z-index: 1; background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.5) 100%); }
     .p-content { position: relative; z-index: 10; padding: 40px 30px; display: flex; flex-direction: column; flex: 1; }
-
-    /* Header */
+    
+    /* Components */
     .p-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
     .user-box { display: flex; align-items: center; gap: 12px; }
-    
-    /* 🔥 智能头像 */
-    .avatar { 
-        width: 54px; height: 54px; border-radius: 50%; 
-        background: var(--theme-card); 
-        display: flex; align-items: center; justify-content: center; 
-        font-size: 22px; font-weight: 900; 
-        border: 2px solid rgba(255,255,255,0.3);
-        background-size: cover; background-position: center;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-    
-    .user-info h1 { font-size: 24px; font-weight: 900; margin: 0; padding-top: 4px; padding-bottom: 4px; }
+    .avatar { width: 54px; height: 54px; border-radius: 50%; background: var(--theme-card); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; border: 2px solid rgba(255,255,255,0.3); background-size: cover; background-position: center; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+    .user-info h1 { font-size: 24px; font-weight: 900; margin: 0; padding: 4px 0; }
     .user-info p { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; margin: 0; padding-bottom: 2px; }
     .server-pill { background: var(--theme-card); padding: 4px 10px; border-radius: 20px; font-size: 10px; border: 1px solid rgba(255,255,255,0.1); text-align: center; }
     .server-pill span { display: block; font-weight: 900; font-size: 12px; color: #4ade80; padding-bottom: 2px; }
-
-    /* Stats */
+    
     .stats-row { display: flex; gap: 10px; margin-bottom: 25px; }
     .stat-card { flex: 1; background: var(--theme-card); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); text-align: center; backdrop-filter: blur(10px); }
     .stat-val { font-size: 28px; font-weight: 900; line-height: 1; margin-bottom: 4px; padding-bottom: 4px; }
     .stat-label { font-size: 9px; opacity: 0.6; text-transform: uppercase; font-weight: bold; }
 
-    /* Podium */
     .podium-container { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 10px; align-items: end; margin-bottom: 30px; margin-top: 10px; }
     .podium-item { position: relative; display: flex; flex-direction: column; align-items: center; }
-    .podium-cover {
-        width: 100%; aspect-ratio: 2/3; border-radius: 8px; 
-        background-color: #333; background-size: cover; background-position: center;
-        box-shadow: 0 10px 20px rgba(0,0,0,0.3); position: relative; border: 2px solid transparent;
-    }
+    .podium-cover { width: 100%; aspect-ratio: 2/3; border-radius: 8px; background-color: #333; background-size: cover; background-position: center; box-shadow: 0 10px 20px rgba(0,0,0,0.3); position: relative; border: 2px solid transparent; }
     .podium-item.rank-1 .podium-cover { border-color: #eab308; transform: scale(1.05); z-index: 5; box-shadow: 0 0 20px rgba(234, 179, 8, 0.4); }
     .podium-item.rank-2 .podium-cover { border-color: #94a3b8; }
     .podium-item.rank-3 .podium-cover { border-color: #b45309; }
-    .medal { 
-        position: absolute; top: -10px; left: 50%; transform: translateX(-50%); 
-        width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-        font-size: 12px; font-weight: bold; color: white; z-index: 10; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-    }
+    .medal { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; color: white; z-index: 10; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
     .medal.rank-1 { background: linear-gradient(135deg, #fcd34d, #b45309); width: 32px; height: 32px; top: -16px; font-size: 14px; }
     .medal.rank-2 { background: linear-gradient(135deg, #e2e8f0, #64748b); }
     .medal.rank-3 { background: linear-gradient(135deg, #fdba74, #9a3412); }
@@ -97,36 +120,26 @@
     .podium-title { font-size: 11px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; padding-bottom: 4px; }
     .podium-meta { font-size: 9px; opacity: 0.7; }
 
-    /* Rank List */
     .rank-list { display: flex; flex-direction: column; gap: 8px; }
-    .rank-row { 
-        display: flex; align-items: center; padding: 10px 10px; 
-        background: var(--theme-card); border-radius: 10px; backdrop-filter: blur(5px); min-height: 50px;
-    }
+    .rank-row { display: flex; align-items: center; padding: 10px 10px; background: var(--theme-card); border-radius: 10px; backdrop-filter: blur(5px); min-height: 50px; }
     .rank-idx { font-size: 12px; font-weight: 900; opacity: 0.4; width: 25px; text-align: center; }
-    .rank-poster-sm {
-        width: 32px; height: 48px; border-radius: 4px; 
-        background-color: #333; background-size: cover; background-position: center;
-        margin-right: 12px; flex-shrink: 0;
-    }
+    .rank-poster-sm { width: 32px; height: 48px; border-radius: 4px; background-color: #333; background-size: cover; background-position: center; margin-right: 12px; flex-shrink: 0; }
     .rank-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
     .rank-name { font-size: 12px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 4px; margin-bottom: -2px; }
     .rank-meta-row { font-size: 9px; opacity: 0.7; display: flex; gap: 8px; }
 
     .p-footer { margin-top: auto; padding-top: 30px; text-align: center; opacity: 0.4; font-size: 10px; letter-spacing: 2px; }
     .empty-box { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; min-height: 300px; text-align: center; }
-    
-    .btn-group { display: flex; gap: 8px; margin-bottom: 15px; margin-top: 5px; flex-wrap: wrap; }
-    .btn { flex: 1; padding: 10px; border: 1px solid #ddd; background: #fff; font-weight: bold; border-radius: 8px; font-size: 12px; cursor: pointer; min-width: 60px; }
+
+    /* Controls Styling */
+    .ctrl-label { font-size: 12px; font-weight: bold; color: #666; margin-bottom: 8px; display: block; }
+    .btn-group { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap; }
+    .btn { flex: 1; padding: 10px; border: 1px solid #ddd; background: #fff; font-weight: bold; border-radius: 8px; font-size: 12px; cursor: pointer; min-width: 60px; white-space: nowrap; }
     .btn.active { background: #111827; color: white; border-color: #111827; }
+    .theme-dots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px; }
+    .dot { height: 40px; border-radius: 8px; cursor: pointer; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; font-size: 10px; color: white; font-weight: bold; text-shadow: 0 1px 2px black; }
     
-    /* 🔥 8款主题色块 */
-    .theme-dots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px; }
-    .dot { 
-        height: 40px; border-radius: 8px; cursor: pointer; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
-        display: flex; align-items: center; justify-content: center; font-size: 10px; color: white; font-weight: bold; text-shadow: 0 1px 2px black;
-    }
-    .dot:hover { transform: scale(1.05); }
+    .save-btn-large { width: 100%; padding: 14px; background: #16a34a; color: white; border: none; border-radius: 12px; font-weight: 900; font-size: 16px; margin-top: 10px; box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3); }
 </style>
 {% endblock %}
 
@@ -137,7 +150,6 @@
             <div id="capture-target" class="poster-canvas">
                 <div id="poster-bg-img" data-src=""></div>
                 <div id="poster-bg-gradient"></div>
-                
                 <div class="p-content">
                     <div class="p-header">
                         <div class="user-box">
@@ -147,12 +159,8 @@
                                 <p id="p-period">全量观影报告</p>
                             </div>
                         </div>
-                        <div class="server-pill">
-                            <span id="p-server">0</span>
-                            全服总播
-                        </div>
+                        <div class="server-pill"><span id="p-server">0</span>全服总播</div>
                     </div>
-
                     <div class="stats-row">
                         <div class="stat-card">
                             <div class="stat-val" id="p-hours">0</div>
@@ -163,42 +171,27 @@
                             <div class="stat-label">播放次数</div>
                         </div>
                     </div>
-
                     <div id="content-area">
                         <div id="podium-area" class="podium-container" style="display:none;">
                             <div class="podium-item rank-2" id="rank2-box" style="visibility: hidden;">
                                 <div class="medal rank-2">2</div>
                                 <div class="podium-cover" id="rank2-img" data-src=""></div>
-                                <div class="podium-info">
-                                    <div class="podium-title" id="rank2-title">-</div>
-                                    <div class="podium-meta" id="rank2-meta">0次</div>
-                                </div>
+                                <div class="podium-info"><div class="podium-title" id="rank2-title">-</div><div class="podium-meta" id="rank2-meta">0次</div></div>
                             </div>
                             <div class="podium-item rank-1" id="rank1-box">
                                 <div class="medal rank-1"><i class="fa-solid fa-crown"></i></div>
                                 <div class="podium-cover" id="rank1-img" data-src=""></div>
-                                <div class="podium-info">
-                                    <div class="podium-title" id="rank1-title">-</div>
-                                    <div class="podium-meta" id="rank1-meta">0次</div>
-                                </div>
+                                <div class="podium-info"><div class="podium-title" id="rank1-title">-</div><div class="podium-meta" id="rank1-meta">0次</div></div>
                             </div>
                             <div class="podium-item rank-3" id="rank3-box" style="visibility: hidden;">
                                 <div class="medal rank-3">3</div>
                                 <div class="podium-cover" id="rank3-img" data-src=""></div>
-                                <div class="podium-info">
-                                    <div class="podium-title" id="rank3-title">-</div>
-                                    <div class="podium-meta" id="rank3-meta">0次</div>
-                                </div>
+                                <div class="podium-info"><div class="podium-title" id="rank3-title">-</div><div class="podium-meta" id="rank3-meta">0次</div></div>
                             </div>
                         </div>
                         <div class="rank-list" id="rank-list"></div>
                     </div>
-
-                    <div id="empty-area" class="empty-box" style="display:none;">
-                        <i class="fa-solid fa-ghost" style="font-size: 40px; margin-bottom: 10px;"></i>
-                        <p>该时段暂无记录</p>
-                    </div>
-
+                    <div id="empty-area" class="empty-box" style="display:none;"><i class="fa-solid fa-ghost" style="font-size: 40px; margin-bottom: 10px;"></i><p>该时段暂无记录</p></div>
                     <div class="p-footer">GENERATED BY EMBY PULSE</div>
                 </div>
             </div>
@@ -206,36 +199,45 @@
     </div>
 
     <div class="control-panel">
-        <label style="font-size: 12px; font-weight: bold; color: #666;">用户</label>
-        <select id="user-select" onchange="changeUser(this.value)" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px; margin-top: 5px;">
-            <option>Loading...</option>
-        </select>
+        <div id="desktop-controls-container"></div> </div>
 
-        <label style="font-size: 12px; font-weight: bold; color: #666;">时间</label>
-        <div class="btn-group">
-            <button class="btn" onclick="setPeriod('all', this)">全量</button>
-            <button class="btn" onclick="setPeriod('year', this)">年度</button>
-            <button class="btn active" onclick="setPeriod('month', this)">本月</button>
-            <button class="btn" onclick="setPeriod('week', this)">本周</button>
+    <div class="mobile-fab" onclick="toggleSheet(true)"><i class="fa-solid fa-sliders"></i></div>
+
+    <div class="overlay" id="mobile-overlay" onclick="toggleSheet(false)"></div>
+    <div class="bottom-sheet" id="mobile-sheet">
+        <div style="text-align: center; margin-bottom: 20px; font-weight: 900; font-size: 18px; color: #333;">配置海报</div>
+        <div id="mobile-controls-container">
+            <label class="ctrl-label">选择用户</label>
+            <select id="user-select" onchange="changeUser(this.value)" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px; background: #f9fafb;">
+                <option>Loading...</option>
+            </select>
+
+            <label class="ctrl-label">时间范围</label>
+            <div class="btn-group">
+                <button class="btn" onclick="setPeriod('all', this)">全量</button>
+                <button class="btn" onclick="setPeriod('year', this)">年度</button>
+                <button class="btn active" onclick="setPeriod('month', this)">本月</button>
+                <button class="btn" onclick="setPeriod('week', this)">本周</button>
+            </div>
+
+            <label class="ctrl-label">主题配色</label>
+            <div class="theme-dots">
+                <div class="dot" style="background: #1a1a1a;" onclick="setTheme('#1a1a1a', 'white')">黑金</div>
+                <div class="dot" style="background: #2e1065;" onclick="setTheme('#2e1065', 'white')">赛博</div>
+                <div class="dot" style="background: #0f172a;" onclick="setTheme('#0f172a', 'white')">深海</div>
+                <div class="dot" style="background: #064e3b;" onclick="setTheme('#064e3b', 'white')">极光</div>
+                <div class="dot" style="background: #7f1d1d;" onclick="setTheme('#7f1d1d', 'white')">熔岩</div>
+                <div class="dot" style="background: linear-gradient(135deg, #c2410c, #7c2d12);" onclick="setTheme('linear-gradient(135deg, #c2410c, #7c2d12)', 'white')">落日</div>
+                <div class="dot" style="background: #525252;" onclick="setTheme('#525252', 'white')">水泥</div>
+                <div class="dot" style="background: #ffffff; color:#333; text-shadow:none; border:1px solid #ccc;" onclick="setTheme('#ffffff', '#333')">纯白</div>
+            </div>
+            
+            <button onclick="toggleCoverBg()" class="btn" style="width: 100%; margin-bottom: 15px; border: 1px dashed #999;">🖼️ 使用 Top1 封面背景</button>
+
+            <button onclick="savePoster()" id="save-btn" class="save-btn-large">
+                <i class="fa-solid fa-download mr-2"></i> 保存高清海报
+            </button>
         </div>
-
-        <label style="font-size: 12px; font-weight: bold; color: #666;">主题配色</label>
-        <div class="theme-dots">
-            <div class="dot" style="background: #1a1a1a;" onclick="setTheme('#1a1a1a', 'white')">黑金</div>
-            <div class="dot" style="background: #2e1065;" onclick="setTheme('#2e1065', 'white')">赛博</div>
-            <div class="dot" style="background: #0f172a;" onclick="setTheme('#0f172a', 'white')">深海</div>
-            <div class="dot" style="background: #064e3b;" onclick="setTheme('#064e3b', 'white')">极光</div>
-            <div class="dot" style="background: #7f1d1d;" onclick="setTheme('#7f1d1d', 'white')">熔岩</div>
-            <div class="dot" style="background: linear-gradient(135deg, #c2410c, #7c2d12);" onclick="setTheme('linear-gradient(135deg, #c2410c, #7c2d12)', 'white')">落日</div>
-            <div class="dot" style="background: #525252;" onclick="setTheme('#525252', 'white')">水泥</div>
-            <div class="dot" style="background: #ffffff; color:#333; text-shadow:none; border:1px solid #ccc;" onclick="setTheme('#ffffff', '#333')">纯白</div>
-        </div>
-        
-        <button onclick="toggleCoverBg()" class="btn" style="width: 100%; margin-top: 15px; border: 1px dashed #999;">🖼️ 使用 Top1 封面背景</button>
-
-        <button onclick="savePoster()" id="save-btn" style="width: 100%; padding: 12px; background: #16a34a; color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 14px; margin-top: 10px;">
-            保存海报
-        </button>
     </div>
 </div>
 {% endblock %}
@@ -248,19 +250,45 @@
     let currentPeriod = 'month';
     const periodMap = {'all':'全量','year':'年度','month':'本月','week':'本周'};
 
+    // 移动端逻辑：根据屏幕宽度决定控件放在哪里
+    function checkLayout() {
+        const isMobile = window.innerWidth <= 768;
+        const controlsHTML = document.getElementById('mobile-controls-container').innerHTML;
+        const desktopContainer = document.getElementById('desktop-controls-container');
+        
+        // 如果是桌面端，把抽屉里的控件复制到侧边栏（简单粗暴但有效）
+        if (!isMobile && desktopContainer.innerHTML.trim() === '') {
+            desktopContainer.innerHTML = controlsHTML;
+            // 绑定事件需要重新处理吗？不需要，因为onclick是全局的
+        }
+    }
+    window.addEventListener('resize', () => { fitScale(); checkLayout(); });
+    setTimeout(() => { fitScale(); checkLayout(); }, 100);
+
+    function toggleSheet(show) {
+        const sheet = document.getElementById('mobile-sheet');
+        const overlay = document.getElementById('mobile-overlay');
+        if(show) {
+            sheet.classList.add('active');
+            overlay.classList.add('active');
+        } else {
+            sheet.classList.remove('active');
+            overlay.classList.remove('active');
+        }
+    }
+
     function fitScale() {
         const wrapper = document.querySelector('.preview-area');
-        const scale = Math.min((wrapper.clientWidth - 40) / 400, 1);
+        // 留出边距
+        const w = wrapper.clientWidth;
+        const scale = Math.min((w - 40) / 400, 1);
         document.getElementById('scale-wrapper').style.transform = `scale(${scale})`;
         document.getElementById('scale-wrapper').style.transformOrigin = 'top center';
     }
-    window.addEventListener('resize', fitScale);
-    setTimeout(fitScale, 100);
 
     async function toBase64(url) {
         try {
             const res = await fetch(url);
-            if(!res.ok) throw new Error('Network response was not ok');
             const blob = await res.blob();
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -290,7 +318,7 @@
         const canvas = document.querySelector('.poster-canvas');
         canvas.style.background = bg;
         canvas.style.color = text;
-        document.getElementById('poster-bg-img').style.opacity = '0'; 
+        document.getElementById('poster-bg-img').style.opacity = '0';
         if(text === '#333') {
             document.documentElement.style.setProperty('--theme-card', 'rgba(0,0,0,0.05)');
             document.getElementById('poster-bg-gradient').style.background = 'transparent';
@@ -312,7 +340,6 @@
         }
     }
 
-    // 🔥 哈希渐变生成器
     function getHashGradient(name) {
         let hash = 0;
         for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -321,63 +348,64 @@
         return `linear-gradient(135deg, hsl(${hue1}, 70%, 50%), hsl(${hue2}, 70%, 50%))`;
     }
 
-    // 🔥 头像加载逻辑
     async function loadAvatar() {
         const avatarEl = document.getElementById('p-avatar');
-        // 1. 先重置为初始状态 (显示文字)
         avatarEl.style.backgroundImage = 'none';
         avatarEl.innerText = currentUserName[0].toUpperCase();
-        avatarEl.dataset.type = 'text';
-
-        // 2. 尝试获取真实头像
+        
         const realUrl = `/api/proxy/user_image/${currentUserId}`;
-        const b64 = await toBase64(realUrl); // 预加载检测
+        const b64 = await toBase64(realUrl);
 
         if (b64) {
-            // Plan A: 真实头像
             avatarEl.style.backgroundImage = `url('${b64}')`;
             avatarEl.innerText = '';
-            avatarEl.dataset.type = 'image';
-            avatarEl.dataset.src = realUrl; // 供截图用
+            avatarEl.dataset.src = realUrl;
         } else {
-            // Plan B: 哈希渐变
             avatarEl.style.backgroundImage = getHashGradient(currentUserName);
             avatarEl.style.color = 'white';
             avatarEl.style.textShadow = '0 2px 4px rgba(0,0,0,0.3)';
-            avatarEl.dataset.type = 'hash';
         }
     }
 
     async function init() {
         const res = await fetch('/api/users');
         const json = await res.json();
-        const sel = document.getElementById('user-select');
-        sel.innerHTML = '';
-        if(json.data && json.data.length > 0) {
-            json.data.forEach((u, index) => {
-                const opt = document.createElement('option');
-                opt.value = u.UserId;
-                opt.innerText = u.UserName;
-                sel.appendChild(opt);
-            });
-            changeUser(json.data[0].UserId);
-        }
+        // 填充所有 user-select (Mobile & Desktop if copied)
+        const selects = document.querySelectorAll('#user-select');
+        selects.forEach(sel => {
+            sel.innerHTML = '';
+            if(json.data) {
+                json.data.forEach(u => {
+                    const opt = document.createElement('option');
+                    opt.value = u.UserId; opt.innerText = u.UserName;
+                    sel.appendChild(opt);
+                });
+            }
+        });
+        if(json.data && json.data.length > 0) changeUser(json.data[0].UserId);
     }
 
     function changeUser(uid) {
         currentUserId = uid;
-        const sel = document.getElementById('user-select');
-        currentUserName = sel.options[sel.selectedIndex].text;
-        document.getElementById('p-user').innerText = currentUserName;
+        // 同步所有 select 状态
+        document.querySelectorAll('#user-select').forEach(s => s.value = uid);
         
-        loadAvatar(); // 加载头像
+        // 获取当前选中的用户名 (从第一个select拿)
+        const sel = document.querySelector('#user-select');
+        currentUserName = sel.options[sel.selectedIndex].text;
+        
+        document.getElementById('p-user').innerText = currentUserName;
+        loadAvatar();
         loadData();
     }
 
     function setPeriod(p, btn) {
         currentPeriod = p;
-        document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+        // 同步按钮状态
+        document.querySelectorAll('.btn-group .btn').forEach(b => {
+            if(b.innerText === btn.innerText) b.classList.add('active');
+            else b.classList.remove('active');
+        });
         loadData();
     }
 
@@ -445,6 +473,7 @@
                 </div>`;
             }
             listEl.innerHTML = html;
+            
             setTimeout(async () => {
                 const smPosters = listEl.querySelectorAll('.rank-poster-sm');
                 for(let el of smPosters) {
@@ -457,15 +486,16 @@
     }
 
     async function savePoster() {
-        const btn = document.getElementById('save-btn');
-        btn.innerText = '生成中...';
+        const btns = document.querySelectorAll('#save-btn');
+        btns.forEach(b => b.innerText = '生成中...');
+        toggleSheet(false); // 收起抽屉，展示全屏海报
+
         const wrapper = document.getElementById('scale-wrapper');
         const oldT = wrapper.style.transform;
         wrapper.style.transform = 'none';
         await new Promise(r => setTimeout(r, 200)); 
         
         try {
-            // 🔥 截图前再次确认 Base64
             const allImages = document.getElementById('capture-target').querySelectorAll('[data-src]');
             const promises = Array.from(allImages).map(async (el) => {
                 if(el.dataset.src && !el.style.backgroundImage.includes('base64')) {
@@ -483,7 +513,10 @@
             link.href = canvas.toDataURL();
             link.click();
         } catch(e) { alert('Err'); } 
-        finally { wrapper.style.transform = oldT; btn.innerText = '保存海报'; }
+        finally { 
+            wrapper.style.transform = oldT; 
+            btns.forEach(b => b.innerHTML = '<i class="fa-solid fa-download mr-2"></i> 保存高清海报');
+        }
     }
 
     init();
