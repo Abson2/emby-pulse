@@ -1,10 +1,10 @@
 {% extends "layout.html" %}
-{% block title %}映迹工坊 - 颁奖台版{% endblock %}
+{% block title %}映迹工坊 - 旗舰版{% endblock %}
 {% block head %}
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <style>
     /* ================= 布局系统 ================= */
-    html, body { height: 100%; margin: 0; background: #e5e5e5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }
+    html, body { height: 100%; margin: 0; background: #e5e5e5; font-family: "Microsoft YaHei", -apple-system, sans-serif !important; overflow: hidden; }
     .app-container { display: flex; flex-direction: column; height: 100%; }
     .preview-area { flex: 1; overflow-y: auto; display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px; background-color: #f3f4f6; -webkit-overflow-scrolling: touch; }
     .control-panel { background: white; padding: 20px; box-shadow: 0 -5px 20px rgba(0,0,0,0.1); z-index: 50; flex-shrink: 0; max-height: 40vh; overflow-y: auto; }
@@ -31,18 +31,22 @@
         color: var(--theme-text);
         display: flex; flex-direction: column;
         line-height: 1.5;
+        font-family: "Microsoft YaHei", sans-serif !important; /* 强制字体 */
         transition: background 0.3s;
     }
 
-    /* 动态背景 (统一用 Top1 的 Primary 模糊) */
+    /* 动态背景 (默认隐藏，需手动开启) */
     #poster-bg-img {
         position: absolute; inset: 0; z-index: 0;
         background-size: cover; background-position: center;
         filter: blur(50px) brightness(0.4); transform: scale(1.2);
+        opacity: 0; /* 默认隐藏 */
+        transition: opacity 0.5s;
     }
     #poster-bg-gradient {
         position: absolute; inset: 0; z-index: 1;
-        background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.8) 100%);
+        /* 默认渐变，防黑 */
+        background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.5) 100%);
     }
 
     .p-content { position: relative; z-index: 10; padding: 40px 30px; display: flex; flex-direction: column; flex: 1; }
@@ -51,18 +55,19 @@
     .p-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
     .user-box { display: flex; align-items: center; gap: 12px; }
     .avatar { width: 50px; height: 50px; border-radius: 50%; background: var(--theme-card); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 900; border: 2px solid rgba(255,255,255,0.3); }
-    .user-info h1 { font-size: 24px; font-weight: 900; margin: 0; padding-top: 4px; }
-    .user-info p { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; margin: 0; }
+    /* 🔥 防切字 padding */
+    .user-info h1 { font-size: 24px; font-weight: 900; margin: 0; padding-top: 4px; padding-bottom: 4px; }
+    .user-info p { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; margin: 0; padding-bottom: 2px; }
     .server-pill { background: var(--theme-card); padding: 4px 10px; border-radius: 20px; font-size: 10px; border: 1px solid rgba(255,255,255,0.1); text-align: center; }
-    .server-pill span { display: block; font-weight: 900; font-size: 12px; color: #4ade80; }
+    .server-pill span { display: block; font-weight: 900; font-size: 12px; color: #4ade80; padding-bottom: 2px; }
 
     /* Stats */
     .stats-row { display: flex; gap: 10px; margin-bottom: 25px; }
     .stat-card { flex: 1; background: var(--theme-card); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); text-align: center; backdrop-filter: blur(10px); }
-    .stat-val { font-size: 28px; font-weight: 900; line-height: 1; margin-bottom: 4px; }
+    .stat-val { font-size: 28px; font-weight: 900; line-height: 1; margin-bottom: 4px; padding-bottom: 4px; }
     .stat-label { font-size: 9px; opacity: 0.6; text-transform: uppercase; font-weight: bold; }
 
-    /* 🔥 颁奖台布局 (Podium) */
+    /* 🔥 颁奖台 (Podium) */
     .podium-container { 
         display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 10px; align-items: end; 
         margin-bottom: 30px; margin-top: 10px;
@@ -70,7 +75,6 @@
     
     .podium-item { position: relative; display: flex; flex-direction: column; align-items: center; }
     
-    /* 封面图容器 */
     .podium-cover {
         width: 100%; aspect-ratio: 2/3; border-radius: 8px; 
         background-color: #333; background-size: cover; background-position: center;
@@ -78,12 +82,10 @@
         border: 2px solid transparent;
     }
     
-    /* 冠军样式 */
     .podium-item.rank-1 .podium-cover { border-color: #eab308; transform: scale(1.05); z-index: 5; box-shadow: 0 0 20px rgba(234, 179, 8, 0.4); }
     .podium-item.rank-2 .podium-cover { border-color: #94a3b8; }
     .podium-item.rank-3 .podium-cover { border-color: #b45309; }
 
-    /* 奖牌 */
     .medal { 
         position: absolute; top: -10px; left: 50%; transform: translateX(-50%); 
         width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
@@ -94,9 +96,8 @@
     .medal.rank-2 { background: linear-gradient(135deg, #e2e8f0, #64748b); }
     .medal.rank-3 { background: linear-gradient(135deg, #fdba74, #9a3412); }
 
-    /* 信息 */
     .podium-info { text-align: center; margin-top: 8px; width: 100%; }
-    .podium-title { font-size: 11px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
+    .podium-title { font-size: 11px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; padding-bottom: 2px; }
     .podium-meta { font-size: 9px; opacity: 0.7; }
 
     /* Rank List */
@@ -117,16 +118,13 @@
     .rank-name { font-size: 12px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 2px; }
     .rank-meta-row { font-size: 9px; opacity: 0.7; display: flex; gap: 8px; }
 
-    /* Footer & Empty */
     .p-footer { margin-top: auto; padding-top: 30px; text-align: center; opacity: 0.4; font-size: 10px; letter-spacing: 2px; }
     .empty-box { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; min-height: 300px; text-align: center; }
     
-    /* Controls */
     .btn-group { display: flex; gap: 8px; margin-bottom: 15px; margin-top: 5px; flex-wrap: wrap; }
     .btn { flex: 1; padding: 10px; border: 1px solid #ddd; background: #fff; font-weight: bold; border-radius: 8px; font-size: 12px; cursor: pointer; min-width: 60px; }
     .btn.active { background: #111827; color: white; border-color: #111827; }
     
-    /* Theme Dots */
     .theme-dots { display: flex; gap: 10px; margin-top: 10px; }
     .dot { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
     .dot:hover { transform: scale(1.1); }
@@ -225,14 +223,16 @@
 
         <label style="font-size: 12px; font-weight: bold; color: #666;">主题配色</label>
         <div class="theme-dots">
-            <div class="dot" style="background: #1a1a1a;" onclick="setTheme('#1a1a1a', '#eab308')"></div>
-            <div class="dot" style="background: #2e1065;" onclick="setTheme('#2e1065', '#a855f7')"></div>
-            <div class="dot" style="background: #0f172a;" onclick="setTheme('#0f172a', '#38bdf8')"></div>
-            <div class="dot" style="background: #881337;" onclick="setTheme('#881337', '#f43f5e')"></div>
-            <div class="dot" style="background: #ffffff; border: 1px solid #ccc;" onclick="setTheme('#ffffff', '#000000', '#333')"></div>
+            <div class="dot" style="background: linear-gradient(135deg, #1a1a1a, #333);" onclick="setTheme('#1a1a1a', 'white')"></div>
+            <div class="dot" style="background: linear-gradient(135deg, #2e1065, #4c1d95);" onclick="setTheme('#2e1065', 'white')"></div>
+            <div class="dot" style="background: linear-gradient(135deg, #0f172a, #0369a1);" onclick="setTheme('#0f172a', 'white')"></div>
+            <div class="dot" style="background: linear-gradient(135deg, #881337, #be123c);" onclick="setTheme('#881337', 'white')"></div>
+            <div class="dot" style="background: linear-gradient(135deg, #ffffff, #f3f4f6); border: 1px solid #ccc;" onclick="setTheme('#ffffff', '#333')"></div>
         </div>
+        
+        <button onclick="toggleCoverBg()" class="btn" style="width: 100%; margin-top: 10px; border: 1px dashed #999;">🖼️ 使用封面背景 (Top 1)</button>
 
-        <button onclick="savePoster()" id="save-btn" style="width: 100%; padding: 12px; background: #16a34a; color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 14px; margin-top: 20px;">
+        <button onclick="savePoster()" id="save-btn" style="width: 100%; padding: 12px; background: #16a34a; color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 14px; margin-top: 10px;">
             保存海报
         </button>
     </div>
@@ -255,7 +255,7 @@
     window.addEventListener('resize', fitScale);
     setTimeout(fitScale, 100);
 
-    // 🔥 核心工具：图片转 Base64 (彻底解决黑屏)
+    // 🔥 核心工具：Base64 转码
     async function toBase64(url) {
         try {
             const res = await fetch(url);
@@ -268,19 +268,36 @@
         } catch(e) { return null; }
     }
 
-    // 主题切换
-    function setTheme(bg, highlight, text='white') {
+    // 🔥 核心修复：切换主题时，强制移除背景图，防止遮挡
+    function setTheme(bg, text) {
         const canvas = document.querySelector('.poster-canvas');
         canvas.style.background = bg;
         canvas.style.color = text;
         
-        // 更新 CSS 变量 (用于卡片背景)
-        if(text === '#333') { // 白底模式
+        // 隐藏背景图，只显示颜色
+        document.getElementById('poster-bg-img').style.opacity = '0';
+        
+        // 白底模式特殊处理
+        if(text === '#333') {
             document.documentElement.style.setProperty('--theme-card', 'rgba(0,0,0,0.05)');
-            document.getElementById('poster-bg-gradient').style.background = 'linear-gradient(to bottom, rgba(255,255,255,0.5), rgba(255,255,255,1))';
-        } else { // 黑底模式
+            document.getElementById('poster-bg-gradient').style.background = 'transparent';
+        } else {
             document.documentElement.style.setProperty('--theme-card', 'rgba(255,255,255,0.08)');
-            document.getElementById('poster-bg-gradient').style.background = 'linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.9))';
+            document.getElementById('poster-bg-gradient').style.background = 'linear-gradient(to bottom, rgba(0,0,0,0.1), rgba(0,0,0,0.5))';
+        }
+    }
+
+    // 手动开启封面背景
+    function toggleCoverBg() {
+        const bgImg = document.getElementById('poster-bg-img');
+        if(bgImg.style.opacity === '1') {
+            bgImg.style.opacity = '0'; // 关
+        } else {
+            bgImg.style.opacity = '1'; // 开
+            // 重置为深色模式以配合图片
+            document.documentElement.style.setProperty('--theme-card', 'rgba(255,255,255,0.08)');
+            document.querySelector('.poster-canvas').style.color = 'white';
+            document.getElementById('poster-bg-gradient').style.background = 'linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.8) 100%)';
         }
     }
 
@@ -342,25 +359,29 @@
             if(list.length > 0) {
                 podiumArea.style.display = 'grid';
                 
-                // Helper to render rank item
                 const renderRank = async (rank, idx) => {
                     const el = document.getElementById(`rank${rank}-box`);
                     if(list[idx]) {
                         el.style.visibility = 'visible';
                         document.getElementById(`rank${rank}-title`).innerText = list[idx].ItemName;
-                        document.getElementById(`rank${rank}-meta`).innerText = `${list[idx].Count}次`;
+                        // 🔥 修复：补全时长数据
+                        const h = Math.round(list[idx].Duration/3600);
+                        const t = h > 0 ? `${h}小时` : '';
+                        document.getElementById(`rank${rank}-meta`).innerText = `${list[idx].Count}次 ${t}`;
                         
-                        // 强制 Base64 (全部用竖版图)
                         const imgUrl = `/api/proxy/image/${list[idx].ItemId}/primary`;
                         const b64 = await toBase64(imgUrl);
                         const coverEl = document.getElementById(`rank${rank}-img`);
                         
                         if(b64) {
                             coverEl.style.backgroundImage = `url('${b64}')`;
-                            coverEl.dataset.src = imgUrl; // 标记给截图用
+                            coverEl.dataset.src = imgUrl;
                             
-                            // Top 1 同时设置大背景
-                            if(rank === 1) document.getElementById('poster-bg-img').style.backgroundImage = `url('${b64}')`;
+                            // 预设背景图（但不显示，等用户点按钮）
+                            if(rank === 1) {
+                                document.getElementById('poster-bg-img').style.backgroundImage = `url('${b64}')`;
+                                document.getElementById('poster-bg-img').dataset.src = imgUrl;
+                            }
                         } else {
                             coverEl.style.backgroundColor = '#333';
                         }
@@ -369,10 +390,9 @@
                     }
                 };
 
-                // Render 1, 2, 3
-                await renderRank(1, 0); // Top 1
-                await renderRank(2, 1); // Top 2
-                await renderRank(3, 2); // Top 3
+                await renderRank(1, 0); 
+                await renderRank(2, 1); 
+                await renderRank(3, 2); 
             } else {
                 podiumArea.style.display = 'none';
             }
@@ -401,7 +421,6 @@
             }
             listEl.innerHTML = html;
             
-            // 如果列表有内容，处理列表图片 Base64 (延迟执行，防止卡顿)
             setTimeout(async () => {
                 const smPosters = listEl.querySelectorAll('.rank-poster-sm');
                 for(let el of smPosters) {
