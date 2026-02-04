@@ -7,25 +7,26 @@
         height: 750px; 
         box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.6); 
         transform-origin: top center; 
-        background-color: #111827;
+        background-color: #111827; /* 强制深色底色 */
         position: relative;
         overflow: hidden;
     }
     
-    /* 🔥 修复：加深玻璃背景，让白字可见 */
+    /* 🔥 核心修复1：将玻璃卡片背景改为深色半透明，确保白字可见 */
     .glass-panel { 
         background: rgba(0, 0, 0, 0.4); 
-        backdrop-filter: blur(16px); 
-        border: 1px solid rgba(255, 255, 255, 0.1); 
+        backdrop-filter: blur(10px); /* html2canvas可能忽略这个，但背景色已经是黑的了，所以没事 */
+        border: 1px solid rgba(255, 255, 255, 0.15); 
         box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
     }
 
     .user-option.selected { border-color: #16a34a; background-color: #f0fdf4; }
     
+    /* 🔥 核心修复2：强制降低背景图亮度，防止太亮看不清字 */
     #poster-backdrop-layer {
         position: absolute; inset: 0; 
         background-size: cover; background-position: center; 
-        filter: blur(20px) brightness(0.7); /* 🔥 修复：降低亮度，突出文字 */
+        filter: blur(15px) brightness(0.6); /* 亮度降到 0.6 */
         transform: scale(1.1); 
         transition: background-image 0.8s ease;
         z-index: 0;
@@ -96,7 +97,7 @@
             <div id="capture-area" class="poster-container flex flex-col text-white">
                 
                 <div id="poster-backdrop-layer"></div>
-                <div class="absolute inset-0 z-[1] opacity-20" style="background-image: url('data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E');"></div>
+                <div class="absolute inset-0 z-[1] opacity-10 bg-repeat" style="background-image: url('https://www.transparenttextures.com/patterns/stardust.png');"></div>
 
                 <div class="poster-content flex-1 p-8 flex flex-col h-full">
                     
@@ -105,7 +106,7 @@
                             <div class="w-14 h-14 rounded-full border-2 border-white/30 flex items-center justify-center bg-white/10 text-xl font-bold shadow-lg" id="poster-avatar">U</div>
                             <div>
                                 <h2 class="text-2xl font-black tracking-tight" id="poster-user">Username</h2>
-                                <p class="text-xs text-white/60 font-medium tracking-widest uppercase mt-1" id="poster-period-text">观影报告</p>
+                                <p class="text-xs text-white/60 font-medium tracking-widest uppercase mt-1" id="poster-period-text">全量观影报告</p>
                             </div>
                         </div>
                         <div class="glass-panel px-3 py-1 rounded-full text-xs font-bold text-yellow-300" id="poster-tag">观影达人</div>
@@ -127,7 +128,8 @@
                             <i class="fa-solid fa-crown"></i> 最爱 Top 1
                         </div>
                         <div class="relative w-full aspect-[16/9] rounded-2xl overflow-hidden shadow-2xl border border-white/20 group bg-black/20">
-                            <img id="poster-top1-img" src="" class="w-full h-full object-cover transition duration-700" onerror="handleImgError(this, 'backdrop')">
+                            <img id="poster-top1-img" src="" class="w-full h-full object-cover transition duration-700" 
+                                 onerror="handleImgError(this, 'backdrop')">
                             <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
                             <div class="absolute bottom-4 left-4 right-4">
                                 <h3 class="text-xl font-bold leading-tight line-clamp-1" id="poster-top1-title">暂无数据</h3>
@@ -184,13 +186,20 @@
     let currentPeriod = 'all';
     let currentUserId = '';
 
+    // 🔥 智能回退：横图裂了换竖图，竖图裂了换灰图
     function handleImgError(img, type) {
         img.onerror = null;
         if (img.src.includes('backdrop')) {
-            img.src = img.src.replace('backdrop', 'primary');
+            console.log('Backdrop failed, switching to primary...');
+            // 尝试换成竖图
+            const newSrc = img.src.replace('backdrop', 'primary');
+            img.src = newSrc;
+            
+            // 同时背景也得换
             const bgLayer = document.getElementById('poster-backdrop-layer');
-            bgLayer.style.backgroundImage = `url('${img.src}')`;
+            bgLayer.style.backgroundImage = `url('${newSrc}')`;
         } else {
+            // 竖图也裂了，用灰色占位
             img.src = 'https://via.placeholder.com/400x225/374151/9ca3af?text=No+Image';
         }
     }
@@ -270,12 +279,21 @@
                     document.getElementById('poster-top1-title').innerText = top1.ItemName;
                     document.getElementById('poster-top1-plays').innerText = top1.P;
                     
+                    // 默认先尝试 Backdrop
                     const imgUrl = `/api/proxy/image/${top1.ItemId}/backdrop`; 
                     const imgEl = document.getElementById('poster-top1-img');
+                    
+                    // 重置onerror，确保能触发回退
                     imgEl.onerror = function() { handleImgError(this, 'backdrop'); };
                     imgEl.src = imgUrl;
+                    
                     document.getElementById('poster-backdrop-layer').style.backgroundImage = `url('${imgUrl}')`;
+                } else {
+                    document.getElementById('poster-top1-title').innerText = "暂无数据";
+                    document.getElementById('poster-top1-plays').innerText = "0";
+                    document.getElementById('poster-top1-img').src = "";
                 }
+
                 updateSmallCard(1, data.top3); 
                 updateSmallCard(2, data.top3); 
             }
@@ -311,8 +329,15 @@
         const btn = document.getElementById('dl-btn');
         const originalText = btn.innerHTML;
         const userName = document.getElementById('poster-user').innerText;
+        
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> 生成中...';
-        html2canvas(node, { scale: 3, useCORS: true, backgroundColor: null }).then(canvas => {
+        
+        // 关键配置：useCORS: true, backgroundColor: null (这样才能保留透明度/颜色)
+        html2canvas(node, { 
+            scale: 3, 
+            useCORS: true, 
+            backgroundColor: '#111827' // 强制指定背景色，防止透明变白
+        }).then(canvas => {
             const link = document.createElement('a');
             link.download = `EmbyReport_${currentPeriod}_${userName}.png`;
             link.href = canvas.toDataURL('image/png');
