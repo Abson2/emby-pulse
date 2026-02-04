@@ -16,7 +16,7 @@ EMBY_HOST = os.getenv("EMBY_HOST", "http://127.0.0.1:8096").rstrip('/')
 EMBY_API_KEY = os.getenv("EMBY_API_KEY", "").strip()
 FALLBACK_IMAGE_URL = "https://img.hotimg.com/a444d32a033994d5b.png"
 
-print(f"--- EmbyPulse Ultimate v4 ---")
+print(f"--- EmbyPulse Ultimate v5 (Final Fix) ---")
 print(f"DB: {DB_PATH}")
 print(f"API: {'✅ 已加载' if EMBY_API_KEY else '❌ 未加载'}")
 
@@ -152,38 +152,45 @@ async def api_live_sessions():
         return {"status": "success", "data": sessions}
     except Exception as e: return {"status": "error", "message": str(e)}
 
-# === 🔥 升级版 API: 海报数据支持时间筛选 ===
+# === 🔥 升级版 API: 增加全服数据和Top10 ===
 @app.get("/api/stats/poster_data")
 async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
     try:
         where, params = "WHERE 1=1", []
         if user_id and user_id != 'all': where += " AND UserId = ?"; params.append(user_id)
         
-        # ⏳ 时间过滤逻辑
-        if period == 'week':
-            where += " AND DateCreated > date('now', '-7 days')"
-        elif period == 'month':
-            where += " AND DateCreated > date('now', '-30 days')"
-        elif period == 'year':
-            where += " AND DateCreated > date('now', '-1 year')"
+        # 时间过滤
+        if period == 'week': where += " AND DateCreated > date('now', '-7 days')"
+        elif period == 'month': where += " AND DateCreated > date('now', '-30 days')"
+        elif period == 'year': where += " AND DateCreated > date('now', '-1 year')"
         
-        # 1. 基础统计
+        # 1. 用户统计
         stats_sql = f"SELECT COUNT(*) as Plays, SUM(PlayDuration) as Duration FROM PlaybackActivity {where}"
         stats_res = query_db(stats_sql, params)
         total_plays = stats_res[0]['Plays'] if stats_res else 0
         total_hours = round((stats_res[0]['Duration'] or 0) / 3600)
 
-        # 2. Top 3 内容
+        # 2. 🔥 全服数据 (Server Stats)
+        server_where = "WHERE 1=1"
+        if period == 'week': server_where += " AND DateCreated > date('now', '-7 days')"
+        elif period == 'month': server_where += " AND DateCreated > date('now', '-30 days')"
+        elif period == 'year': server_where += " AND DateCreated > date('now', '-1 year')"
+        
+        server_sql = f"SELECT COUNT(*) as Plays FROM PlaybackActivity {server_where}"
+        server_res = query_db(server_sql)
+        server_total_plays = server_res[0]['Plays'] if server_res else 0
+
+        # 3. 🔥 Top 10 内容
         top_sql = f"""
         SELECT ItemName, ItemId, COUNT(*) as P, SUM(PlayDuration) as T 
         FROM PlaybackActivity {where} 
         GROUP BY ItemId, ItemName 
-        ORDER BY P DESC LIMIT 3
+        ORDER BY P DESC LIMIT 10
         """
         top_res = query_db(top_sql, params)
-        top3 = [dict(r) for r in top_res] if top_res else []
+        top_list = [dict(r) for r in top_res] if top_res else []
 
-        # 3. 关键词
+        # 4. 关键词
         tags = []
         if total_hours > 500: tags.append("影视肝帝")
         elif total_hours > 100: tags.append("忠实观众")
@@ -199,14 +206,15 @@ async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
             "data": {
                 "plays": total_plays,
                 "hours": total_hours,
-                "top3": top3,
+                "server_plays": server_total_plays, # 新增
+                "top_list": top_list, # Top 10
                 "tags": tags[:2],
                 "active_hour": "--" 
             }
         }
     except Exception as e: return {"status": "error", "message": str(e)}
 
-# === 现有其他接口保持不变 ===
+# === 现有其他接口保持不变 (略去，请保留原有的 monthly_stats, badges, etc.) ===
 @app.get("/api/stats/monthly_stats")
 async def api_monthly_stats(user_id: Optional[str] = None):
     try:
