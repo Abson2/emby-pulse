@@ -18,7 +18,7 @@ EMBY_HOST = os.getenv("EMBY_HOST", "http://127.0.0.1:8096").rstrip('/')
 EMBY_API_KEY = os.getenv("EMBY_API_KEY", "").strip()
 FALLBACK_IMAGE_URL = "https://img.hotimg.com/a444d32a033994d5b.png"
 
-print(f"--- EmbyPulse V19 (Final Fix) ---")
+print(f"--- EmbyPulse V20 (Visual Flagship) ---")
 print(f"DB Path: {DB_PATH}")
 
 app = FastAPI()
@@ -107,7 +107,6 @@ async def api_dashboard(user_id: Optional[str] = None):
 
 @app.get("/api/stats/recent")
 async def api_recent_activity(user_id: Optional[str] = None):
-    # 首页最近播放：智能聚合
     try:
         where, params = "WHERE 1=1", []
         if user_id and user_id != 'all':
@@ -154,7 +153,7 @@ async def api_live_sessions():
     except: pass
     return {"status": "success", "data": []}
 
-# ================= API: 内容排行 (Content Ranking) =================
+# ================= API: 内容排行 =================
 @app.get("/api/stats/top_movies")
 async def api_top_movies(user_id: Optional[str] = None, category: str = 'all', sort_by: str = 'count'):
     try:
@@ -191,7 +190,7 @@ async def api_top_movies(user_id: Optional[str] = None, category: str = 'all', s
         return {"status": "success", "data": result_list[:50]}
     except: return {"status": "error", "data": []}
 
-# ================= API: 数据洞察 (Details) =================
+# ================= API: 数据洞察 =================
 @app.get("/api/stats/user_details")
 async def api_user_details(user_id: Optional[str] = None):
     try:
@@ -219,7 +218,7 @@ async def api_user_details(user_id: Optional[str] = None):
         return {"status": "success", "data": {"hourly": hourly_data, "devices": [dict(r) for r in device_res] if device_res else [], "logs": logs_data}}
     except: return {"status": "error", "data": {"hourly": {}, "devices": [], "logs": []}}
 
-# ================= API: 图表 (Chart) =================
+# ================= API: 图表 =================
 @app.get("/api/stats/chart")
 async def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'month'):
     try:
@@ -246,7 +245,7 @@ async def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'month
         return {"status": "success", "data": data}
     except: return {"status": "error", "data": {}}
 
-# ================= API: 海报生成 (Poster) =================
+# ================= API: 海报数据 =================
 @app.get("/api/stats/poster_data")
 async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
     try:
@@ -340,8 +339,14 @@ async def proxy_image(item_id: str, img_type: str):
 
     suffix = "/Images/Backdrop?maxWidth=800" if img_type == 'backdrop' else "/Images/Primary?maxHeight=400"
     try:
+        # 增加 headers 防止缓存问题
+        headers = {
+            "Cache-Control": "public, max-age=31536000",
+            "Access-Control-Allow-Origin": "*"
+        }
         resp = requests.get(f"{EMBY_HOST}/emby/Items/{target_id}{suffix}", timeout=3)
-        if resp.status_code == 200: return Response(content=resp.content, media_type=resp.headers.get("Content-Type", "image/jpeg"))
+        if resp.status_code == 200: 
+            return Response(content=resp.content, media_type=resp.headers.get("Content-Type", "image/jpeg"), headers=headers)
     except: pass
     return RedirectResponse(FALLBACK_IMAGE_URL)
 
