@@ -6,17 +6,16 @@
     .poster-container { 
         width: 400px; 
         height: 750px; 
-        background-color: #111827; /* 深色底色 */
+        background-color: #111827; /* 深色底色，防止透明穿透变白 */
         position: relative;
         overflow: hidden;
         flex-shrink: 0;
-        transform-origin: top center;
+        /* 取消 transform-origin，由外部控制缩放 */
         box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.5); 
     }
     
-    /* ================= 玻璃卡片 (兼容模式) ================= */
-    /* 既然 html2canvas 不支持 backdrop-filter，我们直接用半透明黑底 */
-    /* 这样预览和下载的效果是一致的 */
+    /* ================= 玻璃卡片 ================= */
+    /* 使用半透明黑底，确保预览和下载一致性 */
     .glass-panel { 
         background: rgba(0, 0, 0, 0.5); 
         border: 1px solid rgba(255, 255, 255, 0.15); 
@@ -24,20 +23,32 @@
         border-radius: 12px;
     }
 
-    /* ================= 背景层 ================= */
-    /* 我们使用 img 标签而不是 background-image，方便 JS 替换模糊源 */
-    .poster-bg-img {
+    /* ================= 背景层 (关键修复：使用 DIV+BGImage) ================= */
+    /* 修复拉伸问题的核心：不用 img 标签 */
+    #poster-bg-layer {
         position: absolute; inset: 0; 
-        width: 100%; height: 100%;
-        object-fit: cover;
+        background-size: cover; 
+        background-position: center;
         /* 预览时的滤镜 (下载时会被 JS 物理模糊替代) */
         filter: blur(15px) brightness(0.6); 
         transform: scale(1.1); /* 放大一点防止模糊白边 */
         z-index: 0;
-        transition: opacity 0.3s;
+        transition: background-image 0.3s ease, opacity 0.3s ease;
+    }
+
+    /* 纯色背景层 (用于渐变模式) */
+    #poster-bg-gradient {
+        position: absolute; inset: 0; z-index: 0;
+        transition: background 0.3s ease;
     }
     
-    .poster-content { position: relative; z-index: 10; height: 100%; display: flex; flex-direction: column; }
+    /* 内容层布局优化，防止文字偏移 */
+    .poster-content { 
+        position: relative; z-index: 10; 
+        height: 100%; 
+        display: flex; flex-direction: column; 
+        padding: 32px; /* 统一 Padding */
+    }
     
     /* ================= 交互组件 ================= */
     .user-option.selected { border-color: #16a34a; background-color: #f0fdf4; }
@@ -46,8 +57,13 @@
     .bg-option.active { border-color: #16a34a; transform: scale(1.1); }
 
     /* ================= 预览缩放容器 ================= */
-    #preview-wrapper { overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding: 20px; }
+    /* 确保预览居中 */
+    #preview-wrapper { overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding: 20px; background-color: #f3f4f6; }
+    /* 缩放控制点 */
     #scale-wrapper { transform-origin: top center; transition: transform 0.2s; margin-top: 10px; }
+    
+    /* 文字截断辅助类 */
+    .truncate-flex { min-width: 0; flex: 1; }
 </style>
 {% endblock %}
 
@@ -93,81 +109,76 @@
                     <label class="block text-xs font-bold text-gray-500 uppercase">寄语</label>
                     <button onclick="randomQuote()" class="text-xs text-blue-600 hover:text-blue-800 transition-colors"><i class="fa-solid fa-dice mr-1"></i> 随机灵感</button>
                 </div>
-                <textarea id="custom-msg" rows="3" class="w-full border-gray-300 rounded-lg text-sm p-3 border focus:ring-green-500 focus:border-green-500 shadow-sm transition-shadow" oninput="document.getElementById('poster-msg').innerText = this.value">生活不仅有代码，还有电影。</textarea>
+                <textarea id="custom-msg" rows="3" class="w-full border-gray-300 rounded-lg text-sm p-3 border focus:ring-green-500 focus:border-green-500 shadow-sm transition-shadow resize-none" oninput="document.getElementById('poster-msg').innerText = this.value">生活不仅有代码，还有电影。</textarea>
             </div>
         </div>
 
-        <button onclick="downloadPoster()" id="dl-btn" class="mt-8 w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg transition transform active:scale-95 flex justify-center items-center">
+        <button onclick="processCapture('download')" id="dl-btn" class="mt-8 w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg transition transform active:scale-95 flex justify-center items-center">
             <i class="fa-solid fa-download mr-2"></i> 保存高清海报
         </button>
-        <button onclick="copyPoster()" id="cp-btn" class="mt-2 w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl shadow-sm transition-colors flex justify-center items-center">
+        <button onclick="processCapture('copy')" id="cp-btn" class="mt-2 w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl shadow-sm transition-colors flex justify-center items-center">
             <i class="fa-regular fa-copy mr-2"></i> 复制到剪贴板
         </button>
     </div>
 
-    <div class="flex-1 bg-gray-100" id="preview-wrapper">
+    <div class="flex-1" id="preview-wrapper">
         <div id="scale-wrapper">
             
             <div id="capture-area" class="poster-container">
                 
-                <img id="poster-bg-img" class="poster-bg-img" src="" style="display: none;">
-                <div id="poster-bg-gradient" class="absolute inset-0 z-0" style="display: none;"></div>
+                <div id="poster-bg-layer" style="display: none;"></div>
+                <div id="poster-bg-gradient" style="display: none;"></div>
                 
                 <div class="absolute inset-0 z-[1] opacity-10 bg-repeat" style="background-image: url('https://www.transparenttextures.com/patterns/stardust.png'); pointer-events: none;"></div>
 
-                <div class="poster-content p-8">
+                <div class="poster-content">
                     
                     <div class="flex justify-between items-start mb-8">
-                        <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-4 truncate-flex">
                             <div class="w-14 h-14 rounded-full border-2 border-white/30 flex items-center justify-center bg-white/10 text-xl font-bold shadow-lg shrink-0" id="poster-avatar">U</div>
-                            <div class="min-w-0">
-                                <h2 class="text-2xl font-black tracking-tight text-white truncate" style="max-width: 180px;" id="poster-user">Username</h2>
-                                <p class="text-xs text-white/70 font-medium tracking-widest uppercase mt-1" id="poster-period-text">全量观影报告</p>
+                            <div class="min-w-0 truncate-flex">
+                                <h2 class="text-2xl font-black tracking-tight text-white truncate" id="poster-user">Username</h2>
+                                <p class="text-xs text-white/70 font-medium tracking-widest uppercase mt-1 truncate" id="poster-period-text">全量观影报告</p>
                             </div>
                         </div>
-                        <div class="glass-panel px-3 py-1 rounded-full text-xs font-bold text-yellow-300 shrink-0" id="poster-tag">观影达人</div>
+                        <div class="glass-panel px-3 py-1 rounded-full text-xs font-bold text-yellow-300 shrink-0 ml-2" id="poster-tag">观影达人</div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4 mb-8">
-                        <div class="glass-panel rounded-2xl py-4 px-2 text-center flex flex-col justify-center">
+                    <div class="grid grid-cols-2 gap-4 mb-8 shrink-0">
+                        <div class="glass-panel rounded-2xl py-4 px-3 text-center flex flex-col justify-center">
                             <div class="text-4xl font-black text-white leading-none mb-1" id="poster-hours">0</div>
-                            <div class="text-[10px] text-white/70 font-bold w-full whitespace-nowrap overflow-visible">总时长 (小时)</div>
+                            <div class="text-[10px] text-white/70 font-bold truncate">总时长 (小时)</div>
                         </div>
-                        <div class="glass-panel rounded-2xl py-4 px-2 text-center flex flex-col justify-center">
+                        <div class="glass-panel rounded-2xl py-4 px-3 text-center flex flex-col justify-center">
                             <div class="text-4xl font-black text-white leading-none mb-1" id="poster-plays">0</div>
-                            <div class="text-[10px] text-white/70 font-bold w-full whitespace-nowrap overflow-visible">播放次数</div>
+                            <div class="text-[10px] text-white/70 font-bold truncate">播放次数</div>
                         </div>
                     </div>
 
                     <div class="flex-1 flex flex-col justify-center mb-6 min-h-0">
-                        <div class="text-xs font-bold text-yellow-400 mb-3 flex items-center gap-2">
+                        <div class="text-xs font-bold text-yellow-400 mb-3 flex items-center gap-2 shrink-0">
                             <i class="fa-solid fa-crown"></i> 最爱 Top 1
                         </div>
-                        <div class="relative w-full aspect-[16/9] rounded-2xl overflow-hidden shadow-2xl border border-white/20 group bg-black/30 flex-shrink-0">
-                            <img id="poster-top1-img" src="" class="w-full h-full object-cover" crossOrigin="anonymous" onerror="handleImgError(this)">
+                        <div id="poster-top1-bg" class="relative w-full aspect-[16/9] rounded-2xl overflow-hidden shadow-2xl border border-white/20 group bg-black/30 flex-shrink-0 bg-cover bg-center" style="background-image: url('https://via.placeholder.com/400x225/374151/9ca3af?text=No+Data');">
                             <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>
                             <div class="absolute bottom-4 left-4 right-4">
-                                <h3 class="text-xl font-bold leading-tight line-clamp-1 text-white" id="poster-top1-title">暂无数据</h3>
-                                <p class="text-xs text-white/70 mt-1"><span id="poster-top1-plays">0</span> 次播放 · 挚爱之选</p>
+                                <h3 class="text-xl font-bold leading-tight line-clamp-2 text-white" id="poster-top1-title">暂无数据</h3>
+                                <p class="text-xs text-white/70 mt-1 truncate"><span id="poster-top1-plays">0</span> 次播放 · 挚爱之选</p>
                             </div>
                         </div>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4 mb-8 shrink-0">
-                        <div class="glass-panel p-2 rounded-xl flex gap-2 items-center overflow-hidden">
-                            <div class="w-10 h-14 bg-gray-700 rounded overflow-hidden shrink-0">
-                                <img id="poster-top2-img" class="w-full h-full object-cover" crossOrigin="anonymous" onerror="this.src='https://via.placeholder.com/100x150/374151/9ca3af?text=No'">
-                            </div>
-                            <div class="min-w-0 flex-1">
+                        <div class="glass-panel p-2 rounded-xl flex gap-3 items-center overflow-hidden">
+                            <div id="poster-top2-bg" class="w-10 h-14 bg-gray-700 rounded overflow-hidden shrink-0 bg-cover bg-center" style="background-image: url('https://via.placeholder.com/100x150/374151/9ca3af?text=No');"></div>
+                            <div class="truncate-flex">
                                 <div class="text-[9px] text-white/50 font-bold mb-0.5">Top 2</div>
                                 <div class="text-xs font-bold text-white truncate" id="poster-top2-title">-</div>
                             </div>
                         </div>
-                        <div class="glass-panel p-2 rounded-xl flex gap-2 items-center overflow-hidden">
-                            <div class="w-10 h-14 bg-gray-700 rounded overflow-hidden shrink-0">
-                                <img id="poster-top3-img" class="w-full h-full object-cover" crossOrigin="anonymous" onerror="this.src='https://via.placeholder.com/100x150/374151/9ca3af?text=No'">
-                            </div>
-                            <div class="min-w-0 flex-1">
+                        <div class="glass-panel p-2 rounded-xl flex gap-3 items-center overflow-hidden">
+                            <div id="poster-top3-bg" class="w-10 h-14 bg-gray-700 rounded overflow-hidden shrink-0 bg-cover bg-center" style="background-image: url('https://via.placeholder.com/100x150/374151/9ca3af?text=No');"></div>
+                            <div class="truncate-flex">
                                 <div class="text-[9px] text-white/50 font-bold mb-0.5">Top 3</div>
                                 <div class="text-xs font-bold text-white truncate" id="poster-top3-title">-</div>
                             </div>
@@ -194,19 +205,19 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
     const quotes = ["生活不仅有代码，还有电影。", "有些鸟儿是关不住的。", "能力越大，责任越大。", "愿原力与你同在。", "念念不忘，必有回响。", "我命由我不由天！", "为了看看阳光，我来到这世上。", "风起，唯有努力生存。", "如果不曾见过太阳，我本可以忍受黑暗。", "好的电影，是一次灵魂的洗礼。"];
     let currentPeriod = 'all';
     let currentUserId = '';
-    let currentTop1Img = '';
+    let currentTop1Backdrop = '';
     let isAutoBg = true;
 
-    // 缩放适配
+    // 缩放适配 (仅用于预览，截图时不依赖此缩放)
     function resizePoster() {
         if (window.innerWidth < 1100) {
             const wrapper = document.getElementById('preview-wrapper');
-            const scale = (wrapper.clientWidth - 40) / 400;
+            const scale = (wrapper.clientWidth - 60) / 400;
             const el = document.getElementById('scale-wrapper');
             const finalScale = Math.min(scale, 1);
             el.style.transform = `scale(${finalScale})`;
@@ -215,16 +226,24 @@
     window.addEventListener('resize', resizePoster);
     setTimeout(resizePoster, 100);
 
-    // 图片回退
-    function handleImgError(img) {
-        img.onerror = null;
-        if (img.src.includes('backdrop')) {
-            const newSrc = img.src.replace('backdrop', 'primary');
-            img.src = newSrc;
-            if (isAutoBg) updateBgImage(newSrc);
-        } else {
-            img.src = 'https://via.placeholder.com/400x225/374151/9ca3af?text=No+Image';
-        }
+    // 🔥 核心修复：设置背景图的通用函数 (处理 div 的 background-image)
+    function setDivBackground(elementId, url) {
+        const el = document.getElementById(elementId);
+        if (!el) return;
+        // 预加载图片以检查有效性
+        const img = new Image();
+        img.onload = () => { el.style.backgroundImage = `url('${url}')`; };
+        img.onerror = () => {
+            // 回退逻辑
+            if (elementId.includes('top1') && url.includes('backdrop')) {
+                 const newUrl = url.replace('backdrop', 'primary');
+                 setDivBackground(elementId, newUrl);
+                 if (isAutoBg) setDivBackground('poster-bg-layer', newUrl);
+            } else {
+                 el.style.backgroundImage = `url('https://via.placeholder.com/400x225/374151/9ca3af?text=No+Image')`;
+            }
+        };
+        img.src = url;
     }
 
     async function init() { await loadUsers(); }
@@ -290,56 +309,56 @@
                     document.getElementById('poster-top1-plays').innerText = top1.P;
                     
                     const imgUrl = `/api/proxy/image/${top1.ItemId}/backdrop`; 
-                    currentTop1Img = imgUrl;
+                    currentTop1Backdrop = imgUrl;
                     
-                    const imgEl = document.getElementById('poster-top1-img');
-                    imgEl.onerror = function() { handleImgError(this); };
-                    imgEl.src = imgUrl;
+                    // 🔥 修复：使用 setDivBackground 设置 Top1 背景
+                    setDivBackground('poster-top1-bg', imgUrl);
                     
                     if(isAutoBg) updateBgImage(imgUrl);
                 } else {
                     document.getElementById('poster-top1-title').innerText = "暂无数据";
                     document.getElementById('poster-top1-plays').innerText = "0";
-                    document.getElementById('poster-top1-img').src = "";
+                    setDivBackground('poster-top1-bg', 'https://via.placeholder.com/400x225/374151/9ca3af?text=No+Data');
                 }
                 updateSmallCard(1, data.top3); 
                 updateSmallCard(2, data.top3);
+                setTimeout(resizePoster, 50);
             }
         } catch(e) {}
     }
 
     function updateSmallCard(index, list) {
         const titleEl = document.getElementById(`poster-top${index+1}-title`);
-        const imgEl = document.getElementById(`poster-top${index+1}-img`);
+        const bgElId = `poster-top${index+1}-bg`;
         if(list && list[index]) {
             titleEl.innerText = list[index].ItemName;
-            imgEl.src = `/api/proxy/image/${list[index].ItemId}/primary`;
+            setDivBackground(bgElId, `/api/proxy/image/${list[index].ItemId}/primary`);
         } else {
             titleEl.innerText = "-";
-            imgEl.src = "";
+            setDivBackground(bgElId, 'https://via.placeholder.com/100x150/374151/9ca3af?text=No');
         }
     }
 
     function updateBgImage(src) {
-        const bgImg = document.getElementById('poster-bg-img');
+        const bgLayer = document.getElementById('poster-bg-layer');
         const bgGrad = document.getElementById('poster-bg-gradient');
         bgGrad.style.display = 'none';
-        bgImg.style.display = 'block';
-        bgImg.src = src;
+        bgLayer.style.display = 'block';
+        setDivBackground('poster-bg-layer', src);
     }
 
     function setBg(val, el) {
         document.querySelectorAll('.bg-option').forEach(opt => opt.classList.remove('active'));
         el.classList.add('active');
-        const bgImg = document.getElementById('poster-bg-img');
+        const bgLayer = document.getElementById('poster-bg-layer');
         const bgGrad = document.getElementById('poster-bg-gradient');
         
         if(val === 'auto') {
             isAutoBg = true;
-            if(currentTop1Img) updateBgImage(currentTop1Img);
+            if(currentTop1Backdrop) updateBgImage(currentTop1Backdrop);
         } else {
             isAutoBg = false;
-            bgImg.style.display = 'none';
+            bgLayer.style.display = 'none';
             bgGrad.style.display = 'block';
             bgGrad.style.background = val;
         }
@@ -351,61 +370,75 @@
         document.getElementById('poster-msg').innerText = quote;
     }
 
-    // 🔥 终极模糊方案：用 Canvas 物理生成模糊图替换原图，然后再截图
-    async function prepareBlurForCapture() {
-        const bgImg = document.getElementById('poster-bg-img');
-        if (bgImg.style.display === 'none' || !bgImg.src) return;
+    // 🔥 核心修复：物理高斯模糊 (JS Canvas 实现)
+    async function applyPhysicalBlur() {
+        const bgLayer = document.getElementById('poster-bg-layer');
+        if (bgLayer.style.display === 'none') return null;
+
+        const bgImageStyle = bgLayer.style.backgroundImage;
+        const urlMatch = bgImageStyle.match(/url\(['"]?(.*?)['"]?\)/);
+        if (!urlMatch || !urlMatch[1]) return null;
 
         return new Promise((resolve) => {
             const img = new Image();
             img.crossOrigin = "Anonymous";
-            img.src = bgImg.src;
+            img.src = urlMatch[1];
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                // 缩小到 10%
-                const w = img.naturalWidth * 0.1;
-                const h = img.naturalHeight * 0.1;
-                canvas.width = w;
-                canvas.height = h;
-                ctx.drawImage(img, 0, 0, w, h);
+                // 缩小到 5% 产生强烈模糊
+                canvas.width = img.naturalWidth * 0.05;
+                canvas.height = img.naturalHeight * 0.05;
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 
-                // 将模糊后的图设置回去
-                const originalSrc = bgImg.src;
-                bgImg.src = canvas.toDataURL();
-                // 暂时移除 CSS filter，避免双重模糊
-                bgImg.style.filter = 'brightness(0.6)'; 
+                // 替换背景图为模糊后的 Canvas DataURL
+                bgLayer.style.backgroundImage = `url(${canvas.toDataURL()})`;
+                // 移除 CSS 滤镜，防止双重模糊
+                const originalFilter = bgLayer.style.filter;
+                bgLayer.style.filter = 'brightness(0.7)'; // 仅保留亮度压暗
                 
                 resolve(() => {
-                    // 还原函数
-                    bgImg.src = originalSrc;
-                    bgImg.style.filter = 'blur(15px) brightness(0.6)';
+                    // 返回恢复函数
+                    bgLayer.style.backgroundImage = bgImageStyle;
+                    bgLayer.style.filter = originalFilter;
                 });
             };
-            img.onerror = resolve; // 失败则跳过
+            img.onerror = () => resolve(null);
         });
     }
 
     async function processCapture(action) {
         const node = document.getElementById('capture-area');
-        const btnId = action === 'download' ? 'dl-btn' : 'cp-btn';
-        const btn = document.getElementById(btnId);
-        const oldText = btn.innerHTML;
+        const scaleWrapper = document.getElementById('scale-wrapper');
+        const btn = document.getElementById(action === 'download' ? 'dl-btn' : 'cp-btn');
+        const originalText = btn.innerHTML;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> 处理中...';
 
-        // 1. 物理模糊处理
-        const restoreFn = await prepareBlurForCapture();
+        // 1. 记录当前缩放值并暂时移除缩放，确保截图无偏移
+        const currentTransform = scaleWrapper.style.transform;
+        scaleWrapper.style.transform = 'none';
 
-        // 2. 截图
+        // 2. 应用物理模糊
+        const restoreBgFn = await applyPhysicalBlur();
+
         try {
+            // 3. 截图
             const canvas = await html2canvas(node, {
-                scale: 3, 
+                scale: 3, // 高清
                 useCORS: true, 
                 backgroundColor: '#111827',
-                allowTaint: true
+                allowTaint: true,
+                logging: false,
+                // 强制指定截图尺寸，防止意外空白
+                width: 400,
+                height: 750,
+                windowWidth: 400,
+                windowHeight: 750,
+                x: 0,
+                y: 0
             });
 
-            // 3. 执行动作
+            // 4. 执行动作
             if (action === 'download') {
                 const link = document.createElement('a');
                 link.download = `EmbyReport_${currentPeriod}_${document.getElementById('poster-user').innerText}.png`;
@@ -417,22 +450,20 @@
                         navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
                         alert("已复制到剪贴板！");
                     } else {
-                        alert("复制失败，请使用下载功能。");
+                        alert("复制失败，请下载。");
                     }
                 });
             }
         } catch(e) {
             console.error(e);
-            alert("生成失败，请重试");
+            alert("生成失败，请检查网络或跨域设置");
         } finally {
-            // 4. 还原现场
-            if(restoreFn) restoreFn();
-            btn.innerHTML = oldText;
+            // 5. 还原现场
+            if(restoreBgFn) restoreBgFn();
+            scaleWrapper.style.transform = currentTransform; // 恢复缩放
+            btn.innerHTML = originalText;
         }
     }
-
-    function downloadPoster() { processCapture('download'); }
-    function copyPoster() { processCapture('copy'); }
     
     init();
 </script>
