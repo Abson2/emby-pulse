@@ -328,17 +328,54 @@ def proxy_user_image(user_id: str):
     except: pass
     return Response(status_code=404)
 
+# ==========================================
+# 替换 main.py 中的 api_badges 函数
+# ==========================================
+
 @app.get("/api/stats/badges")
 def api_badges(user_id: Optional[str] = None):
     try:
         where, params = "WHERE 1=1", []
         if user_id and user_id != 'all': where += " AND UserId = ?"; params.append(user_id)
+        
         badges = []
+        
+        # 1. 修仙党: 凌晨 2-5 点播放超过 5 次
         night_res = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where} AND strftime('%H', DateCreated) BETWEEN '02' AND '05'", params)
         if night_res and night_res[0]['c'] > 5:
             badges.append({"id": "night", "name": "修仙党", "icon": "fa-moon", "color": "text-purple-500", "bg": "bg-purple-100", "desc": "深夜是灵魂最自由的时刻"})
+            
+        # 2. 周末狂欢: 周六(6)或周日(0)播放超过 10 次
+        weekend_res = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where} AND strftime('%w', DateCreated) IN ('0', '6')", params)
+        if weekend_res and weekend_res[0]['c'] > 10:
+             badges.append({"id": "weekend", "name": "周末狂欢", "icon": "fa-champagne-glasses", "color": "text-pink-500", "bg": "bg-pink-100", "desc": "工作日唯唯诺诺，周末重拳出击"})
+
+        # 3. 肝帝: 总播放时长超过 100 小时 (360000秒)
+        dur_res = query_db(f"SELECT SUM(PlayDuration) as d FROM PlaybackActivity {where}", params)
+        total_dur = dur_res[0]['d'] if dur_res and dur_res[0]['d'] else 0
+        if total_dur > 360000:
+             badges.append({"id": "liver", "name": "Emby肝帝", "icon": "fa-fire", "color": "text-red-500", "bg": "bg-red-100", "desc": "阅片无数，心中的码比片还厚"})
+
+        # 4. 偏好分析: 电影迷 vs 追剧狂
+        type_res = query_db(f"SELECT ItemType, COUNT(*) as c FROM PlaybackActivity {where} GROUP BY ItemType", params)
+        type_counts = {row['ItemType']: row['c'] for row in type_res or []}
+        movies = type_counts.get('Movie', 0)
+        episodes = type_counts.get('Episode', 0)
+        
+        if movies > 20 and movies > episodes:
+             badges.append({"id": "movie", "name": "电影迷", "icon": "fa-film", "color": "text-blue-500", "bg": "bg-blue-100", "desc": "两小时体验一种人生"})
+        elif episodes > 50 and episodes > movies:
+             badges.append({"id": "series", "name": "追剧狂魔", "icon": "fa-tv", "color": "text-green-500", "bg": "bg-green-100", "desc": "下一集...再看一集就睡"})
+
+        # 5. 早起鸟: 早上 6-9 点播放
+        morning_res = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where} AND strftime('%H', DateCreated) BETWEEN '06' AND '09'", params)
+        if morning_res and morning_res[0]['c'] > 5:
+            badges.append({"id": "morning", "name": "早起鸟", "icon": "fa-sun", "color": "text-orange-500", "bg": "bg-orange-100", "desc": "一日之计在于晨"})
+
         return {"status": "success", "data": badges}
-    except: return {"status": "success", "data": []}
+    except Exception as e:
+        print(f"Badge Error: {e}")
+        return {"status": "success", "data": []}
 
 @app.get("/api/stats/monthly_stats")
 def api_monthly_stats(user_id: Optional[str] = None):

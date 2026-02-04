@@ -220,10 +220,41 @@
 
     function renderLogs(logs) {
         const tbody = document.getElementById('logs-table-body');
+        if (!logs || logs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-400">暂无播放记录</td></tr>';
+            return;
+        }
+        
         let html = '';
         logs.forEach(log => {
-            const date = new Date(log.DateCreated + 'Z').toLocaleString('zh-CN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
-            html += `<tr class="bg-white border-b hover:bg-gray-50"><td class="px-6 py-3 font-medium text-gray-900 whitespace-nowrap">${date}</td><td class="px-6 py-3">${log.UserName}</td><td class="px-6 py-3 font-bold text-gray-800 line-clamp-1 max-w-xs" title="${log.ItemName}">${log.ItemName}</td><td class="px-6 py-3 text-xs"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded">${log.Device}</span></td><td class="px-6 py-3 text-right font-bold text-green-600">${Math.round(log.PlayDuration/60)}m</td></tr>`;
+            // 🔥 修复：去掉 + 'Z'，防止二次叠加时区导致显示未来时间
+            // 直接将字符串中的空格替换为T，作为本地时间解析
+            let dateStr = log.DateCreated;
+            // 兼容部分浏览器解析问题，确保 "YYYY-MM-DD HH:MM:SS" 能被识别
+            if (dateStr && dateStr.includes(' ')) {
+                dateStr = dateStr.replace(' ', 'T');
+            }
+            const dateObj = new Date(dateStr); 
+            const date = dateObj.toLocaleString('zh-CN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
+            
+            // 简单的设备图标映射
+            let deviceIcon = 'fa-mobile-screen';
+            const d = (log.Device || '').toLowerCase();
+            if(d.includes('browser') || d.includes('chrome')) deviceIcon = 'fa-globe';
+            else if(d.includes('tv')) deviceIcon = 'fa-tv';
+            else if(d.includes('apple')) deviceIcon = 'fa-apple';
+            
+            html += `<tr class="bg-white border-b hover:bg-gray-50">
+                <td class="px-6 py-3 font-medium text-gray-900 whitespace-nowrap">${date}</td>
+                <td class="px-6 py-3">${log.UserName}</td>
+                <td class="px-6 py-3 font-bold text-gray-800 line-clamp-1 max-w-xs" title="${log.ItemName}">${log.ItemName}</td>
+                <td class="px-6 py-3 text-xs text-gray-500">
+                    <span class="bg-gray-100 px-2 py-1 rounded border border-gray-200 flex items-center w-fit gap-1">
+                        <i class="fa-solid ${deviceIcon} text-[10px]"></i> ${log.Device}
+                    </span>
+                </td>
+                <td class="px-6 py-3 text-right font-bold text-green-600">${Math.round(log.PlayDuration/60)}m</td>
+            </tr>`;
         });
         tbody.innerHTML = html;
     }
