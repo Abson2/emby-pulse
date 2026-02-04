@@ -2,7 +2,7 @@ import sqlite3
 import os
 import uvicorn
 import requests
-import datetime
+import re
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,26 +17,16 @@ EMBY_HOST = os.getenv("EMBY_HOST", "http://127.0.0.1:8096").rstrip('/')
 EMBY_API_KEY = os.getenv("EMBY_API_KEY", "").strip()
 FALLBACK_IMAGE_URL = "https://img.hotimg.com/a444d32a033994d5b.png"
 
-print(f"--- EmbyPulse V13 (Full Restore) Starting ---")
+print(f"--- EmbyPulse V14 (Compatibility Fix) ---")
 print(f"DB Path: {DB_PATH}")
-if not os.path.exists(DB_PATH):
-    print(f"⚠️ 严重警告: 数据库文件不存在! 请检查 Docker 映射路径!")
 
 app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 if not os.path.exists("static"): os.makedirs("static")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# ================= 数据库工具 =================
 def query_db(query, args=(), one=False):
     if not os.path.exists(DB_PATH): return None
     try:
@@ -48,7 +38,7 @@ def query_db(query, args=(), one=False):
         conn.close()
         return (rv[0] if rv else None) if one else rv
     except Exception as e:
-        print(f"❌ DB Error: {e}")
+        print(f"❌ DB Query Error: {e}")
         return None
 
 def get_user_map():
@@ -61,7 +51,7 @@ def get_user_map():
         except: pass
     return user_map
 
-# ================= 页面路由 =================
+# === 路由 ===
 @app.get("/")
 async def page_dashboard(request: Request): return templates.TemplateResponse("index.html", {"request": request, "active_page": "dashboard"})
 @app.get("/content")
@@ -71,11 +61,9 @@ async def page_report(request: Request): return templates.TemplateResponse("repo
 @app.get("/details")
 async def page_details(request: Request): return templates.TemplateResponse("details.html", {"request": request, "active_page": "details"})
 
-# ================= API 接口 (全功能) =================
-
+# === API ===
 @app.get("/api/users")
 async def api_get_users():
-    """获取用户列表"""
     try:
         results = query_db("SELECT DISTINCT UserId FROM PlaybackActivity")
         if not results: return {"status": "success", "data": []}
@@ -84,46 +72,29 @@ async def api_get_users():
         for row in results:
             uid = row['UserId']
             if not uid: continue
-            name = user_map.get(uid, f"User {str(uid)[:5]}")
-            data.append({"UserId": uid, "UserName": name})
+            data.append({"UserId": uid, "UserName": user_map.get(uid, f"User {str(uid)[:5]}")})
         data.sort(key=lambda x: x['UserName'])
         return {"status": "success", "data": data}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except: return {"status": "error", "data": []}
 
-# === 1. 仪表盘接口 (已修复) ===
 @app.get("/api/stats/dashboard")
 async def api_dashboard(user_id: Optional[str] = None):
     try:
         where, params = "WHERE 1=1", []
-        if user_id and user_id != 'all':
-            where += " AND UserId = ?"
-            params.append(user_id)
-        
-        # 恢复真实的 SQL 查询
+        if user_id and user_id != 'all': where += " AND UserId = ?"; params.append(user_id)
         plays = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}", params)
         users = query_db(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where} AND DateCreated > date('now', '-30 days')", params)
         dur = query_db(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}", params)
-        
-        return {"status": "success", "data": {
-            "total_plays": plays[0]['c'] if plays else 0,
-            "active_users": users[0]['c'] if users else 0,
-            "total_duration": dur[0]['c'] if dur else 0
-        }}
+        return {"status": "success", "data": {"total_plays": plays[0]['c'] if plays else 0, "active_users": users[0]['c'] if users else 0, "total_duration": dur[0]['c'] if dur else 0}}
     except: return {"status": "error", "data": {"total_plays":0, "active_users":0, "total_duration":0}}
 
-# === 2. 最近播放接口 (已修复) ===
 @app.get("/api/stats/recent")
 async def api_recent_activity(user_id: Optional[str] = None):
     try:
         where, params = "WHERE 1=1", []
-        if user_id and user_id != 'all':
-            where += " AND UserId = ?"
-            params.append(user_id)
-            
-        # 恢复查询最近 50 条
-        results = query_db(f"SELECT DateCreated, UserId, ItemId, ItemName, ItemType, PlayDuration FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 50", params)
+        if user_id and user_id != 'all': where += " AND UserId = ?"; params.append(user_id)
+        results = query_db(f"SELECT DateCreated, UserId, ItemId, ItemName, ItemType FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 50", params)
         if not results: return {"status": "success", "data": []}
-
         user_map = get_user_map()
         data = []
         for row in results:
@@ -133,10 +104,9 @@ async def api_recent_activity(user_id: Optional[str] = None):
         return {"status": "success", "data": data}
     except: return {"status": "error", "data": []}
 
-# === 3. 实时监控 (保持不变) ===
 @app.get("/api/live")
 async def api_live_sessions():
-    if not EMBY_API_KEY: return {"status": "error", "message": "No API Key"}
+    if not EMBY_API_KEY: return {"status": "error"}
     try:
         res = requests.get(f"{EMBY_HOST}/emby/Sessions?api_key={EMBY_API_KEY}", timeout=2)
         if res.status_code == 200:
@@ -144,10 +114,10 @@ async def api_live_sessions():
     except: pass
     return {"status": "success", "data": []}
 
-# === 4. 海报数据接口 (V12 小票版逻辑) ===
+# === 🔥 修复核心：不依赖 SeriesName 列的聚合 ===
 @app.get("/api/stats/poster_data")
 async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
-    print(f"\n📊 [Poster] 生成请求: User={user_id}, Period={period}")
+    print(f"\n📊 [Poster V14] 生成请求: User={user_id}, Period={period}")
     try:
         where, params = "WHERE 1=1", []
         date_filter = ""
@@ -156,18 +126,17 @@ async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
         elif period == 'month': date_filter = " AND DateCreated > date('now', '-30 days')"
         elif period == 'year': date_filter = " AND DateCreated > date('now', '-1 year')"
         
-        # 全服数据
         server_sql = f"SELECT COUNT(*) as Plays FROM PlaybackActivity WHERE 1=1 {date_filter}"
         server_res = query_db(server_sql)
         server_plays = server_res[0]['Plays'] if server_res else 0
 
-        # 个人数据
         if user_id and user_id != 'all': 
             where += " AND UserId = ?"
             params.append(user_id)
         where += date_filter
 
-        raw_sql = f"SELECT ItemName, ItemId, ItemType, SeriesName, PlayDuration FROM PlaybackActivity {where}"
+        # 🔥 修正：移除了 SeriesName，因为它不存在
+        raw_sql = f"SELECT ItemName, ItemId, ItemType, PlayDuration FROM PlaybackActivity {where}"
         rows = query_db(raw_sql, params)
         
         total_plays = 0
@@ -180,17 +149,37 @@ async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
                 dur = row['PlayDuration'] or 0
                 total_duration += dur
                 
-                # 智能聚合
-                name = row['SeriesName'] if (row['ItemType'] == 'Episode' and row['SeriesName']) else row['ItemName']
-                if not name: name = "未知内容"
-                if ' - ' in name: name = name.split(' - ')[0]
+                original_name = row['ItemName']
+                item_type = row['ItemType']
+                clean_name = original_name
+
+                # 🔥 智能清洗逻辑 (替代 SeriesName)
+                if item_type == 'Episode':
+                    # 常见的剧集命名格式处理
+                    # "仙逆 - S01E01 - ..." -> "仙逆"
+                    if ' - S' in original_name:
+                        clean_name = original_name.split(' - S')[0]
+                    # "仙逆 - 第1集" -> "仙逆"
+                    elif ' - ' in original_name:
+                        parts = original_name.split(' - ')
+                        # 如果后面部分看起来像集数，就取前面
+                        if len(parts) > 1:
+                            clean_name = parts[0]
                 
-                if name not in aggregated:
-                    aggregated[name] = {'ItemName': name, 'ItemId': row['ItemId'], 'Count': 0, 'Duration': 0}
+                # 电影也稍微处理一下 "Avatar - 1080p"
+                elif item_type == 'Movie':
+                    if ' - ' in original_name:
+                        clean_name = original_name.split(' - ')[0]
+
+                if not clean_name: clean_name = "未知内容"
+
+                if clean_name not in aggregated:
+                    aggregated[clean_name] = {'ItemName': clean_name, 'ItemId': row['ItemId'], 'Count': 0, 'Duration': 0}
                 
-                aggregated[name]['Count'] += 1
-                aggregated[name]['Duration'] += dur
-                aggregated[name]['ItemId'] = row['ItemId'] 
+                aggregated[clean_name]['Count'] += 1
+                aggregated[clean_name]['Duration'] += dur
+                # 更新 ID (保持最新)
+                aggregated[clean_name]['ItemId'] = row['ItemId'] 
 
         top_list = list(aggregated.values())
         top_list.sort(key=lambda x: x['Count'], reverse=True)
@@ -198,6 +187,8 @@ async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
 
         total_hours = round(total_duration / 3600)
         
+        print(f"   ✅ 聚合成功: {len(top_list)} 条 Top 数据")
+
         return {
             "status": "success",
             "data": {
@@ -209,61 +200,31 @@ async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
             }
         }
     except Exception as e:
-        print(f"❌ [Poster] Error: {e}")
+        print(f"❌ Poster Error: {e}")
         return {"status": "error", "message": str(e), "data": {"plays": 0, "hours": 0, "server_plays": 0, "top_list": []}}
 
-# === 5. 内容排行接口 (已修复) ===
-@app.get("/api/stats/top_movies")
-async def api_top_movies(user_id: Optional[str] = None, category: str = 'all', sort_by: str = 'count'):
-    try:
-        where, params = "WHERE 1=1", []
-        if user_id and user_id != 'all':
-            where += " AND UserId = ?"
-            params.append(user_id)
-        if category == 'Movie': where += " AND ItemType = 'Movie'"
-        elif category == 'Episode': where += " AND ItemType = 'Episode'"
-        
-        order = "ORDER BY PlayCount DESC" if sort_by == 'count' else "ORDER BY TotalTime DESC"
-        # 恢复 Group By 查询
-        sql = f"SELECT ItemName, ItemId, ItemType, COUNT(*) as PlayCount, SUM(PlayDuration) as TotalTime FROM PlaybackActivity {where} GROUP BY ItemId, ItemName {order} LIMIT 20"
-        results = query_db(sql, params)
-        return {"status": "success", "data": [dict(r) for r in results] if results else []}
-    except: return {"status": "error", "data": []}
+@app.get("/api/proxy/image/{item_id}/{img_type}")
+async def proxy_image(item_id: str, img_type: str):
+    target_id = item_id
+    if img_type == 'primary' and EMBY_API_KEY:
+        try:
+            r = requests.get(f"{EMBY_HOST}/emby/Items?Ids={item_id}&Fields=SeriesId,ParentId&Limit=1&api_key={EMBY_API_KEY}", timeout=1)
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("Items"):
+                    item = data["Items"][0]
+                    if item.get('SeriesId'): target_id = item.get('SeriesId')
+                    elif item.get('ParentId'): target_id = item.get('ParentId')
+        except: pass
 
-# === 6. 用户详情接口 (已修复) ===
-@app.get("/api/stats/user_details")
-async def api_user_details(user_id: Optional[str] = None):
+    suffix = "/Images/Backdrop?maxWidth=800" if img_type == 'backdrop' else "/Images/Primary?maxHeight=400"
     try:
-        where, params = "WHERE 1=1", []
-        if user_id and user_id != 'all':
-            where += " AND UserId = ?"
-            params.append(user_id)
-        
-        # 恢复详细查询
-        hourly_res = query_db(f"SELECT strftime('%H', DateCreated) as Hour, COUNT(*) as Plays FROM PlaybackActivity {where} GROUP BY Hour ORDER BY Hour", params)
-        hourly_data = {str(i).zfill(2): 0 for i in range(24)}
-        if hourly_res:
-            for r in hourly_res: hourly_data[r['Hour']] = r['Plays']
-            
-        device_res = query_db(f"SELECT COALESCE(DeviceName, ClientName, 'Unknown') as Device, COUNT(*) as Plays FROM PlaybackActivity {where} GROUP BY Device ORDER BY Plays DESC", params)
-        logs_res = query_db(f"SELECT DateCreated, ItemName, PlayDuration, COALESCE(DeviceName, ClientName) as Device, UserId FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 100", params)
-        
-        user_map = get_user_map()
-        logs_data = []
-        if logs_res:
-            for r in logs_res:
-                l = dict(r)
-                l['UserName'] = user_map.get(l['UserId'], "User")
-                logs_data.append(l)
-                
-        return {"status": "success", "data": {
-            "hourly": hourly_data, 
-            "devices": [dict(r) for r in device_res] if device_res else [],
-            "logs": logs_data
-        }}
-    except: return {"status": "error", "data": {"hourly": {}, "devices": [], "logs": []}}
+        resp = requests.get(f"{EMBY_HOST}/emby/Items/{target_id}{suffix}", timeout=3)
+        if resp.status_code == 200: return Response(content=resp.content, media_type="image/jpeg")
+    except: pass
+    return RedirectResponse(FALLBACK_IMAGE_URL)
 
-# === 7. 图表接口 (已修复) ===
+# === 其他接口 ===
 @app.get("/api/stats/chart")
 async def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'month'):
     try:
@@ -271,7 +232,6 @@ async def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'month
         if user_id and user_id != 'all':
             where += " AND UserId = ?"
             params.append(user_id)
-        
         sql = ""
         if dimension == 'year':
             sql = f"SELECT strftime('%Y', DateCreated) as Label, SUM(PlayDuration) as Duration FROM PlaybackActivity {where} GROUP BY Label ORDER BY Label DESC LIMIT 5"
@@ -281,7 +241,6 @@ async def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'month
         else:
             where += " AND DateCreated > date('now', '-12 months')"
             sql = f"SELECT strftime('%Y-%m', DateCreated) as Label, SUM(PlayDuration) as Duration FROM PlaybackActivity {where} GROUP BY Label ORDER BY Label"
-            
         results = query_db(sql, params)
         data = {}
         if results:
@@ -290,7 +249,29 @@ async def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'month
         return {"status": "success", "data": data}
     except: return {"status": "error", "data": {}}
 
-# === 8. 其他辅助接口 ===
+@app.get("/api/stats/user_details")
+async def api_user_details(user_id: Optional[str] = None):
+    try:
+        where, params = "WHERE 1=1", []
+        if user_id and user_id != 'all':
+            where += " AND UserId = ?"
+            params.append(user_id)
+        hourly_res = query_db(f"SELECT strftime('%H', DateCreated) as Hour, COUNT(*) as Plays FROM PlaybackActivity {where} GROUP BY Hour ORDER BY Hour", params)
+        hourly_data = {str(i).zfill(2): 0 for i in range(24)}
+        if hourly_res:
+            for r in hourly_res: hourly_data[r['Hour']] = r['Plays']
+        device_res = query_db(f"SELECT COALESCE(DeviceName, ClientName, 'Unknown') as Device, COUNT(*) as Plays FROM PlaybackActivity {where} GROUP BY Device ORDER BY Plays DESC", params)
+        logs_res = query_db(f"SELECT DateCreated, ItemName, PlayDuration, COALESCE(DeviceName, ClientName) as Device, UserId FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 100", params)
+        user_map = get_user_map()
+        logs_data = []
+        if logs_res:
+            for r in logs_res:
+                l = dict(r)
+                l['UserName'] = user_map.get(l['UserId'], "User")
+                logs_data.append(l)
+        return {"status": "success", "data": {"hourly": hourly_data, "devices": [dict(r) for r in device_res] if device_res else [], "logs": logs_data}}
+    except: return {"status": "error", "data": {"hourly": {}, "devices": [], "logs": []}}
+
 @app.get("/api/stats/top_users_list")
 async def api_top_users_list():
     try:
@@ -304,6 +285,21 @@ async def api_top_users_list():
             data.append(u)
         return {"status": "success", "data": data}
     except: return {"status": "success", "data": []}
+
+@app.get("/api/stats/top_movies")
+async def api_top_movies(user_id: Optional[str] = None, category: str = 'all', sort_by: str = 'count'):
+    try:
+        where, params = "WHERE 1=1", []
+        if user_id and user_id != 'all':
+            where += " AND UserId = ?"
+            params.append(user_id)
+        if category == 'Movie': where += " AND ItemType = 'Movie'"
+        elif category == 'Episode': where += " AND ItemType = 'Episode'"
+        order = "ORDER BY PlayCount DESC" if sort_by == 'count' else "ORDER BY TotalTime DESC"
+        sql = f"SELECT ItemName, ItemId, ItemType, COUNT(*) as PlayCount, SUM(PlayDuration) as TotalTime FROM PlaybackActivity {where} GROUP BY ItemId, ItemName {order} LIMIT 20"
+        results = query_db(sql, params)
+        return {"status": "success", "data": [dict(r) for r in results] if results else []}
+    except: return {"status": "error", "data": []}
 
 @app.get("/api/stats/badges")
 async def api_badges(user_id: Optional[str] = None):
@@ -332,28 +328,6 @@ async def api_monthly_stats(user_id: Optional[str] = None):
             for r in results: data[r['Month']] = int(r['Duration'])
         return {"status": "success", "data": data}
     except: return {"status": "error", "data": {}}
-
-# === 图片代理 (通用) ===
-@app.get("/api/proxy/image/{item_id}/{img_type}")
-async def proxy_image(item_id: str, img_type: str):
-    target_id = item_id
-    if img_type == 'primary' and EMBY_API_KEY:
-        try:
-            r = requests.get(f"{EMBY_HOST}/emby/Items?Ids={item_id}&Fields=SeriesId,ParentId&Limit=1&api_key={EMBY_API_KEY}", timeout=1)
-            if r.status_code == 200:
-                data = r.json()
-                if data.get("Items"):
-                    item = data["Items"][0]
-                    if item.get('SeriesId'): target_id = item.get('SeriesId')
-                    elif item.get('ParentId'): target_id = item.get('ParentId')
-        except: pass
-
-    suffix = "/Images/Backdrop?maxWidth=800" if img_type == 'backdrop' else "/Images/Primary?maxHeight=400"
-    try:
-        resp = requests.get(f"{EMBY_HOST}/emby/Items/{target_id}{suffix}", timeout=3)
-        if resp.status_code == 200: return Response(content=resp.content, media_type=resp.headers.get("Content-Type", "image/jpeg"))
-    except: pass
-    return RedirectResponse(FALLBACK_IMAGE_URL)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=PORT)
