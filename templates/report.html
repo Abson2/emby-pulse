@@ -1,226 +1,222 @@
 {% extends "layout.html" %}
-{% block title %}映迹工坊 - EmbyPulse{% endblock %}
+{% block title %}映迹工坊 - 小票版{% endblock %}
 {% block head %}
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <style>
-    /* ================= 1. 基础布局 (手机优先) ================= */
-    html, body { 
-        height: 100%; 
-        margin: 0; 
-        overflow: hidden; 
-        background-color: #f3f4f6;
-    }
+    /* 全局重置 */
+    html, body { height: 100%; margin: 0; background: #f0f2f5; font-family: 'Space Mono', monospace, sans-serif; }
     
-    .app-container {
-        display: flex;
-        flex-direction: column; /* 默认手机竖屏布局 */
-        height: 100%;
-    }
-
-    /* 预览区域 (上部/右部) */
-    .preview-section {
+    .app-layout { display: flex; flex-direction: column; height: 100%; }
+    
+    /* 预览区 */
+    .preview-area {
         flex: 1;
-        overflow-y: auto; /* 允许海报区域滚动 */
-        overflow-x: hidden;
+        overflow-y: auto;
         display: flex;
         justify-content: center;
         align-items: flex-start;
-        padding: 20px;
+        padding: 40px 20px;
         background-color: #e5e7eb;
-        -webkit-overflow-scrolling: touch;
+        background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+        background-size: 20px 20px;
     }
 
-    /* 控制面板 (下部/左部) */
-    .control-section {
+    /* 控制台 (底部固定) */
+    .control-panel {
         background: white;
         padding: 20px;
-        box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
-        z-index: 50;
-        height: auto;
-        max-height: 40vh; /* 手机上最多占 40% 高度 */
-        overflow-y: auto;
+        border-top: 1px solid #ddd;
+        box-shadow: 0 -5px 20px rgba(0,0,0,0.05);
+        z-index: 100;
+        flex-shrink: 0;
     }
 
-    /* 桌面端适配 (大屏变左右布局) */
-    @media (min-width: 768px) {
-        .app-container { flex-direction: row; } /* 左控制，右预览 */
-        .control-section { 
-            width: 360px; 
-            max-height: 100%; 
-            height: 100%; 
-            border-right: 1px solid #ddd;
-            box-shadow: none;
-        }
-        .preview-section { align-items: center; } /* 桌面端垂直居中 */
-    }
-
-    /* ================= 2. 海报本体 (固定比例 9:16) ================= */
-    /* 这里的尺寸是固定的，截图绝对稳 */
-    .poster-canvas {
-        width: 375px;
-        height: 667px;
-        background-color: #111827;
+    /* ================= 🧾 小票海报本体 ================= */
+    .receipt-container {
+        width: 380px;
+        background: #fff;
         position: relative;
-        overflow: hidden;
-        flex-shrink: 0; /* 禁止被挤压 */
-        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        color: white;
-    }
-
-    /* 动态背景 */
-    #poster-bg { position: absolute; inset: 0; z-index: 0; transition: background 0.3s; }
-    .texture { position: absolute; inset: 0; z-index: 1; opacity: 0.05; background-image: url('https://www.transparenttextures.com/patterns/stardust.png'); }
-
-    /* 内容层 */
-    .content-layer {
-        position: relative; z-index: 10;
-        height: 100%;
-        padding: 30px 24px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.15);
         display: flex;
         flex-direction: column;
+        filter: drop-shadow(0 0 10px rgba(0,0,0,0.1));
     }
 
-    /* ================= 3. 海报组件 ================= */
+    /* 锯齿效果 (纯CSS实现) */
+    .receipt-container::before, .receipt-container::after {
+        content: ""; position: absolute; left: 0; width: 100%; height: 10px;
+        background-size: 20px 20px;
+        background-repeat: repeat-x;
+    }
+    .receipt-container::before {
+        top: -10px;
+        background-image: linear-gradient(135deg, transparent 50%, #fff 50%), linear-gradient(45deg, #fff 50%, transparent 50%);
+    }
+    .receipt-container::after {
+        bottom: -10px;
+        background-image: linear-gradient(135deg, #fff 50%, transparent 50%), linear-gradient(45deg, transparent 50%, #fff 50%);
+    }
+
+    .receipt-content { padding: 30px 25px; color: #1a1a1a; }
+
     /* 头部 */
-    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-    .avatar { width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; border: 2px solid rgba(255,255,255,0.2); }
-    .user-info h2 { font-size: 24px; font-weight: 900; margin: 0; line-height: 1.2; padding-top: 4px; }
-    .user-info p { font-size: 10px; opacity: 0.6; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
+    .r-header { text-align: center; border-bottom: 2px dashed #1a1a1a; padding-bottom: 20px; margin-bottom: 20px; }
+    .r-title { font-size: 24px; font-weight: 900; letter-spacing: -1px; text-transform: uppercase; margin: 0; }
+    .r-subtitle { font-size: 12px; margin-top: 5px; opacity: 0.6; }
+    .r-meta { display: flex; justify-content: space-between; font-size: 10px; margin-top: 15px; font-weight: bold; opacity: 0.5; }
+
+    /* 数据行 */
+    .r-row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; }
+    .r-label { font-size: 12px; font-weight: bold; }
+    .r-val { font-size: 14px; font-weight: bold; }
+    .r-val.big { font-size: 24px; }
     
-    /* 顶部胶囊 (全服数据) */
-    .server-pill { 
-        background: rgba(0,0,0,0.3); padding: 4px 10px; border-radius: 20px; 
-        font-size: 10px; display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.1); 
+    .divider { border-bottom: 2px dashed #1a1a1a; margin: 20px 0; opacity: 0.2; }
+
+    /* Top 榜单 */
+    .top-section { margin-top: 10px; }
+    .top-header { font-size: 12px; font-weight: 900; text-transform: uppercase; margin-bottom: 15px; display: flex; justify-content: space-between; }
+    
+    /* Top 1 图片 */
+    .top1-card { 
+        width: 100%; aspect-ratio: 16/9; background: #eee; margin-bottom: 15px; 
+        background-size: cover; background-position: center; border: 2px solid #1a1a1a; 
+        position: relative; display: flex; align-items: flex-end;
     }
-    .server-val { color: #4ade80; font-weight: bold; margin-left: 4px; font-size: 12px; }
+    .top1-badge { 
+        background: #1a1a1a; color: white; padding: 4px 8px; 
+        font-size: 10px; font-weight: bold; position: absolute; top: 0; left: 0; 
+    }
+    .top1-info {
+        background: rgba(255,255,255,0.9); width: 100%; padding: 8px; 
+        border-top: 2px solid #1a1a1a;
+    }
 
-    /* 数据卡片 */
-    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; }
-    .stat-card { background: rgba(255,255,255,0.08); border-radius: 16px; padding: 15px; text-align: center; border: 1px solid rgba(255,255,255,0.1); }
-    .stat-num { font-size: 32px; font-weight: 900; line-height: 1.1; }
-    .stat-label { font-size: 10px; opacity: 0.5; font-weight: bold; margin-top: 4px; }
+    /* 列表 */
+    .list-item { display: flex; justify-content: space-between; font-size: 11px; padding: 6px 0; border-bottom: 1px dotted #ccc; }
+    .list-item:last-child { border-bottom: none; }
+    .item-name { max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: bold; }
 
-    /* Top 1 区域 */
-    .top1-box { position: relative; width: 100%; aspect-ratio: 16/9; border-radius: 16px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); background: #333; }
-    .cover-img { width: 100%; height: 100%; background-size: cover; background-position: center; }
-    .top1-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); display: flex; flex-direction: column; justify-content: flex-end; padding: 15px; }
-    .top1-label { position: absolute; top: 10px; left: 10px; background: #fbbf24; color: black; font-size: 10px; font-weight: bold; padding: 2px 8px; border-radius: 4px; }
-    
-    /* 列表区域 */
-    .list-box { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
-    .list-item { display: flex; align-items: center; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 8px; }
-    .rank-idx { font-size: 12px; font-weight: bold; opacity: 0.4; width: 20px; }
-    .item-name { flex: 1; font-size: 12px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
-    .item-count { font-size: 10px; opacity: 0.6; }
+    /* 底部条形码 */
+    .barcode-area { text-align: center; margin-top: 20px; opacity: 0.8; }
+    .barcode { height: 40px; background: repeating-linear-gradient(to right, #000 0px, #000 2px, #fff 2px, #fff 4px); width: 80%; margin: 0 auto; }
+    .r-footer-text { font-size: 9px; margin-top: 8px; text-transform: uppercase; letter-spacing: 2px; }
 
-    /* 底部 */
-    .footer { margin-top: auto; padding-top: 20px; display: flex; justify-content: space-between; align-items: center; opacity: 0.5; font-size: 10px; }
+    /* ================= 控制台样式 ================= */
+    .ctrl-row { display: flex; gap: 10px; margin-bottom: 10px; overflow-x: auto; }
+    .btn { 
+        padding: 10px 15px; border: 2px solid #1a1a1a; background: #fff; 
+        font-family: inherit; font-weight: bold; font-size: 12px; cursor: pointer; flex: 1; white-space: nowrap;
+    }
+    .btn.active { background: #1a1a1a; color: #fff; }
+    .btn-action { background: #16a34a; border-color: #16a34a; color: white; }
 
-    /* 空状态 */
-    .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; }
-    
-    /* ================= 4. UI组件 ================= */
-    .btn-group { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
-    .btn { background: #f3f4f6; border: none; padding: 8px; border-radius: 8px; font-size: 12px; font-weight: bold; color: #666; cursor: pointer; }
-    .btn.active { background: #111827; color: white; }
-    
-    .color-opts { display: flex; gap: 8px; margin-bottom: 16px; }
-    .c-opt { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; border: 2px solid #ddd; }
-    .c-opt.active { border-color: #16a34a; transform: scale(1.1); }
-
-    .action-btn { width: 100%; padding: 12px; background: #16a34a; color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 14px; margin-top: 10px; }
+    /* 适配 PC */
+    @media (min-width: 768px) {
+        .app-layout { flex-direction: row; }
+        .control-panel { width: 350px; height: 100%; border-top: none; border-right: 1px solid #ddd; }
+        .preview-area { align-items: center; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="app-container">
+<div class="app-layout">
     
-    <div class="preview-section">
-        <div id="scale-wrapper">
-            <div id="poster" class="poster-canvas">
-                <div id="poster-bg" style="background: linear-gradient(135deg, #1f2937, #000);"></div>
-                <div class="texture"></div>
+    <div class="preview-area">
+        <div id="capture-target" class="receipt-container">
+            <div class="receipt-content">
                 
-                <div class="poster-content content-layer">
-                    <div class="header">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <div class="avatar" id="p-avatar">U</div>
-                            <div class="user-info">
-                                <h2 id="p-user">User</h2>
-                                <p id="p-period">2026 年度报告</p>
-                            </div>
-                        </div>
-                        <div class="server-pill">
-                            <span>全服</span>
-                            <span class="server-val" id="p-server">0</span>
-                        </div>
-                    </div>
-
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-num" id="p-hours">0</div>
-                            <div class="stat-label">专注时长 (H)</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-num" id="p-plays">0</div>
-                            <div class="stat-label">播放次数</div>
-                        </div>
-                    </div>
-
-                    <div id="content-area" style="display: block;">
-                        <div class="top1-box" id="top1-box">
-                            <div class="cover-img" id="top1-img"></div>
-                            <div class="top1-overlay">
-                                <div class="top1-label">TOP 1</div>
-                                <div style="font-size: 18px; font-weight: bold; line-height: 1.2; margin-bottom: 4px;" id="top1-title">-</div>
-                                <div style="font-size: 12px; opacity: 0.8;" id="top1-sub">0 次播放</div>
-                            </div>
-                        </div>
-
-                        <div class="list-box" id="list-container">
-                            </div>
-                    </div>
-
-                    <div id="empty-area" class="empty-state" style="display: none;">
-                        <i class="fa-solid fa-mug-hot" style="font-size: 48px; margin-bottom: 10px;"></i>
-                        <p>该时段暂无摸鱼记录</p>
-                    </div>
-
-                    <div class="footer">
-                        <span id="p-msg">生活不仅有代码，还有电影。</span>
-                        <span>EMBY PULSE</span>
+                <div class="r-header">
+                    <h1 class="r-title">EMBY PULSE</h1>
+                    <div class="r-subtitle">Personal Viewing Receipt</div>
+                    <div class="r-meta">
+                        <span id="p-date">2026-02-04</span>
+                        <span id="p-time">12:00 PM</span>
+                        <span>NO.0001</span>
                     </div>
                 </div>
+
+                <div class="r-row">
+                    <span class="r-label">USER (观众)</span>
+                    <span class="r-val" id="p-user">LOADING...</span>
+                </div>
+                <div class="r-row">
+                    <span class="r-label">PERIOD (周期)</span>
+                    <span class="r-val" id="p-period">ALL TIME</span>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="r-row">
+                    <span class="r-label">TOTAL HOURS</span>
+                    <span class="r-val big" id="p-hours">0</span>
+                </div>
+                <div class="r-row">
+                    <span class="r-label">TOTAL PLAYS</span>
+                    <span class="r-val big" id="p-plays">0</span>
+                </div>
+                <div class="r-row" style="opacity: 0.5;">
+                    <span class="r-label">SERVER TOTAL</span>
+                    <span class="r-val" id="p-server">0</span>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="top-section">
+                    <div class="top-header">
+                        <span>TOP CONSUMPTION</span>
+                        <span>QTY</span>
+                    </div>
+
+                    <div id="top1-area" style="display: none;">
+                        <div class="top1-card" id="top1-bg">
+                            <div class="top1-badge">#1 FAVORITE</div>
+                            <div class="top1-info">
+                                <div style="font-weight:bold; font-size:14px;" id="top1-title">-</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="list-container">
+                        <div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">
+                            [NO DATA RECORDED]
+                        </div>
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="r-row">
+                    <span class="r-label">TOTAL AMOUNT</span>
+                    <span class="r-val">PRICELESS</span>
+                </div>
+                
+                <div class="barcode-area">
+                    <div class="barcode"></div>
+                    <div class="r-footer-text">THANK YOU FOR WATCHING</div>
+                    <div class="r-footer-text" style="margin-top: 4px; font-size: 8px; opacity: 0.5;">Generated by EmbyPulse</div>
+                </div>
+
             </div>
         </div>
     </div>
 
-    <div class="control-section">
-        <div style="margin-bottom: 15px;">
-            <label style="font-size: 12px; color: #888; font-weight: bold;">主角</label>
-            <select id="user-select" onchange="changeUser(this.value)" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 8px; margin-top: 5px;">
-                <option value="">加载中...</option>
-            </select>
+    <div class="control-panel">
+        <div style="margin-bottom: 5px; font-size: 10px; font-weight: bold; opacity: 0.5;">SELECT USER</div>
+        <div id="user-btn-group" class="ctrl-row"></div>
+
+        <div style="margin-bottom: 5px; font-size: 10px; font-weight: bold; opacity: 0.5;">SELECT PERIOD</div>
+        <div class="ctrl-row">
+            <button class="btn active" onclick="setPeriod('all', this)">ALL</button>
+            <button class="btn" onclick="setPeriod('year', this)">YEAR</button>
+            <button class="btn" onclick="setPeriod('month', this)">MONTH</button>
+            <button class="btn" onclick="setPeriod('week', this)">WEEK</button>
         </div>
 
-        <div class="btn-group">
-            <button class="btn" onclick="setPeriod('all')" data-p="all">全量</button>
-            <button class="btn" onclick="setPeriod('year')" data-p="year">年度</button>
-            <button class="btn active" onclick="setPeriod('month')" data-p="month">本月</button>
-            <button class="btn" onclick="setPeriod('week')" data-p="week">本周</button>
-        </div>
-
-        <div class="color-opts">
-            <div class="c-opt active" style="background: linear-gradient(135deg, #1f2937, #000);" onclick="setBg(this)"></div>
-            <div class="c-opt" style="background: linear-gradient(135deg, #4c1d95, #1e1b4b);" onclick="setBg(this)"></div>
-            <div class="c-opt" style="background: linear-gradient(135deg, #881337, #4a044e);" onclick="setBg(this)"></div>
-            <div class="c-opt" style="background: linear-gradient(135deg, #064e3b, #022c22);" onclick="setBg(this)"></div>
-            <div class="c-opt" style="background: linear-gradient(135deg, #c2410c, #7c2d12);" onclick="setBg(this)"></div>
-        </div>
-
-        <button class="action-btn" onclick="savePoster()" id="save-btn">
-            <i class="fa-solid fa-download"></i> 保存海报
+        <button class="btn btn-action" onclick="downloadReceipt()" style="width: 100%; margin-top: 10px;">
+            SAVE RECEIPT 📥
         </button>
     </div>
 
@@ -230,145 +226,114 @@
 {% block scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
-    let currentPeriod = 'month';
+    let currentPeriod = 'all';
     let currentUserId = '';
 
-    // 缩放逻辑：始终让海报完整显示在预览区
-    function fitPoster() {
-        const wrapper = document.querySelector('.preview-section');
-        const poster = document.getElementById('poster');
-        const scaleWrapper = document.getElementById('scale-wrapper');
-        
-        const availableW = wrapper.clientWidth - 40;
-        const availableH = wrapper.clientHeight - 40;
-        
-        const scaleW = availableW / 375;
-        const scaleH = availableH / 667;
-        const scale = Math.min(scaleW, scaleH, 1); // 最多1倍
-        
-        scaleWrapper.style.transform = `scale(${scale})`;
-        scaleWrapper.style.transformOrigin = 'top center';
-    }
-    window.addEventListener('resize', fitPoster);
-    setTimeout(fitPoster, 100);
-
+    // 初始化
     async function init() {
-        // Load Users
+        const d = new Date();
+        document.getElementById('p-date').innerText = d.toISOString().split('T')[0];
+        
+        // 加载用户
         const res = await fetch('/api/users');
         const json = await res.json();
-        const sel = document.getElementById('user-select');
-        sel.innerHTML = '';
+        const container = document.getElementById('user-btn-group');
+        
         if(json.data && json.data.length > 0) {
-            json.data.forEach(u => {
-                const opt = document.createElement('option');
-                opt.value = u.UserId;
-                opt.innerText = u.UserName;
-                sel.appendChild(opt);
+            json.data.forEach((u, index) => {
+                const btn = document.createElement('button');
+                btn.className = `btn ${index === 0 ? 'active' : ''}`;
+                btn.innerText = u.UserName;
+                btn.onclick = () => {
+                    document.querySelectorAll('#user-btn-group .btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    changeUser(u.UserId, u.UserName);
+                };
+                container.appendChild(btn);
+                if(index === 0) changeUser(u.UserId, u.UserName);
             });
-            changeUser(json.data[0].UserId);
         }
     }
 
-    function changeUser(uid) {
+    function changeUser(uid, name) {
         currentUserId = uid;
-        const sel = document.getElementById('user-select');
-        const text = sel.options[sel.selectedIndex].text;
-        document.getElementById('p-user').innerText = text;
-        document.getElementById('p-avatar').innerText = text[0].toUpperCase();
+        document.getElementById('p-user').innerText = name.toUpperCase();
         loadData();
     }
 
-    function setPeriod(p) {
+    function setPeriod(p, btn) {
         currentPeriod = p;
-        document.querySelectorAll('.btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.p === p);
+        document.querySelectorAll('.ctrl-row .btn').forEach(b => {
+            // 简单处理，只移除时间组的active
+            if(['ALL','YEAR','MONTH','WEEK'].includes(b.innerText)) b.classList.remove('active');
         });
-        const map = {'all':'全量报告', 'year':'年度报告', 'month':'本月报告', 'week':'本周报告'};
-        document.getElementById('p-period').innerText = map[p];
+        btn.classList.add('active');
+        document.getElementById('p-period').innerText = p.toUpperCase();
         loadData();
-    }
-
-    function setBg(el) {
-        document.querySelectorAll('.c-opt').forEach(c => c.classList.remove('active'));
-        el.classList.add('active');
-        document.getElementById('poster-bg').style.background = el.style.background;
     }
 
     async function loadData() {
         if(!currentUserId) return;
         
-        // 模拟 loading
-        document.getElementById('p-plays').style.opacity = 0.5;
-        
         const res = await fetch(`/api/stats/poster_data?user_id=${currentUserId}&period=${currentPeriod}`);
         const json = await res.json();
-        const data = json.data;
+        
+        if(json.status === 'success') {
+            const data = json.data;
+            document.getElementById('p-plays').innerText = data.plays;
+            document.getElementById('p-hours').innerText = data.hours;
+            document.getElementById('p-server').innerText = data.server_plays;
 
-        document.getElementById('p-plays').style.opacity = 1;
-        document.getElementById('p-plays').innerText = data.plays;
-        document.getElementById('p-hours').innerText = data.hours;
-        document.getElementById('p-server').innerText = data.server_plays;
-
-        const hasData = data.plays > 0;
-        document.getElementById('content-area').style.display = hasData ? 'block' : 'none';
-        document.getElementById('empty-area').style.display = hasData ? 'none' : 'flex';
-
-        if (hasData) {
-            const list = data.top_list;
-            // Top 1
-            if (list[0]) {
-                document.getElementById('top1-title').innerText = list[0].ItemName;
-                document.getElementById('top1-sub').innerText = `${list[0].P} 次播放`;
-                // Set BG
-                const img = new Image();
-                img.src = `/api/proxy/image/${list[0].ItemId}/backdrop`;
-                img.onload = () => { document.getElementById('top1-img').style.backgroundImage = `url('${img.src}')`; };
-                img.onerror = () => { document.getElementById('top1-img').style.backgroundImage = `url('https://via.placeholder.com/400x200/333/666')`; };
-            }
-
-            // List
+            const list = data.top_list || [];
             const listContainer = document.getElementById('list-container');
-            let html = '';
-            // 显示 Top 2 - 6 (最多5个)
-            const max = Math.min(list.length, 6);
-            for(let i=1; i<max; i++) {
-                html += `
-                <div class="list-item">
-                    <div class="rank-idx">${i+1}</div>
-                    <div class="item-name">${list[i].ItemName}</div>
-                    <div class="item-count">${list[i].P}次</div>
-                </div>`;
+            const top1Area = document.getElementById('top1-area');
+
+            // Top 1 处理
+            if(list.length > 0) {
+                top1Area.style.display = 'block';
+                document.getElementById('top1-title').innerText = list[0].ItemName;
+                // 设置封面背景
+                const imgUrl = `/api/proxy/image/${list[0].ItemId}/backdrop`;
+                document.getElementById('top1-bg').style.backgroundImage = `url('${imgUrl}')`;
+            } else {
+                top1Area.style.display = 'none';
             }
-            listContainer.innerHTML = html;
+
+            // 列表处理
+            if(list.length === 0) {
+                listContainer.innerHTML = '<div style="text-align: center; padding: 20px; color: #999; font-size: 12px;">[NO CONTENT FOUND]</div>';
+            } else {
+                let html = '';
+                // 显示 Top 2 到 Top 10
+                for(let i=1; i<list.length; i++) {
+                    html += `
+                    <div class="list-item">
+                        <span class="item-name">${i+1}. ${list[i].ItemName}</span>
+                        <span>${list[i].Count} x</span>
+                    </div>`;
+                }
+                // 如果只有一个数据，显示点别的
+                if(list.length === 1) {
+                    html = '<div style="text-align: center; padding: 10px; font-size: 10px; opacity: 0.5;">ONLY ONE FAVORITE</div>';
+                }
+                listContainer.innerHTML = html;
+            }
         }
     }
 
-    async function savePoster() {
-        const btn = document.getElementById('save-btn');
-        btn.innerHTML = '生成中...';
-        
-        const scaleWrapper = document.getElementById('scale-wrapper');
-        const oldTransform = scaleWrapper.style.transform;
-        scaleWrapper.style.transform = 'none'; // 还原缩放以高清截图
-        
-        await new Promise(r => setTimeout(r, 100)); // 等待渲染
-
+    async function downloadReceipt() {
+        const node = document.getElementById('capture-target');
         try {
-            const canvas = await html2canvas(document.getElementById('poster'), {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: '#111827'
+            const canvas = await html2canvas(node, {
+                scale: 2, 
+                backgroundColor: null 
             });
-            
             const link = document.createElement('a');
-            link.download = `EmbyReport.png`;
+            link.download = `Emby_Receipt_${currentUserId}.png`;
             link.href = canvas.toDataURL();
             link.click();
         } catch(e) {
-            alert('保存失败');
-        } finally {
-            scaleWrapper.style.transform = oldTransform;
-            btn.innerHTML = '<i class="fa-solid fa-download"></i> 保存海报';
+            alert("Error saving image");
         }
     }
 
