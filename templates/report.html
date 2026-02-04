@@ -1,507 +1,377 @@
 {% extends "layout.html" %}
 {% block title %}映迹工坊 - EmbyPulse{% endblock %}
 {% block head %}
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <style>
-    /* ================= 布局重置：手机适配核心 ================= */
-    html, body { height: 100%; overflow: hidden; }
-    
-    .layout-wrapper { 
-        display: flex; 
+    /* ================= 1. 基础布局 (手机优先) ================= */
+    html, body { 
         height: 100%; 
-        width: 100%;
+        margin: 0; 
+        overflow: hidden; 
         background-color: #f3f4f6;
     }
-
-    /* 左侧控制台 */
-    .control-panel {
-        width: 340px; 
-        background: white; 
-        border-right: 1px solid #e5e7eb;
-        display: flex; 
-        flex-direction: column; 
-        z-index: 50;
-        flex-shrink: 0;
+    
+    .app-container {
+        display: flex;
+        flex-direction: column; /* 默认手机竖屏布局 */
         height: 100%;
-        overflow-y: auto; /* 控制台内部滚动 */
+    }
+
+    /* 预览区域 (上部/右部) */
+    .preview-section {
+        flex: 1;
+        overflow-y: auto; /* 允许海报区域滚动 */
+        overflow-x: hidden;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
         padding: 20px;
+        background-color: #e5e7eb;
+        -webkit-overflow-scrolling: touch;
     }
 
-    /* 右侧预览区 */
-    #preview-wrapper {
-        flex: 1; 
-        height: 100%;
-        display: flex; 
-        justify-content: center; 
-        align-items: flex-start; /* 顶部对齐，方便滚动 */
-        padding: 40px; 
-        overflow-y: auto; /* 🔥 关键：允许预览区滚动 */
-        -webkit-overflow-scrolling: touch; /* iOS丝滑滚动 */
+    /* 控制面板 (下部/左部) */
+    .control-section {
+        background: white;
+        padding: 20px;
+        box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+        z-index: 50;
+        height: auto;
+        max-height: 40vh; /* 手机上最多占 40% 高度 */
+        overflow-y: auto;
     }
 
-    /* 手机端响应式 */
-    @media (max-width: 768px) {
-        .layout-wrapper { flex-direction: column-reverse; } /* 控制台在下 */
-        .control-panel { 
-            width: 100%; 
-            height: 40vh; /* 占据底部40% */
-            border-right: none; 
-            border-top: 1px solid #e5e7eb; 
-            box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+    /* 桌面端适配 (大屏变左右布局) */
+    @media (min-width: 768px) {
+        .app-container { flex-direction: row; } /* 左控制，右预览 */
+        .control-section { 
+            width: 360px; 
+            max-height: 100%; 
+            height: 100%; 
+            border-right: 1px solid #ddd;
+            box-shadow: none;
         }
-        #preview-wrapper { 
-            height: 60vh; /* 占据顶部60% */
-            padding: 20px; 
-            align-items: center; /* 手机上垂直居中好看点 */
-        }
+        .preview-section { align-items: center; } /* 桌面端垂直居中 */
     }
 
-    /* ================= 海报样式 ================= */
-    .poster-container { 
-        width: 420px; 
-        min-height: 800px;
-        height: auto; /* 自适应 */
-        background-color: #111827; 
+    /* ================= 2. 海报本体 (固定比例 9:16) ================= */
+    /* 这里的尺寸是固定的，截图绝对稳 */
+    .poster-canvas {
+        width: 375px;
+        height: 667px;
+        background-color: #111827;
         position: relative;
-        overflow: visible; /* 允许内容撑开 */
-        box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.6); 
+        overflow: hidden;
+        flex-shrink: 0; /* 禁止被挤压 */
+        box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        color: white;
+    }
+
+    /* 动态背景 */
+    #poster-bg { position: absolute; inset: 0; z-index: 0; transition: background 0.3s; }
+    .texture { position: absolute; inset: 0; z-index: 1; opacity: 0.05; background-image: url('https://www.transparenttextures.com/patterns/stardust.png'); }
+
+    /* 内容层 */
+    .content-layer {
+        position: relative; z-index: 10;
+        height: 100%;
+        padding: 30px 24px;
         display: flex;
         flex-direction: column;
-        flex-shrink: 0; /* 防止被挤压 */
-        font-family: -apple-system, "Microsoft YaHei", sans-serif; /* 强制字体 */
     }
+
+    /* ================= 3. 海报组件 ================= */
+    /* 头部 */
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .avatar { width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; border: 2px solid rgba(255,255,255,0.2); }
+    .user-info h2 { font-size: 24px; font-weight: 900; margin: 0; line-height: 1.2; padding-top: 4px; }
+    .user-info p { font-size: 10px; opacity: 0.6; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
     
-    #poster-bg-gradient {
-        position: absolute; inset: 0; z-index: 0;
-        transition: background 0.3s ease;
+    /* 顶部胶囊 (全服数据) */
+    .server-pill { 
+        background: rgba(0,0,0,0.3); padding: 4px 10px; border-radius: 20px; 
+        font-size: 10px; display: flex; align-items: center; border: 1px solid rgba(255,255,255,0.1); 
     }
+    .server-val { color: #4ade80; font-weight: bold; margin-left: 4px; font-size: 12px; }
+
+    /* 数据卡片 */
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; }
+    .stat-card { background: rgba(255,255,255,0.08); border-radius: 16px; padding: 15px; text-align: center; border: 1px solid rgba(255,255,255,0.1); }
+    .stat-num { font-size: 32px; font-weight: 900; line-height: 1.1; }
+    .stat-label { font-size: 10px; opacity: 0.5; font-weight: bold; margin-top: 4px; }
+
+    /* Top 1 区域 */
+    .top1-box { position: relative; width: 100%; aspect-ratio: 16/9; border-radius: 16px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); background: #333; }
+    .cover-img { width: 100%; height: 100%; background-size: cover; background-position: center; }
+    .top1-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.9), transparent); display: flex; flex-direction: column; justify-content: flex-end; padding: 15px; }
+    .top1-label { position: absolute; top: 10px; left: 10px; background: #fbbf24; color: black; font-size: 10px; font-weight: bold; padding: 2px 8px; border-radius: 4px; }
     
-    .noise-layer {
-        position: absolute; inset: 0; z-index: 1; opacity: 0.08;
-        background-image: url('https://www.transparenttextures.com/patterns/stardust.png');
-        pointer-events: none;
-    }
+    /* 列表区域 */
+    .list-box { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
+    .list-item { display: flex; align-items: center; padding: 8px 12px; background: rgba(255,255,255,0.05); border-radius: 8px; }
+    .rank-idx { font-size: 12px; font-weight: bold; opacity: 0.4; width: 20px; }
+    .item-name { flex: 1; font-size: 12px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
+    .item-count { font-size: 10px; opacity: 0.6; }
 
-    .poster-content { 
-        position: relative; z-index: 10;
-        padding: 40px 32px 30px 32px; 
-        color: white; 
-        display: flex; flex-direction: column;
-        flex: 1;
-    }
+    /* 底部 */
+    .footer { margin-top: auto; padding-top: 20px; display: flex; justify-content: space-between; align-items: center; opacity: 0.5; font-size: 10px; }
 
-    /* 🔥 修复：文字安全区域 */
-    .safe-text-header {
-        display: block;
-        line-height: 1.4;
-        padding-bottom: 6px; /* 防止切到底部 */
-        padding-top: 4px;    /* 防止切到顶部 */
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .glass-card {
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 16px;
-        padding: 16px;
-        margin-bottom: 24px;
-    }
-
-    .img-cover {
-        background-size: cover; background-position: center; background-repeat: no-repeat;
-        background-color: #374151;
-    }
-
-    /* 列表项 */
-    .rank-item {
-        display: flex; align-items: center; 
-        padding: 12px 0;
-        border-bottom: 1px solid rgba(255,255,255,0.08);
-    }
-    .rank-item:last-child { border-bottom: none; }
-
-    /* 交互组件 */
-    .user-option.selected { border-color: #16a34a; background-color: #f0fdf4; }
-    .bg-option { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid white; transition: transform 0.2s; }
-    .bg-option.active { border-color: #16a34a; transform: scale(1.1); box-shadow: 0 0 0 2px #16a34a; }
+    /* 空状态 */
+    .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; }
     
-    #scale-wrapper { transform-origin: top center; transition: transform 0.2s; padding-bottom: 50px; }
+    /* ================= 4. UI组件 ================= */
+    .btn-group { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+    .btn { background: #f3f4f6; border: none; padding: 8px; border-radius: 8px; font-size: 12px; font-weight: bold; color: #666; cursor: pointer; }
+    .btn.active { background: #111827; color: white; }
     
-    /* 空状态样式 */
-    #empty-state-visual {
-        flex: 1; display: flex; flex-direction: column; 
-        align-items: center; justify-content: center;
-        opacity: 0.3; text-align: center;
-        min-height: 300px;
-    }
+    .color-opts { display: flex; gap: 8px; margin-bottom: 16px; }
+    .c-opt { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; border: 2px solid #ddd; }
+    .c-opt.active { border-color: #16a34a; transform: scale(1.1); }
+
+    .action-btn { width: 100%; padding: 12px; background: #16a34a; color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 14px; margin-top: 10px; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="layout-wrapper">
+<div class="app-container">
     
-    <div class="control-panel">
-        <div class="flex items-center mb-6 shrink-0">
-            <i class="fa-solid fa-paintbrush text-green-600 mr-2 text-xl"></i>
-            <h2 class="text-lg font-black text-gray-800">映迹工坊</h2>
-        </div>
-        
-        <div class="space-y-6 flex-1 overflow-y-auto pr-1">
-            <div>
-                <label class="block text-xs font-bold text-gray-400 uppercase mb-2">主角</label>
-                <div id="user-list-container" class="space-y-2 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
-                    <p class="text-xs text-gray-400">加载中...</p>
-                </div>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-gray-400 uppercase mb-2">时间范围</label>
-                <div class="grid grid-cols-4 gap-2">
-                    <button onclick="setPeriod('all')" class="period-btn bg-gray-900 text-white text-xs py-2 rounded-lg font-bold" data-p="all">全量</button>
-                    <button onclick="setPeriod('year')" class="period-btn bg-gray-100 text-gray-500 text-xs py-2 rounded-lg font-bold hover:bg-gray-200" data-p="year">年度</button>
-                    <button onclick="setPeriod('month')" class="period-btn bg-gray-100 text-gray-500 text-xs py-2 rounded-lg font-bold hover:bg-gray-200" data-p="month">本月</button>
-                    <button onclick="setPeriod('week')" class="period-btn bg-gray-100 text-gray-500 text-xs py-2 rounded-lg font-bold hover:bg-gray-200" data-p="week">本周</button>
-                </div>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-gray-400 uppercase mb-2">色调</label>
-                <div class="grid grid-cols-6 gap-2">
-                    <div class="bg-option active" style="background: linear-gradient(135deg, #111827 0%, #000000 100%)" onclick="setBg(this, 'linear-gradient(135deg, #111827 0%, #000000 100%)')"></div>
-                    <div class="bg-option" style="background: linear-gradient(135deg, #4c1d95 0%, #1e1b4b 100%)" onclick="setBg(this, 'linear-gradient(135deg, #4c1d95 0%, #1e1b4b 100%)')"></div>
-                    <div class="bg-option" style="background: linear-gradient(135deg, #be123c 0%, #881337 100%)" onclick="setBg(this, 'linear-gradient(135deg, #be123c 0%, #881337 100%)')"></div>
-                    <div class="bg-option" style="background: linear-gradient(135deg, #047857 0%, #064e3b 100%)" onclick="setBg(this, 'linear-gradient(135deg, #047857 0%, #064e3b 100%)')"></div>
-                    <div class="bg-option" style="background: linear-gradient(135deg, #b45309 0%, #78350f 100%)" onclick="setBg(this, 'linear-gradient(135deg, #b45309 0%, #78350f 100%)')"></div>
-                    <div class="bg-option" style="background: linear-gradient(135deg, #155e75 0%, #0e7490 100%)" onclick="setBg(this, 'linear-gradient(135deg, #155e75 0%, #0e7490 100%)')"></div>
-                </div>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-gray-400 uppercase mb-2">寄语</label>
-                <textarea id="custom-msg" rows="2" class="w-full border-gray-300 rounded-lg text-sm p-2 resize-none" oninput="document.getElementById('poster-msg').innerText = this.value">生活不仅有代码，还有电影。</textarea>
-            </div>
-        </div>
-
-        <div class="mt-4 flex gap-2 shrink-0">
-            <button onclick="processCapture('download')" id="dl-btn" class="flex-1 py-3 bg-gray-900 hover:bg-black text-white font-bold rounded-xl shadow-lg text-sm flex justify-center items-center">
-                <i class="fa-solid fa-download mr-2"></i> 保存
-            </button>
-            <button onclick="processCapture('copy')" id="cp-btn" class="flex-1 py-3 bg-white border border-gray-300 text-gray-700 font-bold rounded-xl shadow-sm hover:bg-gray-50 text-sm flex justify-center items-center">
-                <i class="fa-regular fa-copy mr-2"></i> 复制
-            </button>
-        </div>
-    </div>
-
-    <div id="preview-wrapper">
+    <div class="preview-section">
         <div id="scale-wrapper">
-            
-            <div id="capture-target" class="poster-container">
-                <div id="poster-bg-gradient" style="background: linear-gradient(135deg, #111827 0%, #000000 100%);"></div>
-                <div class="noise-layer"></div>
-
-                <div class="poster-content">
-                    
-                    <div class="flex justify-between items-start mb-8">
-                        <div class="flex items-center gap-4 min-w-0">
-                            <div class="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center text-3xl font-black shrink-0 border border-white/20 shadow-lg" id="poster-avatar">U</div>
-                            <div class="min-w-0">
-                                <h2 class="text-3xl font-black safe-text-header" id="poster-user">Username</h2>
-                                <p class="text-xs text-white/50 uppercase tracking-widest" id="poster-period-text">全量报告</p>
+            <div id="poster" class="poster-canvas">
+                <div id="poster-bg" style="background: linear-gradient(135deg, #1f2937, #000);"></div>
+                <div class="texture"></div>
+                
+                <div class="poster-content content-layer">
+                    <div class="header">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div class="avatar" id="p-avatar">U</div>
+                            <div class="user-info">
+                                <h2 id="p-user">User</h2>
+                                <p id="p-period">2026 年度报告</p>
                             </div>
                         </div>
-                        <div class="px-4 py-1.5 rounded-full text-xs font-bold bg-white/10 text-white shrink-0 border border-white/10" id="poster-tag">观影达人</div>
-                    </div>
-
-                    <div class="glass-card mb-8">
-                        <div class="grid grid-cols-3 divide-x divide-white/10">
-                            <div class="flex flex-col items-center justify-center px-2">
-                                <span class="text-2xl font-black safe-text-header" id="poster-hours">0</span>
-                                <span class="text-[9px] text-white/40 uppercase font-bold">专注时长(h)</span>
-                            </div>
-                            <div class="flex flex-col items-center justify-center px-2">
-                                <span class="text-2xl font-black safe-text-header" id="poster-plays">0</span>
-                                <span class="text-[9px] text-white/40 uppercase font-bold">播放次数</span>
-                            </div>
-                            <div class="flex flex-col items-center justify-center px-2">
-                                <span class="text-2xl font-black text-green-400 safe-text-header" id="poster-server-plays">0</span>
-                                <span class="text-[9px] text-white/40 uppercase font-bold">全服总播放</span>
-                            </div>
+                        <div class="server-pill">
+                            <span>全服</span>
+                            <span class="server-val" id="p-server">0</span>
                         </div>
                     </div>
 
-                    <div id="empty-state-visual" style="display: none;">
-                        <i class="fa-solid fa-wind text-6xl mb-4"></i>
-                        <p class="text-lg font-bold">暂无足迹</p>
-                        <p class="text-xs mt-2">该时间段内没有发现观影记录</p>
-                    </div>
-
-                    <div id="data-content-area">
-                        <div class="mb-6 shrink-0" id="top1-section">
-                            <div class="text-xs font-bold text-yellow-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                                <i class="fa-solid fa-crown"></i> 年度最爱 Top 1
-                            </div>
-                            <div class="relative w-full aspect-[2/1] rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-gray-800">
-                                <div id="top1-bg" class="img-cover w-full h-full"></div>
-                                <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
-                                <div class="absolute bottom-4 left-5 right-5">
-                                    <h3 class="text-2xl font-bold safe-text-header" id="poster-top1-title">-</h3>
-                                    <p class="text-sm text-white/60"><span id="poster-top1-plays" class="text-white font-bold">0</span> 次播放</p>
-                                </div>
-                            </div>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-num" id="p-hours">0</div>
+                            <div class="stat-label">专注时长 (H)</div>
                         </div>
-
-                        <div class="grid grid-cols-2 gap-4 mb-6 shrink-0" id="top23-section">
-                            <div class="glass-card flex items-center gap-3 p-3 overflow-hidden !margin-0">
-                                <div id="top2-bg" class="w-10 h-14 bg-gray-700 rounded shrink-0 img-cover shadow-sm"></div>
-                                <div class="min-w-0">
-                                    <div class="text-[9px] text-white/40 font-bold mb-0.5 uppercase">TOP 2</div>
-                                    <div class="text-sm font-bold safe-text-header" id="poster-top2-title">-</div>
-                                </div>
-                            </div>
-                            <div class="glass-card flex items-center gap-3 p-3 overflow-hidden !margin-0">
-                                <div id="top3-bg" class="w-10 h-14 bg-gray-700 rounded shrink-0 img-cover shadow-sm"></div>
-                                <div class="min-w-0">
-                                    <div class="text-[9px] text-white/40 font-bold mb-0.5 uppercase">TOP 3</div>
-                                    <div class="text-sm font-bold safe-text-header" id="poster-top3-title">-</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="glass-card flex-1 mb-6 px-5 py-4 min-h-0" id="top-rest-section">
-                            <div class="text-[10px] text-white/30 uppercase font-bold mb-2 tracking-wider">其余上榜</div>
-                            <div id="top-rest-list" class="space-y-1"></div>
+                        <div class="stat-card">
+                            <div class="stat-num" id="p-plays">0</div>
+                            <div class="stat-label">播放次数</div>
                         </div>
                     </div>
 
-                    <div class="mt-auto pt-6 border-t border-white/10 shrink-0">
-                        <p id="poster-msg" class="text-sm text-white/70 italic font-light line-clamp-2 leading-relaxed">生活不仅有代码，还有电影。</p>
-                        <div class="mt-4 flex justify-between items-center opacity-40">
-                            <span class="text-[10px] font-mono tracking-[0.2em]">EMBY PULSE</span>
-                            <i class="fa-solid fa-heart-pulse text-green-500"></i>
+                    <div id="content-area" style="display: block;">
+                        <div class="top1-box" id="top1-box">
+                            <div class="cover-img" id="top1-img"></div>
+                            <div class="top1-overlay">
+                                <div class="top1-label">TOP 1</div>
+                                <div style="font-size: 18px; font-weight: bold; line-height: 1.2; margin-bottom: 4px;" id="top1-title">-</div>
+                                <div style="font-size: 12px; opacity: 0.8;" id="top1-sub">0 次播放</div>
+                            </div>
                         </div>
+
+                        <div class="list-box" id="list-container">
+                            </div>
                     </div>
 
+                    <div id="empty-area" class="empty-state" style="display: none;">
+                        <i class="fa-solid fa-mug-hot" style="font-size: 48px; margin-bottom: 10px;"></i>
+                        <p>该时段暂无摸鱼记录</p>
+                    </div>
+
+                    <div class="footer">
+                        <span id="p-msg">生活不仅有代码，还有电影。</span>
+                        <span>EMBY PULSE</span>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <div class="control-section">
+        <div style="margin-bottom: 15px;">
+            <label style="font-size: 12px; color: #888; font-weight: bold;">主角</label>
+            <select id="user-select" onchange="changeUser(this.value)" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 8px; margin-top: 5px;">
+                <option value="">加载中...</option>
+            </select>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn" onclick="setPeriod('all')" data-p="all">全量</button>
+            <button class="btn" onclick="setPeriod('year')" data-p="year">年度</button>
+            <button class="btn active" onclick="setPeriod('month')" data-p="month">本月</button>
+            <button class="btn" onclick="setPeriod('week')" data-p="week">本周</button>
+        </div>
+
+        <div class="color-opts">
+            <div class="c-opt active" style="background: linear-gradient(135deg, #1f2937, #000);" onclick="setBg(this)"></div>
+            <div class="c-opt" style="background: linear-gradient(135deg, #4c1d95, #1e1b4b);" onclick="setBg(this)"></div>
+            <div class="c-opt" style="background: linear-gradient(135deg, #881337, #4a044e);" onclick="setBg(this)"></div>
+            <div class="c-opt" style="background: linear-gradient(135deg, #064e3b, #022c22);" onclick="setBg(this)"></div>
+            <div class="c-opt" style="background: linear-gradient(135deg, #c2410c, #7c2d12);" onclick="setBg(this)"></div>
+        </div>
+
+        <button class="action-btn" onclick="savePoster()" id="save-btn">
+            <i class="fa-solid fa-download"></i> 保存海报
+        </button>
+    </div>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
-    let currentPeriod = 'all';
+    let currentPeriod = 'month';
     let currentUserId = '';
 
-    function resizePreview() {
-        if (window.innerWidth < 1200) {
-            const wrapper = document.getElementById('preview-wrapper');
-            // 计算缩放比例 (宽度适配，高度自适应)
-            const scale = (wrapper.clientWidth - 40) / 440;
-            const finalScale = Math.min(scale, 1);
-            document.getElementById('scale-wrapper').style.transform = `scale(${finalScale})`;
-        }
-    }
-    window.addEventListener('resize', resizePreview);
-    setTimeout(resizePreview, 100);
-
-    function setDivBg(elementId, url) {
-        const el = document.getElementById(elementId);
-        if(!el) return;
-        const img = new Image();
-        img.onload = () => { el.style.backgroundImage = `url('${url}')`; };
-        img.onerror = () => {
-            if (url.includes('backdrop')) {
-                setDivBg(elementId, url.replace('backdrop', 'primary'));
-            } else {
-                el.style.backgroundImage = `url('https://via.placeholder.com/100x150/374151/9ca3af?text=No')`;
-            }
-        };
-        img.src = url;
-    }
-
-    async function init() { await loadUsers(); }
-
-    async function loadUsers() {
-        const container = document.getElementById('user-list-container');
-        try {
-            const res = await fetch('/api/users');
-            const json = await res.json();
-            container.innerHTML = '';
-            if(json.status === 'success') {
-                json.data.forEach((user, index) => {
-                    const div = document.createElement('div');
-                    div.className = `user-option p-2 border border-gray-200 rounded cursor-pointer hover:bg-gray-50 flex items-center mb-1 transition ${index===0?'selected bg-green-50 border-green-500':''}`;
-                    div.innerHTML = `<span class="text-xs font-bold mr-3 text-green-600 w-5">${user.UserName[0].toUpperCase()}</span><span class="text-sm safe-text-header flex-1">${user.UserName}</span>`;
-                    div.onclick = () => {
-                        document.querySelectorAll('.user-option').forEach(el => el.className = el.className.replace('selected bg-green-50 border-green-500', ''));
-                        div.className += ' selected bg-green-50 border-green-500';
-                        selectUser(user);
-                    };
-                    container.appendChild(div);
-                    if (index === 0) selectUser(user);
-                });
-            }
-        } catch (e) { container.innerHTML = 'Error'; }
-    }
-
-    function selectUser(user) {
-        document.getElementById('poster-user').innerText = user.UserName;
-        document.getElementById('poster-avatar').innerText = user.UserName[0].toUpperCase();
-        currentUserId = user.UserId;
-        loadPosterData();
-    }
-
-    function setPeriod(period) {
-        currentPeriod = period;
-        document.querySelectorAll('.period-btn').forEach(btn => {
-            btn.className = btn.dataset.p === period 
-                ? "period-btn bg-gray-900 text-white text-xs py-2.5 rounded-lg font-bold transition shadow-md"
-                : "period-btn bg-gray-100 text-gray-500 text-xs py-2.5 rounded-lg font-bold hover:bg-gray-200 transition";
-        });
-        const map = {'all': '全量观影报告', 'year': '年度观影报告', 'month': '本月观影报告', 'week': '本周观影报告'};
-        document.getElementById('poster-period-text').innerText = map[period];
-        loadPosterData();
-    }
-
-    function setBg(el, gradient) {
-        document.querySelectorAll('.bg-option').forEach(opt => opt.classList.remove('active'));
-        el.classList.add('active');
-        document.getElementById('poster-bg-gradient').style.background = gradient;
-    }
-
-    async function loadPosterData() {
-        if(!currentUserId) return;
-        try {
-            const res = await fetch(`/api/stats/poster_data?user_id=${currentUserId}&period=${currentPeriod}`);
-            const json = await res.json();
-            if(json.status === 'success') {
-                const data = json.data;
-                document.getElementById('poster-plays').innerText = data.plays;
-                document.getElementById('poster-hours').innerText = data.hours;
-                document.getElementById('poster-server-plays').innerText = data.server_plays || 0;
-                document.getElementById('poster-tag').innerText = data.tags[0] || "观影达人";
-
-                const hasData = data.plays > 0;
-                // 空状态处理
-                document.getElementById('data-content-area').style.display = hasData ? 'block' : 'none';
-                document.getElementById('empty-state-visual').style.display = hasData ? 'none' : 'flex';
-
-                if (hasData) {
-                    const list = data.top_list || [];
-                    
-                    // Top 1
-                    const s1 = document.getElementById('top1-section');
-                    if(list[0]) {
-                        s1.style.display = 'block';
-                        document.getElementById('poster-top1-title').innerText = list[0].ItemName;
-                        document.getElementById('poster-top1-plays').innerText = list[0].P;
-                        setDivBg('top1-bg', `/api/proxy/image/${list[0].ItemId}/backdrop`);
-                    } else {
-                        s1.style.display = 'none';
-                    }
-
-                    // Top 2-3
-                    const s23 = document.getElementById('top23-section');
-                    if(list[1]) {
-                        s23.style.display = 'grid';
-                        updateCard(2, list[1]);
-                        updateCard(3, list[2]);
-                    } else {
-                        s23.style.display = 'none';
-                    }
-
-                    // Top 4-10
-                    const sRest = document.getElementById('top-rest-section');
-                    const listContainer = document.getElementById('top-rest-list');
-                    let listHtml = '';
-                    let hasRest = false;
-                    const maxCount = Math.min(list.length, 10);
-                    
-                    for(let i=3; i<maxCount; i++) {
-                        hasRest = true;
-                        listHtml += `
-                        <div class="rank-item">
-                            <span class="text-[10px] text-white/40 w-6 font-bold font-mono">0${i+1}</span>
-                            <span class="text-xs font-bold flex-1 text-truncate mr-2 safe-text-header">${list[i].ItemName}</span>
-                            <span class="text-[9px] text-white/60 font-mono">${list[i].P}次</span>
-                        </div>`;
-                    }
-                    
-                    if(hasRest) {
-                        sRest.style.display = 'flex';
-                        listContainer.innerHTML = listHtml;
-                    } else {
-                        sRest.style.display = 'none';
-                    }
-                }
-                
-                setTimeout(resizePreview, 100);
-            }
-        } catch(e) { console.error(e); }
-    }
-
-    function updateCard(rank, item) {
-        const titleEl = document.getElementById(`poster-top${rank}-title`);
-        const bgId = `top${rank}-bg`;
-        const card = document.getElementById(bgId).parentElement;
-        if(item) {
-            card.style.visibility = 'visible';
-            titleEl.innerText = item.ItemName;
-            setDivBg(bgId, `/api/proxy/image/${item.ItemId}/primary`);
-        } else {
-            card.style.visibility = 'hidden';
-        }
-    }
-
-    function randomQuote() {
-        const quotes = ["生活不仅有代码，还有电影。", "有些鸟儿是关不住的。", "能力越大，责任越大。", "念念不忘，必有回响。", "风起，唯有努力生存。", "好的电影，是一次灵魂的洗礼。"];
-        const q = quotes[Math.floor(Math.random() * quotes.length)];
-        document.getElementById('custom-msg').value = q;
-        document.getElementById('poster-msg').innerText = q;
-    }
-
-    async function processCapture(action) {
-        const node = document.getElementById('capture-target');
-        const scaler = document.getElementById('scale-wrapper');
-        const btn = document.getElementById(action === 'download' ? 'dl-btn' : 'cp-btn');
-        const originalText = btn.innerHTML;
+    // 缩放逻辑：始终让海报完整显示在预览区
+    function fitPoster() {
+        const wrapper = document.querySelector('.preview-section');
+        const poster = document.getElementById('poster');
+        const scaleWrapper = document.getElementById('scale-wrapper');
         
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        const availableW = wrapper.clientWidth - 40;
+        const availableH = wrapper.clientHeight - 40;
         
-        const originalTransform = scaler.style.transform;
-        scaler.style.transform = 'none';
-        await new Promise(r => setTimeout(r, 50)); 
+        const scaleW = availableW / 375;
+        const scaleH = availableH / 667;
+        const scale = Math.min(scaleW, scaleH, 1); // 最多1倍
+        
+        scaleWrapper.style.transform = `scale(${scale})`;
+        scaleWrapper.style.transformOrigin = 'top center';
+    }
+    window.addEventListener('resize', fitPoster);
+    setTimeout(fitPoster, 100);
 
-        try {
-            const canvas = await html2canvas(node, {
-                scale: 2, 
-                useCORS: true, 
-                backgroundColor: '#111827',
-                width: 440,
-                windowWidth: 440,
-                x: 0, y: 0
+    async function init() {
+        // Load Users
+        const res = await fetch('/api/users');
+        const json = await res.json();
+        const sel = document.getElementById('user-select');
+        sel.innerHTML = '';
+        if(json.data && json.data.length > 0) {
+            json.data.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.UserId;
+                opt.innerText = u.UserName;
+                sel.appendChild(opt);
             });
-
-            if (action === 'download') {
-                const link = document.createElement('a');
-                link.download = `EmbyReport_${document.getElementById('poster-user').innerText}.png`;
-                link.href = canvas.toDataURL('image/png');
-                link.click();
-            } else {
-                canvas.toBlob(blob => {
-                    navigator.clipboard.write([new ClipboardItem({'image/png': blob})])
-                        .then(() => alert("已复制!"))
-                        .catch(() => alert("复制失败，请下载"));
-                });
-            }
-        } catch(e) { 
-            alert("生成失败，请刷新重试"); 
-        } finally {
-            scaler.style.transform = originalTransform;
-            btn.innerHTML = originalText;
+            changeUser(json.data[0].UserId);
         }
     }
-    
+
+    function changeUser(uid) {
+        currentUserId = uid;
+        const sel = document.getElementById('user-select');
+        const text = sel.options[sel.selectedIndex].text;
+        document.getElementById('p-user').innerText = text;
+        document.getElementById('p-avatar').innerText = text[0].toUpperCase();
+        loadData();
+    }
+
+    function setPeriod(p) {
+        currentPeriod = p;
+        document.querySelectorAll('.btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.p === p);
+        });
+        const map = {'all':'全量报告', 'year':'年度报告', 'month':'本月报告', 'week':'本周报告'};
+        document.getElementById('p-period').innerText = map[p];
+        loadData();
+    }
+
+    function setBg(el) {
+        document.querySelectorAll('.c-opt').forEach(c => c.classList.remove('active'));
+        el.classList.add('active');
+        document.getElementById('poster-bg').style.background = el.style.background;
+    }
+
+    async function loadData() {
+        if(!currentUserId) return;
+        
+        // 模拟 loading
+        document.getElementById('p-plays').style.opacity = 0.5;
+        
+        const res = await fetch(`/api/stats/poster_data?user_id=${currentUserId}&period=${currentPeriod}`);
+        const json = await res.json();
+        const data = json.data;
+
+        document.getElementById('p-plays').style.opacity = 1;
+        document.getElementById('p-plays').innerText = data.plays;
+        document.getElementById('p-hours').innerText = data.hours;
+        document.getElementById('p-server').innerText = data.server_plays;
+
+        const hasData = data.plays > 0;
+        document.getElementById('content-area').style.display = hasData ? 'block' : 'none';
+        document.getElementById('empty-area').style.display = hasData ? 'none' : 'flex';
+
+        if (hasData) {
+            const list = data.top_list;
+            // Top 1
+            if (list[0]) {
+                document.getElementById('top1-title').innerText = list[0].ItemName;
+                document.getElementById('top1-sub').innerText = `${list[0].P} 次播放`;
+                // Set BG
+                const img = new Image();
+                img.src = `/api/proxy/image/${list[0].ItemId}/backdrop`;
+                img.onload = () => { document.getElementById('top1-img').style.backgroundImage = `url('${img.src}')`; };
+                img.onerror = () => { document.getElementById('top1-img').style.backgroundImage = `url('https://via.placeholder.com/400x200/333/666')`; };
+            }
+
+            // List
+            const listContainer = document.getElementById('list-container');
+            let html = '';
+            // 显示 Top 2 - 6 (最多5个)
+            const max = Math.min(list.length, 6);
+            for(let i=1; i<max; i++) {
+                html += `
+                <div class="list-item">
+                    <div class="rank-idx">${i+1}</div>
+                    <div class="item-name">${list[i].ItemName}</div>
+                    <div class="item-count">${list[i].P}次</div>
+                </div>`;
+            }
+            listContainer.innerHTML = html;
+        }
+    }
+
+    async function savePoster() {
+        const btn = document.getElementById('save-btn');
+        btn.innerHTML = '生成中...';
+        
+        const scaleWrapper = document.getElementById('scale-wrapper');
+        const oldTransform = scaleWrapper.style.transform;
+        scaleWrapper.style.transform = 'none'; // 还原缩放以高清截图
+        
+        await new Promise(r => setTimeout(r, 100)); // 等待渲染
+
+        try {
+            const canvas = await html2canvas(document.getElementById('poster'), {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: '#111827'
+            });
+            
+            const link = document.createElement('a');
+            link.download = `EmbyReport.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+        } catch(e) {
+            alert('保存失败');
+        } finally {
+            scaleWrapper.style.transform = oldTransform;
+            btn.innerHTML = '<i class="fa-solid fa-download"></i> 保存海报';
+        }
+    }
+
     init();
 </script>
 {% endblock %}
