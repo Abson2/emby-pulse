@@ -63,9 +63,9 @@
     
     .poster-canvas {
         width: 400px; 
-        height: fit-content; /* 紧贴内容 */
+        height: fit-content; 
         min-height: auto;
-        /* 🔥 V31: 减少底部留白，更紧凑 */
+        /* 🔥 V32: 极简底部，只留30px */
         padding-bottom: 30px; 
         
         background: var(--theme-bg); color: var(--theme-text);
@@ -76,20 +76,18 @@
     }
     #poster-bg-img { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; filter: blur(50px) brightness(0.4); transform: scale(1.2); opacity: 0; transition: opacity 0.5s; height: 100%; }
     #poster-bg-gradient { position: absolute; inset: 0; z-index: 1; background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.5) 100%); height: 100%; }
-    
-    /* 🔥 V31: 移除 flex: 1，防止内容少时强行撑开高度 */
     .p-content { position: relative; z-index: 10; padding: 40px 30px; display: block; }
     
     .p-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
     .user-box { display: flex; align-items: center; gap: 12px; }
     
-    /* 🔥 V31: FontAwesome 图标头像适配 */
+    /* 🔥 V32: 头像样式 - 确保默认状态也好看 */
     .avatar { 
         width: 54px; height: 54px; border-radius: 50%; 
-        background-color: #f3f4f6; 
+        background-color: #e5e7eb; /* 初始灰，防止闪烁 */
         display: flex; align-items: center; justify-content: center; 
-        font-size: 26px; /* 图标大小 */
-        color: white; /* 图标颜色 */
+        font-size: 26px; 
+        color: white; 
         border: 2px solid rgba(255,255,255,0.8); 
         box-shadow: 0 4px 10px rgba(0,0,0,0.2);
         background-size: cover; background-position: center; 
@@ -128,7 +126,6 @@
     .rank-name { font-size: 12px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 4px; margin-bottom: -2px; }
     .rank-meta-row { font-size: 9px; opacity: 0.7; display: flex; gap: 8px; }
     
-    /* 🔥 V31: Footer 紧贴内容，不再自动推底 */
     .p-footer { 
         margin-top: 30px; 
         text-align: center; opacity: 0.4; font-size: 10px; letter-spacing: 2px; 
@@ -290,16 +287,20 @@
         document.getElementById('scale-wrapper').style.transformOrigin = 'top center';
     }
 
+    // 🔥 V32 关键修复：增加 404 检测
     async function toBase64(url) {
         try {
             const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`); // 遇到404直接抛出异常
             const blob = await res.blob();
             return new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.onloadend = () => resolve(reader.result);
                 reader.readAsDataURL(blob);
             });
-        } catch(e) { return null; }
+        } catch(e) { 
+            return null; // 返回 null，触发备用头像逻辑
+        }
     }
 
     function getDateLabel(period) {
@@ -344,20 +345,9 @@
         }
     }
 
-    // 🔥 V31 核心：随机图标 + 马卡龙色背景 (稳如老狗版)
     function getIconAvatar(name) {
-        // 使用 FontAwesome 矢量图标，绝对能显示
-        const icons = [
-            'fa-robot', 'fa-cat', 'fa-ghost', 'fa-dragon', 'fa-user-astronaut', 
-            'fa-snowman', 'fa-frog', 'fa-hippo', 'fa-dog', 'fa-otter', 'fa-kiwi-bird', 
-            'fa-crow', 'fa-fish', 'fa-spider', 'fa-dove', 'fa-paw'
-        ];
-        // 马卡龙色系
-        const colors = [
-            '#FFC0CB', '#FFB6C1', '#FF69B4', '#E6E6FA', '#D8BFD8', '#B0C4DE', 
-            '#ADD8E6', '#87CEFA', '#98FB98', '#90EE90', '#F0E68C', '#FFD700', 
-            '#FFA07a', '#FF7F50', '#00CED1', '#20B2AA'
-        ];
+        const icons = ['fa-robot', 'fa-cat', 'fa-ghost', 'fa-dragon', 'fa-user-astronaut', 'fa-snowman', 'fa-frog', 'fa-hippo', 'fa-dog', 'fa-otter', 'fa-kiwi-bird', 'fa-crow', 'fa-fish', 'fa-spider', 'fa-dove', 'fa-paw'];
+        const colors = ['#FFC0CB', '#FFB6C1', '#FF69B4', '#E6E6FA', '#D8BFD8', '#B0C4DE', '#ADD8E6', '#87CEFA', '#98FB98', '#90EE90', '#F0E68C', '#FFD700', '#FFA07a', '#FF7F50', '#00CED1', '#20B2AA'];
         
         let hash = 0;
         for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -369,25 +359,23 @@
 
     async function loadAvatar() {
         const avatarEl = document.getElementById('p-avatar');
-        avatarEl.style.backgroundImage = 'none';
-        avatarEl.innerText = '';
         
+        // 1. 先生成备用头像（立刻显示，确保无缝）
+        const style = getIconAvatar(currentUserName);
+        avatarEl.style.backgroundColor = style.color;
+        avatarEl.style.backgroundImage = 'none';
+        avatarEl.innerHTML = `<i class="fa-solid ${style.icon}"></i>`;
+        avatarEl.style.color = 'white';
+        avatarEl.style.textShadow = '0 1px 3px rgba(0,0,0,0.2)';
+        
+        // 2. 尝试加载真实图片
         const realUrl = `/api/proxy/user_image/${currentUserId}`;
-        const b64 = await toBase64(realUrl);
+        const b64 = await toBase64(realUrl); // 这里现在会正确拦截404
 
+        // 3. 只有成功才替换
         if (b64) {
+            avatarEl.innerHTML = '';
             avatarEl.style.backgroundImage = `url('${b64}')`;
-            avatarEl.innerHTML = ''; 
-            avatarEl.dataset.src = realUrl;
-        } else {
-            // 🔥 V31 渲染：FontAwesome 图标
-            const style = getIconAvatar(currentUserName);
-            avatarEl.style.backgroundColor = style.color;
-            avatarEl.style.backgroundImage = 'none';
-            // 插入矢量图标
-            avatarEl.innerHTML = `<i class="fa-solid ${style.icon}"></i>`;
-            avatarEl.style.color = 'white'; 
-            avatarEl.style.textShadow = '0 1px 3px rgba(0,0,0,0.2)'; 
         }
     }
 
