@@ -8,11 +8,20 @@
     html, body { height: 100%; margin: 0; background: #f3f4f6; font-family: "Microsoft YaHei", -apple-system, sans-serif !important; overflow: hidden; }
     .app-container { display: flex; height: 100%; }
     
-    /* ================= 预览区 ================= */
+    /* ================= 预览区 (Preview Area) ================= */
     .preview-area {
-        flex: 1; overflow-y: auto; display: flex; justify-content: center; align-items: flex-start;
-        padding: 40px 20px; background-color: #e5e7eb; -webkit-overflow-scrolling: touch;
-        padding-bottom: 120px; 
+        flex: 1; 
+        overflow-y: auto; 
+        display: flex; 
+        /* 🔥 V28 修复：改为顶部对齐，防止长海报头部被切 */
+        justify-content: center; 
+        align-items: flex-start;
+        padding: 40px 20px; 
+        /* 🔥 V28 修复：增加顶部留白 */
+        padding-top: 30px; 
+        background-color: #e5e7eb; 
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 140px; /* 给底部工具栏留足空间 */
     }
 
     /* ================= PC端控制台 ================= */
@@ -25,29 +34,45 @@
     .mobile-toolbar {
         display: none; /* Desktop hidden */
         position: fixed; bottom: 0; left: 0; width: 100%; height: 70px;
-        background: white; border-top: 1px solid #eee;
+        background: rgba(255, 255, 255, 0.95); /* 半透明磨砂 */
+        backdrop-filter: blur(10px);
+        border-top: 1px solid rgba(0,0,0,0.1);
         z-index: 500; align-items: center; justify-content: space-between;
-        padding: 0 15px; box-sizing: border-box; box-shadow: 0 -5px 20px rgba(0,0,0,0.05);
+        padding: 0 15px; box-sizing: border-box; 
+        box-shadow: 0 -5px 20px rgba(0,0,0,0.1); /* 加深阴影 */
     }
     .toolbar-btn { flex: 1; height: 44px; border-radius: 8px; border: none; font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
     .btn-config { background: #f3f4f6; color: #333; margin-right: 10px; border: 1px solid #ddd; }
     .btn-save { background: #16a34a; color: white; flex: 1.5; box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3); }
 
-    /* 🔥 V27 修复：抽屉交互逻辑 */
+    /* 抽屉容器 */
     .bottom-sheet {
-        display: block; /* 必须是block，否则transform无效 */
-        visibility: hidden; /* 默认不可见 */
+        display: block; 
+        visibility: hidden;
         position: fixed; bottom: 0; left: 0; width: 100%;
-        background: white; border-radius: 20px 20px 0 0; padding: 25px; padding-bottom: 40px;
-        box-shadow: 0 -10px 40px rgba(0,0,0,0.2); z-index: 200;
-        transform: translateY(100%); transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-        max-height: 80vh; overflow-y: auto;
+        background: white; border-radius: 20px 20px 0 0; 
+        padding: 25px; padding-bottom: 40px;
+        box-shadow: 0 -10px 40px rgba(0,0,0,0.2); 
+        z-index: 600; /* 比工具栏更高 */
+        transform: translateY(100%); 
+        transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        max-height: 85vh; overflow-y: auto;
     }
     .bottom-sheet.active { visibility: visible; transform: translateY(0); }
 
+    /* 抽屉头部 */
+    .sheet-header {
+        display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
+    }
+    .sheet-title { font-weight: 900; font-size: 18px; color: #333; }
+    .sheet-close { 
+        width: 30px; height: 30px; border-radius: 50%; background: #f3f4f6; 
+        display: flex; align-items: center; justify-content: center; color: #666; cursor: pointer;
+    }
+
     .overlay {
         position: fixed; inset: 0; background: rgba(0,0,0,0.5);
-        z-index: 150; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        z-index: 550; opacity: 0; pointer-events: none; transition: opacity 0.3s;
     }
     .overlay.active { opacity: 1; pointer-events: auto; }
 
@@ -56,7 +81,7 @@
         .app-container { flex-direction: column; }
         .control-panel { display: none !important; } 
         .mobile-toolbar { display: flex; } 
-        .preview-area { align-items: center; padding-top: 20px; }
+        .preview-area { align-items: flex-start; } /* 确保左上对齐 */
     }
 
     /* ================= 海报样式 ================= */
@@ -68,6 +93,8 @@
         box-shadow: 0 30px 60px rgba(0,0,0,0.5);
         line-height: 1.6; font-family: "Microsoft YaHei", sans-serif !important;
         transition: background 0.3s;
+        /* 防止缩放时边缘模糊 */
+        transform-origin: top center;
     }
     #poster-bg-img { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; filter: blur(50px) brightness(0.4); transform: scale(1.2); opacity: 0; transition: opacity 0.5s; }
     #poster-bg-gradient { position: absolute; inset: 0; z-index: 1; background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.5) 100%); }
@@ -76,10 +103,10 @@
     .p-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
     .user-box { display: flex; align-items: center; gap: 12px; }
     
-    /* 🔥 V27 美化：高级头像样式 */
+    /* 头像样式 */
     .avatar { 
         width: 54px; height: 54px; border-radius: 50%; 
-        /* 默认渐变兜底 */
+        /* 🔥 V28 兜底：默认先给个好看的渐变，防止加载期间变灰 */
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         display: flex; align-items: center; justify-content: center; 
         font-size: 24px; font-weight: 900; color: white;
@@ -143,7 +170,7 @@
                 <div class="p-content">
                     <div class="p-header">
                         <div class="user-box">
-                            <div class="avatar" id="p-avatar">U</div>
+                            <div class="avatar" id="p-avatar" data-type="text">U</div>
                             <div class="user-info">
                                 <h1 id="p-user">User</h1>
                                 <p id="p-period">全量观影报告</p>
@@ -193,7 +220,7 @@
     </div>
 
     <div class="mobile-toolbar">
-        <button class="toolbar-btn btn-config" onclick="toggleSheet(true)">
+        <button class="toolbar-btn btn-config" onclick="toggleSheet()">
             <i class="fa-solid fa-sliders"></i> 参数配置
         </button>
         <button class="toolbar-btn btn-save" onclick="savePoster()" id="mobile-save-btn">
@@ -203,7 +230,11 @@
 
     <div class="overlay" id="mobile-overlay" onclick="toggleSheet(false)"></div>
     <div class="bottom-sheet" id="mobile-sheet">
-        <div style="text-align: center; margin-bottom: 20px; font-weight: 900; font-size: 18px; color: #333;">配置选项</div>
+        <div class="sheet-header">
+            <div class="sheet-title">配置选项</div>
+            <div class="sheet-close" onclick="toggleSheet(false)"><i class="fa-solid fa-xmark"></i></div>
+        </div>
+        
         <div id="mobile-controls-container">
             <label class="ctrl-label">选择用户</label>
             <select id="user-select" onchange="changeUser(this.value)" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px; background: #f9fafb;">
@@ -257,10 +288,20 @@
     window.addEventListener('resize', () => { fitScale(); checkLayout(); });
     setTimeout(() => { fitScale(); checkLayout(); }, 100);
 
-    function toggleSheet(show) {
+    // 🔥 V28 修复：抽屉智能开关
+    function toggleSheet(forceState) {
         const sheet = document.getElementById('mobile-sheet');
         const overlay = document.getElementById('mobile-overlay');
-        if(show) {
+        
+        let shouldShow = false;
+        if (typeof forceState === 'boolean') {
+            shouldShow = forceState;
+        } else {
+            // 如果已经在显示，就关闭；否则开启
+            shouldShow = !sheet.classList.contains('active');
+        }
+
+        if(shouldShow) {
             sheet.classList.add('active');
             overlay.classList.add('active');
         } else {
@@ -272,8 +313,10 @@
     function fitScale() {
         const wrapper = document.querySelector('.preview-area');
         const w = wrapper.clientWidth;
+        // 留一点边距
         const scale = Math.min((w - 40) / 400, 1);
         document.getElementById('scale-wrapper').style.transform = `scale(${scale})`;
+        // 🔥 V28 修复：确保顶部对齐，不切头
         document.getElementById('scale-wrapper').style.transformOrigin = 'top center';
     }
 
@@ -331,17 +374,18 @@
         }
     }
 
-    // 🔥 V27 优化：生成双色流光渐变
     function getHashGradient(name) {
         let hash = 0;
         for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
         const h1 = Math.abs(hash % 360);
-        const h2 = (h1 + 60) % 360; // 偏移60度，形成邻近色渐变
+        const h2 = (h1 + 60) % 360;
+        // 高饱和度糖果色
         return `linear-gradient(135deg, hsl(${h1}, 80%, 60%), hsl(${h2}, 80%, 60%))`;
     }
 
     async function loadAvatar() {
         const avatarEl = document.getElementById('p-avatar');
+        // 重置状态
         avatarEl.style.backgroundImage = 'none';
         avatarEl.innerText = currentUserName[0].toUpperCase();
         
@@ -353,7 +397,7 @@
             avatarEl.innerText = '';
             avatarEl.dataset.src = realUrl;
         } else {
-            // 生成美观的渐变
+            // 🔥 V28 修复：如果没有图片，使用哈希渐变
             avatarEl.style.backgroundImage = getHashGradient(currentUserName);
             avatarEl.style.color = 'white';
             avatarEl.style.textShadow = '0 2px 4px rgba(0,0,0,0.3)';
@@ -374,8 +418,10 @@
                 });
             }
         });
+        
+        // 🔥 V28 核心修复：确保下拉框填充后，才触发 changeUser
         if(json.data && json.data.length > 0) {
-            changeUser(json.data[0].UserId); // 🔥 强制触发一次，确保头像加载
+            changeUser(json.data[0].UserId);
         }
     }
 
@@ -383,10 +429,12 @@
         currentUserId = uid;
         document.querySelectorAll('#user-select').forEach(s => s.value = uid);
         const sel = document.querySelector('#user-select');
-        currentUserName = sel.options[sel.selectedIndex].text;
-        document.getElementById('p-user').innerText = currentUserName;
+        if(sel.selectedIndex >= 0) {
+            currentUserName = sel.options[sel.selectedIndex].text;
+        }
         
-        loadAvatar(); // 每次换人刷新头像
+        document.getElementById('p-user').innerText = currentUserName;
+        loadAvatar(); // 立即刷新头像
         loadData();
     }
 
