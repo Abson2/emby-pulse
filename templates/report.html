@@ -65,8 +65,8 @@
         width: 400px; 
         height: fit-content; 
         min-height: auto;
-        /* 🔥 V32: 极简底部，只留30px */
-        padding-bottom: 30px; 
+        /* 🔥 V33: 极致紧凑，底部只留 20px */
+        padding-bottom: 20px; 
         
         background: var(--theme-bg); color: var(--theme-text);
         position: relative; overflow: hidden; display: flex; flex-direction: column;
@@ -76,15 +76,15 @@
     }
     #poster-bg-img { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; filter: blur(50px) brightness(0.4); transform: scale(1.2); opacity: 0; transition: opacity 0.5s; height: 100%; }
     #poster-bg-gradient { position: absolute; inset: 0; z-index: 1; background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.5) 100%); height: 100%; }
+    
     .p-content { position: relative; z-index: 10; padding: 40px 30px; display: block; }
     
     .p-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
     .user-box { display: flex; align-items: center; gap: 12px; }
     
-    /* 🔥 V32: 头像样式 - 确保默认状态也好看 */
     .avatar { 
         width: 54px; height: 54px; border-radius: 50%; 
-        background-color: #e5e7eb; /* 初始灰，防止闪烁 */
+        background-color: #e5e7eb; 
         display: flex; align-items: center; justify-content: center; 
         font-size: 26px; 
         color: white; 
@@ -126,8 +126,9 @@
     .rank-name { font-size: 12px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 4px; margin-bottom: -2px; }
     .rank-meta-row { font-size: 9px; opacity: 0.7; display: flex; gap: 8px; }
     
+    /* 🔥 V33: Footer 极限上移，减少留白 */
     .p-footer { 
-        margin-top: 30px; 
+        margin-top: 15px; 
         text-align: center; opacity: 0.4; font-size: 10px; letter-spacing: 2px; 
     }
     .empty-box { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; min-height: 200px; text-align: center; }
@@ -287,20 +288,17 @@
         document.getElementById('scale-wrapper').style.transformOrigin = 'top center';
     }
 
-    // 🔥 V32 关键修复：增加 404 检测
     async function toBase64(url) {
         try {
             const res = await fetch(url);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`); // 遇到404直接抛出异常
+            if (!res.ok) throw new Error(`HTTP ${res.status}`); 
             const blob = await res.blob();
             return new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.onloadend = () => resolve(reader.result);
                 reader.readAsDataURL(blob);
             });
-        } catch(e) { 
-            return null; // 返回 null，触发备用头像逻辑
-        }
+        } catch(e) { return null; }
     }
 
     function getDateLabel(period) {
@@ -359,23 +357,31 @@
 
     async function loadAvatar() {
         const avatarEl = document.getElementById('p-avatar');
-        
-        // 1. 先生成备用头像（立刻显示，确保无缝）
-        const style = getIconAvatar(currentUserName);
-        avatarEl.style.backgroundColor = style.color;
         avatarEl.style.backgroundImage = 'none';
-        avatarEl.innerHTML = `<i class="fa-solid ${style.icon}"></i>`;
-        avatarEl.style.color = 'white';
-        avatarEl.style.textShadow = '0 1px 3px rgba(0,0,0,0.2)';
+        avatarEl.innerText = '';
         
-        // 2. 尝试加载真实图片
+        // 🔥 V33: 全服用户特殊处理
+        if (currentUserId === 'all') {
+            avatarEl.style.background = 'linear-gradient(135deg, #1a1a1a, #333)';
+            avatarEl.innerHTML = '<i class="fa-solid fa-server"></i>';
+            avatarEl.style.color = 'white';
+            return;
+        }
+        
         const realUrl = `/api/proxy/user_image/${currentUserId}`;
-        const b64 = await toBase64(realUrl); // 这里现在会正确拦截404
+        const b64 = await toBase64(realUrl);
 
-        // 3. 只有成功才替换
         if (b64) {
-            avatarEl.innerHTML = '';
             avatarEl.style.backgroundImage = `url('${b64}')`;
+            avatarEl.innerHTML = ''; 
+            avatarEl.dataset.src = realUrl;
+        } else {
+            const style = getIconAvatar(currentUserName);
+            avatarEl.style.backgroundColor = style.color;
+            avatarEl.style.backgroundImage = 'none';
+            avatarEl.innerHTML = `<i class="fa-solid ${style.icon}"></i>`;
+            avatarEl.style.color = 'white'; 
+            avatarEl.style.textShadow = '0 1px 3px rgba(0,0,0,0.2)'; 
         }
     }
 
@@ -385,6 +391,13 @@
         const selects = document.querySelectorAll('#user-select');
         selects.forEach(sel => {
             sel.innerHTML = '';
+            
+            // 🔥 V33: 插入全服选项
+            const optAll = document.createElement('option');
+            optAll.value = 'all';
+            optAll.innerText = '全服概览 (All Users)';
+            sel.appendChild(optAll);
+
             if(json.data) {
                 json.data.forEach(u => {
                     const opt = document.createElement('option');
@@ -393,18 +406,26 @@
                 });
             }
         });
-        if(json.data && json.data.length > 0) {
-            changeUser(json.data[0].UserId);
-        }
+        
+        // 默认选中全服
+        changeUser('all');
     }
 
     function changeUser(uid) {
         currentUserId = uid;
         document.querySelectorAll('#user-select').forEach(s => s.value = uid);
+        
         const sel = document.querySelector('#user-select');
-        if(sel.selectedIndex >= 0) {
-            currentUserName = sel.options[sel.selectedIndex].text;
+        // V33: 正确获取文案（包含全服）
+        for(let opt of sel.options) {
+            if(opt.value === uid) {
+                currentUserName = opt.text;
+                break;
+            }
         }
+        // 如果是全服，简化显示名字
+        if(uid === 'all') currentUserName = 'Emby Server';
+
         document.getElementById('p-user').innerText = currentUserName;
         loadAvatar();
         loadData();
@@ -420,6 +441,7 @@
     }
 
     async function loadData() {
+        // V33: 允许 currentUserId 为 'all'
         if(!currentUserId) return;
         const res = await fetch(`/api/stats/poster_data?user_id=${currentUserId}&period=${currentPeriod}`);
         const json = await res.json();
