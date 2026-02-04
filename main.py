@@ -22,7 +22,7 @@ EMBY_API_KEY = os.getenv("EMBY_API_KEY", "").strip()
 # 默认图片 (当 Emby 图片加载失败时的兜底图)
 FALLBACK_IMAGE_URL = "https://img.hotimg.com/a444d32a033994d5b.png"
 
-print(f"--- EmbyPulse Ultimate V9 (Final Full) ---")
+print(f"--- EmbyPulse Ultimate V10 (Final Stable) ---")
 print(f"DB Path: {DB_PATH}")
 print(f"API Key: {'✅ Loaded' if EMBY_API_KEY else '❌ Not Set (Images/Live disabled)'}")
 
@@ -141,7 +141,7 @@ async def api_recent_activity(user_id: Optional[str] = None):
             where += " AND UserId = ?"
             params.append(user_id)
             
-        results = query_db(f"SELECT DateCreated, UserId, ItemId, ItemName, ItemType, PlayDuration FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 100", params)
+        results = query_db(f"SELECT DateCreated, UserId, ItemId, ItemName, ItemType, PlayDuration FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 300", params)
         if not results: return {"status": "success", "data": []}
 
         raw_items = [dict(row) for row in results]
@@ -218,7 +218,7 @@ async def api_live_sessions():
         return {"status": "success", "data": sessions}
     except Exception as e: return {"status": "error", "message": str(e)}
 
-# === 🔥 映迹工坊核心数据接口 (V9 - 智能聚合 + 全服数据 + Top10 + 时间过滤) ===
+# === 🔥 映迹工坊核心数据接口 (V10 - 智能聚合 + 全服数据 + 防空数据报错) ===
 @app.get("/api/stats/poster_data")
 async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
     """
@@ -231,7 +231,7 @@ async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
             where += " AND UserId = ?"
             params.append(user_id)
         
-        # 1. 时间过滤
+        # 1. 时间过滤 (构建 SQL 条件)
         date_filter = ""
         if period == 'week': date_filter = " AND DateCreated > date('now', '-7 days')"
         elif period == 'month': date_filter = " AND DateCreated > date('now', '-30 days')"
@@ -240,21 +240,22 @@ async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
         where += date_filter
         
         # 2. 全服数据统计 (Server Stats)
-        # 注意：全服数据不带 UserId 过滤，但带时间过滤
+        # 即使个人数据为空，全服数据也应该正常返回
         server_where = f"WHERE 1=1 {date_filter}" 
         server_sql = f"SELECT COUNT(*) as Plays FROM PlaybackActivity {server_where}"
         server_res = query_db(server_sql)
         server_plays = server_res[0]['Plays'] if server_res else 0
 
         # 3. 个人数据 - 原始记录拉取
-        # 我们拉取所有记录到内存处理，以实现“同一剧集聚合”的逻辑
         raw_sql = f"SELECT ItemName, ItemId, ItemType, SeriesName, PlayDuration FROM PlaybackActivity {where}"
         raw_rows = query_db(raw_sql, params)
         
+        # 初始化聚合容器
         total_plays = 0
         total_duration = 0
-        aggregated = {} # 聚合字典
+        aggregated = {} 
 
+        # 4. 遍历并聚合
         if raw_rows:
             for row in raw_rows:
                 total_plays += 1
@@ -288,20 +289,21 @@ async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
                 # 更新 ID (保持最新，以防封面变动)
                 aggregated[key]['ItemId'] = display_id
 
-        # 4. 排序并取 Top 10
+        # 5. 排序并取 Top 10
         top_list = list(aggregated.values())
         # 优先按次数，其次按时长
         top_list.sort(key=lambda x: (x['Count'], x['Duration']), reverse=True)
         top_list = top_list[:10]
 
-        # 5. 计算标签
+        # 6. 计算标签
         total_hours = round(total_duration / 3600)
         tags = []
         if total_hours > 500: tags.append("影视肝帝")
         elif total_hours > 100: tags.append("忠实观众")
         
-        if not tags: tags.append("佛系观众")
+        if not tags: tags.append("新晋观众")
 
+        # 7. 返回结果 (确保即使 raw_rows 为空，结构也是完整的)
         return {
             "status": "success",
             "data": {
@@ -313,7 +315,16 @@ async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
                 "active_hour": "--" 
             }
         }
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e:
+        print(f"API Error: {e}")
+        # 出错时返回空结构，防止前端炸裂
+        return {
+            "status": "error",
+            "message": str(e),
+            "data": {
+                "plays": 0, "hours": 0, "server_plays": 0, "top_list": [], "tags": ["出错啦"]
+            }
+        }
 
 # === 趋势图接口 ===
 @app.get("/api/stats/chart")
@@ -338,8 +349,7 @@ async def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'month
         data = {}
         if results:
             rows = results[::-1] if dimension == 'year' else results
-            for r in rows:
-                data[r['Label']] = int(r['Duration'])
+            for r in rows: data[r['Label']] = int(r['Duration'])
         return {"status": "success", "data": data}
     except: return {"status": "error", "data": {}}
 
@@ -441,7 +451,6 @@ async def proxy_image(item_id: str, img_type: str):
                 data = info_resp.json()
                 if data.get("Items"):
                     item = data["Items"][0]
-                    # 如果是单集，尝试用剧集 ID
                     if item.get('Type') == 'Episode':
                         if item.get('SeriesId'): target_id = item.get('SeriesId')
                         elif item.get('ParentId'): target_id = item.get('ParentId')

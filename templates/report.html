@@ -2,19 +2,72 @@
 {% block title %}映迹工坊 - EmbyPulse{% endblock %}
 {% block head %}
 <style>
-    /* ================= 核心画布：宽度增加，高度自适应 ================= */
+    /* ================= 布局重置：手机适配核心 ================= */
+    html, body { height: 100%; overflow: hidden; }
+    
+    .layout-wrapper { 
+        display: flex; 
+        height: 100%; 
+        width: 100%;
+        background-color: #f3f4f6;
+    }
+
+    /* 左侧控制台 */
+    .control-panel {
+        width: 340px; 
+        background: white; 
+        border-right: 1px solid #e5e7eb;
+        display: flex; 
+        flex-direction: column; 
+        z-index: 50;
+        flex-shrink: 0;
+        height: 100%;
+        overflow-y: auto; /* 控制台内部滚动 */
+        padding: 20px;
+    }
+
+    /* 右侧预览区 */
+    #preview-wrapper {
+        flex: 1; 
+        height: 100%;
+        display: flex; 
+        justify-content: center; 
+        align-items: flex-start; /* 顶部对齐，方便滚动 */
+        padding: 40px; 
+        overflow-y: auto; /* 🔥 关键：允许预览区滚动 */
+        -webkit-overflow-scrolling: touch; /* iOS丝滑滚动 */
+    }
+
+    /* 手机端响应式 */
+    @media (max-width: 768px) {
+        .layout-wrapper { flex-direction: column-reverse; } /* 控制台在下 */
+        .control-panel { 
+            width: 100%; 
+            height: 40vh; /* 占据底部40% */
+            border-right: none; 
+            border-top: 1px solid #e5e7eb; 
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+        }
+        #preview-wrapper { 
+            height: 60vh; /* 占据顶部60% */
+            padding: 20px; 
+            align-items: center; /* 手机上垂直居中好看点 */
+        }
+    }
+
+    /* ================= 海报样式 ================= */
     .poster-container { 
-        width: 440px; 
+        width: 420px; 
         min-height: 800px;
-        height: fit-content; 
+        height: auto; /* 自适应 */
         background-color: #111827; 
         position: relative;
-        overflow: hidden;
+        overflow: visible; /* 允许内容撑开 */
         box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.6); 
         display: flex;
         flex-direction: column;
-        /* 强制无衬线字体，解决文字渲染差异 */
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        flex-shrink: 0; /* 防止被挤压 */
+        font-family: -apple-system, "Microsoft YaHei", sans-serif; /* 强制字体 */
     }
     
     #poster-bg-gradient {
@@ -30,13 +83,23 @@
 
     .poster-content { 
         position: relative; z-index: 10;
-        padding: 40px 32px; 
+        padding: 40px 32px 30px 32px; 
         color: white; 
         display: flex; flex-direction: column;
         flex: 1;
     }
 
-    /* ================= 玻璃卡片 ================= */
+    /* 🔥 修复：文字安全区域 */
+    .safe-text-header {
+        display: block;
+        line-height: 1.4;
+        padding-bottom: 6px; /* 防止切到底部 */
+        padding-top: 4px;    /* 防止切到顶部 */
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
     .glass-card {
         background: rgba(255, 255, 255, 0.08);
         border: 1px solid rgba(255, 255, 255, 0.12);
@@ -58,60 +121,38 @@
     }
     .rank-item:last-child { border-bottom: none; }
 
-    /* 🔥🔥 核心修复：文字防腰斩 🔥🔥 */
-    .text-safe-render {
-        line-height: 1.5 !important;  /* 增加行高 */
-        padding-bottom: 4px;          /* 增加底部留白 */
-        display: block;               /* 块级元素渲染更稳 */
-    }
-    .text-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-    /* ================= 手机端适配 ================= */
-    .layout-wrapper { display: flex; height: 100%; overflow: hidden; }
-    
-    /* 左侧控制台 */
-    .control-panel {
-        width: 360px; background: white; border-right: 1px solid #e5e7eb;
-        padding: 24px; display: flex; flex-direction: column; z-index: 20;
-        overflow-y: auto; flex-shrink: 0;
-    }
-
-    /* 右侧预览区 */
-    #preview-wrapper {
-        flex: 1; display: flex; justify-content: center; padding: 40px; 
-        background: #f3f4f6; overflow-y: auto; align-items: flex-start;
-    }
-
-    /* 手机响应式：变为垂直布局 */
-    @media (max-width: 768px) {
-        .layout-wrapper { flex-direction: column-reverse; } /* 控制台在下，预览在上 */
-        .control-panel { width: 100%; height: 40%; border-right: none; border-top: 1px solid #e5e7eb; }
-        #preview-wrapper { height: 60%; padding: 20px; align-items: center; }
-        .poster-container { box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
-    }
-
     /* 交互组件 */
     .user-option.selected { border-color: #16a34a; background-color: #f0fdf4; }
     .bg-option { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid white; transition: transform 0.2s; }
     .bg-option.active { border-color: #16a34a; transform: scale(1.1); box-shadow: 0 0 0 2px #16a34a; }
     
-    #scale-wrapper { transform-origin: top center; transition: transform 0.2s; margin-bottom: 50px; }
+    #scale-wrapper { transform-origin: top center; transition: transform 0.2s; padding-bottom: 50px; }
+    
+    /* 空状态样式 */
+    #empty-state-visual {
+        flex: 1; display: flex; flex-direction: column; 
+        align-items: center; justify-content: center;
+        opacity: 0.3; text-align: center;
+        min-height: 300px;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="layout-wrapper">
     
-    <div class="control-panel shadow-xl">
-        <div class="flex items-center mb-6">
-            <i class="fa-solid fa-paintbrush text-green-600 mr-2"></i>
-            <h2 class="text-lg font-black text-gray-800">工坊配置</h2>
+    <div class="control-panel">
+        <div class="flex items-center mb-6 shrink-0">
+            <i class="fa-solid fa-paintbrush text-green-600 mr-2 text-xl"></i>
+            <h2 class="text-lg font-black text-gray-800">映迹工坊</h2>
         </div>
         
-        <div class="space-y-6 flex-1">
+        <div class="space-y-6 flex-1 overflow-y-auto pr-1">
             <div>
                 <label class="block text-xs font-bold text-gray-400 uppercase mb-2">主角</label>
-                <div id="user-list-container" class="space-y-2 max-h-32 overflow-y-auto pr-1 custom-scrollbar"></div>
+                <div id="user-list-container" class="space-y-2 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
+                    <p class="text-xs text-gray-400">加载中...</p>
+                </div>
             </div>
             <div>
                 <label class="block text-xs font-bold text-gray-400 uppercase mb-2">时间范围</label>
@@ -139,11 +180,11 @@
             </div>
         </div>
 
-        <div class="mt-4 flex gap-2">
-            <button onclick="processCapture('download')" id="dl-btn" class="flex-1 py-3 bg-gray-900 text-white font-bold rounded-xl shadow-lg text-sm flex justify-center items-center">
+        <div class="mt-4 flex gap-2 shrink-0">
+            <button onclick="processCapture('download')" id="dl-btn" class="flex-1 py-3 bg-gray-900 hover:bg-black text-white font-bold rounded-xl shadow-lg text-sm flex justify-center items-center">
                 <i class="fa-solid fa-download mr-2"></i> 保存
             </button>
-            <button onclick="processCapture('copy')" id="cp-btn" class="flex-1 py-3 bg-white border border-gray-300 text-gray-700 font-bold rounded-xl shadow-sm text-sm flex justify-center items-center">
+            <button onclick="processCapture('copy')" id="cp-btn" class="flex-1 py-3 bg-white border border-gray-300 text-gray-700 font-bold rounded-xl shadow-sm hover:bg-gray-50 text-sm flex justify-center items-center">
                 <i class="fa-regular fa-copy mr-2"></i> 复制
             </button>
         </div>
@@ -162,8 +203,8 @@
                         <div class="flex items-center gap-4 min-w-0">
                             <div class="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center text-3xl font-black shrink-0 border border-white/20 shadow-lg" id="poster-avatar">U</div>
                             <div class="min-w-0">
-                                <h2 class="text-3xl font-black text-truncate text-safe-render" id="poster-user">Username</h2>
-                                <p class="text-xs text-white/50 uppercase tracking-widest mt-1" id="poster-period-text">全量报告</p>
+                                <h2 class="text-3xl font-black safe-text-header" id="poster-user">Username</h2>
+                                <p class="text-xs text-white/50 uppercase tracking-widest" id="poster-period-text">全量报告</p>
                             </div>
                         </div>
                         <div class="px-4 py-1.5 rounded-full text-xs font-bold bg-white/10 text-white shrink-0 border border-white/10" id="poster-tag">观影达人</div>
@@ -172,23 +213,24 @@
                     <div class="glass-card mb-8">
                         <div class="grid grid-cols-3 divide-x divide-white/10">
                             <div class="flex flex-col items-center justify-center px-2">
-                                <span class="text-2xl font-black text-safe-render" id="poster-hours">0</span>
+                                <span class="text-2xl font-black safe-text-header" id="poster-hours">0</span>
                                 <span class="text-[9px] text-white/40 uppercase font-bold">专注时长(h)</span>
                             </div>
                             <div class="flex flex-col items-center justify-center px-2">
-                                <span class="text-2xl font-black text-safe-render" id="poster-plays">0</span>
+                                <span class="text-2xl font-black safe-text-header" id="poster-plays">0</span>
                                 <span class="text-[9px] text-white/40 uppercase font-bold">播放次数</span>
                             </div>
                             <div class="flex flex-col items-center justify-center px-2">
-                                <span class="text-2xl font-black text-green-400 text-safe-render" id="poster-server-plays">0</span>
+                                <span class="text-2xl font-black text-green-400 safe-text-header" id="poster-server-plays">0</span>
                                 <span class="text-[9px] text-white/40 uppercase font-bold">全服总播放</span>
                             </div>
                         </div>
                     </div>
 
-                    <div id="empty-state" class="flex-1 flex flex-col items-center justify-center text-white/30 hidden">
-                        <i class="fa-solid fa-ghost text-6xl mb-4"></i>
-                        <p class="text-sm">该时间段暂无收视数据</p>
+                    <div id="empty-state-visual" style="display: none;">
+                        <i class="fa-solid fa-wind text-6xl mb-4"></i>
+                        <p class="text-lg font-bold">暂无足迹</p>
+                        <p class="text-xs mt-2">该时间段内没有发现观影记录</p>
                     </div>
 
                     <div id="data-content-area">
@@ -200,7 +242,7 @@
                                 <div id="top1-bg" class="img-cover w-full h-full"></div>
                                 <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
                                 <div class="absolute bottom-4 left-5 right-5">
-                                    <h3 class="text-2xl font-bold line-clamp-1 text-safe-render" id="poster-top1-title">-</h3>
+                                    <h3 class="text-2xl font-bold safe-text-header" id="poster-top1-title">-</h3>
                                     <p class="text-sm text-white/60"><span id="poster-top1-plays" class="text-white font-bold">0</span> 次播放</p>
                                 </div>
                             </div>
@@ -211,14 +253,14 @@
                                 <div id="top2-bg" class="w-10 h-14 bg-gray-700 rounded shrink-0 img-cover shadow-sm"></div>
                                 <div class="min-w-0">
                                     <div class="text-[9px] text-white/40 font-bold mb-0.5 uppercase">TOP 2</div>
-                                    <div class="text-sm font-bold text-truncate text-safe-render" id="poster-top2-title">-</div>
+                                    <div class="text-sm font-bold safe-text-header" id="poster-top2-title">-</div>
                                 </div>
                             </div>
                             <div class="glass-card flex items-center gap-3 p-3 overflow-hidden !margin-0">
                                 <div id="top3-bg" class="w-10 h-14 bg-gray-700 rounded shrink-0 img-cover shadow-sm"></div>
                                 <div class="min-w-0">
                                     <div class="text-[9px] text-white/40 font-bold mb-0.5 uppercase">TOP 3</div>
-                                    <div class="text-sm font-bold text-truncate text-safe-render" id="poster-top3-title">-</div>
+                                    <div class="text-sm font-bold safe-text-header" id="poster-top3-title">-</div>
                                 </div>
                             </div>
                         </div>
@@ -250,19 +292,13 @@
     let currentPeriod = 'all';
     let currentUserId = '';
 
-    // 响应式缩放
     function resizePreview() {
-        const wrapper = document.getElementById('preview-wrapper');
-        const containerWidth = document.querySelector('.poster-container').offsetWidth;
-        // 手机端不需要缩放太多，主要看 PC 端
-        if (window.innerWidth > 768) {
-            const scale = (wrapper.clientWidth - 60) / containerWidth;
+        if (window.innerWidth < 1200) {
+            const wrapper = document.getElementById('preview-wrapper');
+            // 计算缩放比例 (宽度适配，高度自适应)
+            const scale = (wrapper.clientWidth - 40) / 440;
             const finalScale = Math.min(scale, 1);
             document.getElementById('scale-wrapper').style.transform = `scale(${finalScale})`;
-        } else {
-            // 手机端：让它自然滚动，或者稍微缩小一点点以适应屏幕
-            const scale = (window.innerWidth - 40) / containerWidth;
-            document.getElementById('scale-wrapper').style.transform = `scale(${Math.min(scale, 1)})`;
         }
     }
     window.addEventListener('resize', resizePreview);
@@ -295,7 +331,7 @@
                 json.data.forEach((user, index) => {
                     const div = document.createElement('div');
                     div.className = `user-option p-2 border border-gray-200 rounded cursor-pointer hover:bg-gray-50 flex items-center mb-1 transition ${index===0?'selected bg-green-50 border-green-500':''}`;
-                    div.innerHTML = `<span class="text-xs font-bold mr-3 text-green-600 w-5">${user.UserName[0].toUpperCase()}</span><span class="text-sm text-truncate font-medium flex-1">${user.UserName}</span>`;
+                    div.innerHTML = `<span class="text-xs font-bold mr-3 text-green-600 w-5">${user.UserName[0].toUpperCase()}</span><span class="text-sm safe-text-header flex-1">${user.UserName}</span>`;
                     div.onclick = () => {
                         document.querySelectorAll('.user-option').forEach(el => el.className = el.className.replace('selected bg-green-50 border-green-500', ''));
                         div.className += ' selected bg-green-50 border-green-500';
@@ -345,22 +381,23 @@
                 document.getElementById('poster-server-plays').innerText = data.server_plays || 0;
                 document.getElementById('poster-tag').innerText = data.tags[0] || "观影达人";
 
-                const list = data.top_list || [];
                 const hasData = data.plays > 0;
+                // 空状态处理
+                document.getElementById('data-content-area').style.display = hasData ? 'block' : 'none';
+                document.getElementById('empty-state-visual').style.display = hasData ? 'none' : 'flex';
 
-                // 控制空状态显示
                 if (hasData) {
-                    document.getElementById('data-content-area').style.display = 'block';
-                    document.getElementById('empty-state').style.display = 'none';
+                    const list = data.top_list || [];
                     
                     // Top 1
+                    const s1 = document.getElementById('top1-section');
                     if(list[0]) {
-                        document.getElementById('top1-section').style.display = 'block';
+                        s1.style.display = 'block';
                         document.getElementById('poster-top1-title').innerText = list[0].ItemName;
                         document.getElementById('poster-top1-plays').innerText = list[0].P;
                         setDivBg('top1-bg', `/api/proxy/image/${list[0].ItemId}/backdrop`);
                     } else {
-                        document.getElementById('top1-section').style.display = 'none';
+                        s1.style.display = 'none';
                     }
 
                     // Top 2-3
@@ -385,7 +422,7 @@
                         listHtml += `
                         <div class="rank-item">
                             <span class="text-[10px] text-white/40 w-6 font-bold font-mono">0${i+1}</span>
-                            <span class="text-xs font-bold flex-1 text-truncate mr-2 text-safe-render">${list[i].ItemName}</span>
+                            <span class="text-xs font-bold flex-1 text-truncate mr-2 safe-text-header">${list[i].ItemName}</span>
                             <span class="text-[9px] text-white/60 font-mono">${list[i].P}次</span>
                         </div>`;
                     }
@@ -396,10 +433,6 @@
                     } else {
                         sRest.style.display = 'none';
                     }
-                } else {
-                    // 无数据状态
-                    document.getElementById('data-content-area').style.display = 'none';
-                    document.getElementById('empty-state').style.display = 'flex';
                 }
                 
                 setTimeout(resizePreview, 100);
@@ -411,7 +444,6 @@
         const titleEl = document.getElementById(`poster-top${rank}-title`);
         const bgId = `top${rank}-bg`;
         const card = document.getElementById(bgId).parentElement;
-        
         if(item) {
             card.style.visibility = 'visible';
             titleEl.innerText = item.ItemName;
@@ -419,6 +451,13 @@
         } else {
             card.style.visibility = 'hidden';
         }
+    }
+
+    function randomQuote() {
+        const quotes = ["生活不仅有代码，还有电影。", "有些鸟儿是关不住的。", "能力越大，责任越大。", "念念不忘，必有回响。", "风起，唯有努力生存。", "好的电影，是一次灵魂的洗礼。"];
+        const q = quotes[Math.floor(Math.random() * quotes.length)];
+        document.getElementById('custom-msg').value = q;
+        document.getElementById('poster-msg').innerText = q;
     }
 
     async function processCapture(action) {
