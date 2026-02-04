@@ -22,7 +22,7 @@ EMBY_API_KEY = os.getenv("EMBY_API_KEY", "").strip()
 # 默认图片 (当 Emby 图片加载失败时的兜底图)
 FALLBACK_IMAGE_URL = "https://img.hotimg.com/a444d32a033994d5b.png"
 
-print(f"--- EmbyPulse Ultimate V8 Starting ---")
+print(f"--- EmbyPulse Ultimate V9 (Final Full) ---")
 print(f"DB Path: {DB_PATH}")
 print(f"API Key: {'✅ Loaded' if EMBY_API_KEY else '❌ Not Set (Images/Live disabled)'}")
 
@@ -141,16 +141,16 @@ async def api_recent_activity(user_id: Optional[str] = None):
             where += " AND UserId = ?"
             params.append(user_id)
             
-        results = query_db(f"SELECT DateCreated, UserId, ItemId, ItemName, ItemType, PlayDuration FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 300", params)
+        results = query_db(f"SELECT DateCreated, UserId, ItemId, ItemName, ItemType, PlayDuration FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 100", params)
         if not results: return {"status": "success", "data": []}
 
         raw_items = [dict(row) for row in results]
         user_map = get_user_map()
         metadata_map = {}
         
-        # 预加载元数据
+        # 预加载元数据 (用于获取剧集封面)
         if EMBY_API_KEY:
-            all_ids = [i['ItemId'] for i in raw_items][:100]
+            all_ids = [i['ItemId'] for i in raw_items][:50] # 限制API请求数量
             chunk_size = 20
             for i in range(0, len(all_ids), chunk_size):
                 try:
@@ -172,7 +172,7 @@ async def api_recent_activity(user_id: Optional[str] = None):
             unique_key = item['ItemName']
             meta = metadata_map.get(item['ItemId'])
             
-            # 尝试聚合剧集信息
+            # 尝试聚合剧集信息以便在列表中显示剧集封面而不是单集截图
             if meta:
                 if meta.get('Type') == 'Episode':
                     if meta.get('SeriesId'):
@@ -183,13 +183,12 @@ async def api_recent_activity(user_id: Optional[str] = None):
                  display_title = item['ItemName'].split(' - ')[0]
                  unique_key = display_title
 
-            if unique_key not in seen_keys:
-                seen_keys.add(unique_key)
-                item['DisplayId'] = display_id
-                item['DisplayTitle'] = display_title
-                final_data.append(item)
+            # 这里我们不做去重，保留流水账，但限制数量
+            item['DisplayId'] = display_id
+            item['DisplayTitle'] = display_title
+            final_data.append(item)
             
-            if len(final_data) >= 50: break 
+            if len(final_data) >= 20: break 
         return {"status": "success", "data": final_data}
     except Exception as e: return {"status": "error", "message": str(e)}
 
@@ -219,7 +218,7 @@ async def api_live_sessions():
         return {"status": "success", "data": sessions}
     except Exception as e: return {"status": "error", "message": str(e)}
 
-# === 🔥 映迹工坊核心数据接口 (V8 - 智能聚合 + 全服数据 + Top10) ===
+# === 🔥 映迹工坊核心数据接口 (V9 - 智能聚合 + 全服数据 + Top10 + 时间过滤) ===
 @app.get("/api/stats/poster_data")
 async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
     """
@@ -241,6 +240,7 @@ async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
         where += date_filter
         
         # 2. 全服数据统计 (Server Stats)
+        # 注意：全服数据不带 UserId 过滤，但带时间过滤
         server_where = f"WHERE 1=1 {date_filter}" 
         server_sql = f"SELECT COUNT(*) as Plays FROM PlaybackActivity {server_where}"
         server_res = query_db(server_sql)
@@ -285,7 +285,7 @@ async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
                 
                 aggregated[key]['Count'] += 1
                 aggregated[key]['Duration'] += dur
-                # 更新 ID (保持最新)
+                # 更新 ID (保持最新，以防封面变动)
                 aggregated[key]['ItemId'] = display_id
 
         # 4. 排序并取 Top 10
@@ -300,7 +300,6 @@ async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
         if total_hours > 500: tags.append("影视肝帝")
         elif total_hours > 100: tags.append("忠实观众")
         
-        # 简单的时间段统计 (为了性能不再查库，如果需要精确可另加逻辑)
         if not tags: tags.append("佛系观众")
 
         return {
@@ -321,8 +320,10 @@ async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
 async def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'month'):
     try:
         where, params = "WHERE 1=1", []
-        if user_id and user_id != 'all': where += " AND UserId = ?"; params.append(user_id)
-        
+        if user_id and user_id != 'all':
+            where += " AND UserId = ?"
+            params.append(user_id)
+            
         sql = ""
         if dimension == 'year':
             sql = f"SELECT strftime('%Y', DateCreated) as Label, SUM(PlayDuration) as Duration FROM PlaybackActivity {where} GROUP BY Label ORDER BY Label DESC LIMIT 5"
@@ -337,7 +338,8 @@ async def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'month
         data = {}
         if results:
             rows = results[::-1] if dimension == 'year' else results
-            for r in rows: data[r['Label']] = int(r['Duration'])
+            for r in rows:
+                data[r['Label']] = int(r['Duration'])
         return {"status": "success", "data": data}
     except: return {"status": "error", "data": {}}
 
@@ -346,7 +348,9 @@ async def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'month
 async def api_user_details(user_id: Optional[str] = None):
     try:
         where, params = "WHERE 1=1", []
-        if user_id and user_id != 'all': where += " AND UserId = ?"; params.append(user_id)
+        if user_id and user_id != 'all':
+            where += " AND UserId = ?"
+            params.append(user_id)
         
         hourly_res = query_db(f"SELECT strftime('%H', DateCreated) as Hour, COUNT(*) as Plays FROM PlaybackActivity {where} GROUP BY Hour ORDER BY Hour", params)
         hourly_data = {str(i).zfill(2): 0 for i in range(24)}
@@ -437,6 +441,7 @@ async def proxy_image(item_id: str, img_type: str):
                 data = info_resp.json()
                 if data.get("Items"):
                     item = data["Items"][0]
+                    # 如果是单集，尝试用剧集 ID
                     if item.get('Type') == 'Episode':
                         if item.get('SeriesId'): target_id = item.get('SeriesId')
                         elif item.get('ParentId'): target_id = item.get('ParentId')

@@ -2,19 +2,19 @@
 {% block title %}映迹工坊 - EmbyPulse{% endblock %}
 {% block head %}
 <style>
-    /* ================= 核心画布：动态高度 ================= */
+    /* ================= 核心画布：宽度增加，高度自适应 ================= */
     .poster-container { 
         width: 440px; 
         min-height: 800px;
-        height: fit-content; /* 🔥 关键：内容多少，海报就多长 */
+        height: fit-content; 
         background-color: #111827; 
         position: relative;
         overflow: hidden;
         box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.6); 
         display: flex;
         flex-direction: column;
-        /* 强制字体，防止偏移 */
-        font-family: "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        /* 强制无衬线字体，解决文字渲染差异 */
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     
     #poster-bg-gradient {
@@ -22,15 +22,21 @@
         transition: background 0.3s ease;
     }
     
+    .noise-layer {
+        position: absolute; inset: 0; z-index: 1; opacity: 0.08;
+        background-image: url('https://www.transparenttextures.com/patterns/stardust.png');
+        pointer-events: none;
+    }
+
     .poster-content { 
         position: relative; z-index: 10;
-        padding: 40px 36px 30px 36px; /* 上右下左，顶部留足空间 */
+        padding: 40px 32px; 
         color: white; 
         display: flex; flex-direction: column;
         flex: 1;
     }
 
-    /* ================= 组件 ================= */
+    /* ================= 玻璃卡片 ================= */
     .glass-card {
         background: rgba(255, 255, 255, 0.08);
         border: 1px solid rgba(255, 255, 255, 0.12);
@@ -39,161 +45,192 @@
         margin-bottom: 24px;
     }
 
-    /* 图片容器 */
     .img-cover {
         background-size: cover; background-position: center; background-repeat: no-repeat;
         background-color: #374151;
     }
 
-    /* 排名列表项 */
+    /* 列表项 */
     .rank-item {
         display: flex; align-items: center; 
-        padding: 10px 0;
+        padding: 12px 0;
         border-bottom: 1px solid rgba(255,255,255,0.08);
     }
     .rank-item:last-child { border-bottom: none; }
 
-    /* 文字截断 */
+    /* 🔥🔥 核心修复：文字防腰斩 🔥🔥 */
+    .text-safe-render {
+        line-height: 1.5 !important;  /* 增加行高 */
+        padding-bottom: 4px;          /* 增加底部留白 */
+        display: block;               /* 块级元素渲染更稳 */
+    }
     .text-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ================= 手机端适配 ================= */
+    .layout-wrapper { display: flex; height: 100%; overflow: hidden; }
     
-    /* ================= 交互 ================= */
+    /* 左侧控制台 */
+    .control-panel {
+        width: 360px; background: white; border-right: 1px solid #e5e7eb;
+        padding: 24px; display: flex; flex-direction: column; z-index: 20;
+        overflow-y: auto; flex-shrink: 0;
+    }
+
+    /* 右侧预览区 */
+    #preview-wrapper {
+        flex: 1; display: flex; justify-content: center; padding: 40px; 
+        background: #f3f4f6; overflow-y: auto; align-items: flex-start;
+    }
+
+    /* 手机响应式：变为垂直布局 */
+    @media (max-width: 768px) {
+        .layout-wrapper { flex-direction: column-reverse; } /* 控制台在下，预览在上 */
+        .control-panel { width: 100%; height: 40%; border-right: none; border-top: 1px solid #e5e7eb; }
+        #preview-wrapper { height: 60%; padding: 20px; align-items: center; }
+        .poster-container { box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+    }
+
+    /* 交互组件 */
     .user-option.selected { border-color: #16a34a; background-color: #f0fdf4; }
     .bg-option { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid white; transition: transform 0.2s; }
-    .bg-option:hover { transform: scale(1.1); }
     .bg-option.active { border-color: #16a34a; transform: scale(1.1); box-shadow: 0 0 0 2px #16a34a; }
     
-    #preview-wrapper { display: flex; justify-content: center; padding: 40px; background: #e5e7eb; overflow-y: auto; align-items: flex-start; }
     #scale-wrapper { transform-origin: top center; transition: transform 0.2s; margin-bottom: 50px; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="flex h-full flex-col md:flex-row overflow-hidden">
+<div class="layout-wrapper">
     
-    <div class="w-full md:w-96 bg-white border-r border-gray-200 p-6 flex flex-col z-20 shrink-0 overflow-y-auto shadow-xl">
-        <h2 class="text-xl font-black text-gray-800 mb-6 flex items-center">
-            <i class="fa-solid fa-paintbrush text-green-600 mr-2"></i> 映迹工坊
-        </h2>
+    <div class="control-panel shadow-xl">
+        <div class="flex items-center mb-6">
+            <i class="fa-solid fa-paintbrush text-green-600 mr-2"></i>
+            <h2 class="text-lg font-black text-gray-800">工坊配置</h2>
+        </div>
         
-        <div class="space-y-8 flex-1">
+        <div class="space-y-6 flex-1">
             <div>
-                <label class="block text-xs font-bold text-gray-400 uppercase mb-3">主角</label>
-                <div id="user-list-container" class="space-y-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar"></div>
+                <label class="block text-xs font-bold text-gray-400 uppercase mb-2">主角</label>
+                <div id="user-list-container" class="space-y-2 max-h-32 overflow-y-auto pr-1 custom-scrollbar"></div>
             </div>
             <div>
-                <label class="block text-xs font-bold text-gray-400 uppercase mb-3">时间范围</label>
+                <label class="block text-xs font-bold text-gray-400 uppercase mb-2">时间范围</label>
                 <div class="grid grid-cols-4 gap-2">
-                    <button onclick="setPeriod('all')" class="period-btn bg-gray-900 text-white text-xs py-2.5 rounded-lg font-bold" data-p="all">全量</button>
-                    <button onclick="setPeriod('year')" class="period-btn bg-gray-100 text-gray-500 text-xs py-2.5 rounded-lg font-bold hover:bg-gray-200" data-p="year">年度</button>
-                    <button onclick="setPeriod('month')" class="period-btn bg-gray-100 text-gray-500 text-xs py-2.5 rounded-lg font-bold hover:bg-gray-200" data-p="month">本月</button>
-                    <button onclick="setPeriod('week')" class="period-btn bg-gray-100 text-gray-500 text-xs py-2.5 rounded-lg font-bold hover:bg-gray-200" data-p="week">本周</button>
+                    <button onclick="setPeriod('all')" class="period-btn bg-gray-900 text-white text-xs py-2 rounded-lg font-bold" data-p="all">全量</button>
+                    <button onclick="setPeriod('year')" class="period-btn bg-gray-100 text-gray-500 text-xs py-2 rounded-lg font-bold hover:bg-gray-200" data-p="year">年度</button>
+                    <button onclick="setPeriod('month')" class="period-btn bg-gray-100 text-gray-500 text-xs py-2 rounded-lg font-bold hover:bg-gray-200" data-p="month">本月</button>
+                    <button onclick="setPeriod('week')" class="period-btn bg-gray-100 text-gray-500 text-xs py-2 rounded-lg font-bold hover:bg-gray-200" data-p="week">本周</button>
                 </div>
             </div>
             <div>
-                <label class="block text-xs font-bold text-gray-400 uppercase mb-3">主题色调</label>
-                <div class="grid grid-cols-6 gap-3">
+                <label class="block text-xs font-bold text-gray-400 uppercase mb-2">色调</label>
+                <div class="grid grid-cols-6 gap-2">
                     <div class="bg-option active" style="background: linear-gradient(135deg, #111827 0%, #000000 100%)" onclick="setBg(this, 'linear-gradient(135deg, #111827 0%, #000000 100%)')"></div>
                     <div class="bg-option" style="background: linear-gradient(135deg, #4c1d95 0%, #1e1b4b 100%)" onclick="setBg(this, 'linear-gradient(135deg, #4c1d95 0%, #1e1b4b 100%)')"></div>
                     <div class="bg-option" style="background: linear-gradient(135deg, #be123c 0%, #881337 100%)" onclick="setBg(this, 'linear-gradient(135deg, #be123c 0%, #881337 100%)')"></div>
                     <div class="bg-option" style="background: linear-gradient(135deg, #047857 0%, #064e3b 100%)" onclick="setBg(this, 'linear-gradient(135deg, #047857 0%, #064e3b 100%)')"></div>
                     <div class="bg-option" style="background: linear-gradient(135deg, #b45309 0%, #78350f 100%)" onclick="setBg(this, 'linear-gradient(135deg, #b45309 0%, #78350f 100%)')"></div>
-                    <div class="bg-option" style="background: linear-gradient(135deg, #0e7490 0%, #164e63 100%)" onclick="setBg(this, 'linear-gradient(135deg, #0e7490 0%, #164e63 100%)')"></div>
-                    <div class="bg-option" style="background: linear-gradient(135deg, #4b5563 0%, #1f2937 100%)" onclick="setBg(this, 'linear-gradient(135deg, #4b5563 0%, #1f2937 100%)')"></div>
-                    <div class="bg-option" style="background: linear-gradient(135deg, #1e3a8a 0%, #172554 100%)" onclick="setBg(this, 'linear-gradient(135deg, #1e3a8a 0%, #172554 100%)')"></div>
+                    <div class="bg-option" style="background: linear-gradient(135deg, #155e75 0%, #0e7490 100%)" onclick="setBg(this, 'linear-gradient(135deg, #155e75 0%, #0e7490 100%)')"></div>
                 </div>
             </div>
             <div>
-                <label class="block text-xs font-bold text-gray-400 uppercase mb-3">寄语</label>
-                <textarea id="custom-msg" rows="3" class="w-full border-gray-300 rounded-lg text-sm p-3 resize-none" oninput="document.getElementById('poster-msg').innerText = this.value">生活不仅有代码，还有电影。</textarea>
-                <button onclick="randomQuote()" class="text-xs text-blue-600 mt-2 hover:underline">🎲 随机一句</button>
+                <label class="block text-xs font-bold text-gray-400 uppercase mb-2">寄语</label>
+                <textarea id="custom-msg" rows="2" class="w-full border-gray-300 rounded-lg text-sm p-2 resize-none" oninput="document.getElementById('poster-msg').innerText = this.value">生活不仅有代码，还有电影。</textarea>
             </div>
         </div>
 
-        <div class="mt-6 space-y-3">
-            <button onclick="processCapture('download')" id="dl-btn" class="w-full py-4 bg-gray-900 hover:bg-black text-white font-bold rounded-xl shadow-lg transition flex justify-center items-center">
-                <i class="fa-solid fa-download mr-2"></i> 保存海报
+        <div class="mt-4 flex gap-2">
+            <button onclick="processCapture('download')" id="dl-btn" class="flex-1 py-3 bg-gray-900 text-white font-bold rounded-xl shadow-lg text-sm flex justify-center items-center">
+                <i class="fa-solid fa-download mr-2"></i> 保存
             </button>
-            <button onclick="processCapture('copy')" id="cp-btn" class="w-full py-4 bg-white border border-gray-300 text-gray-700 font-bold rounded-xl shadow-sm hover:bg-gray-50 transition flex justify-center items-center">
+            <button onclick="processCapture('copy')" id="cp-btn" class="flex-1 py-3 bg-white border border-gray-300 text-gray-700 font-bold rounded-xl shadow-sm text-sm flex justify-center items-center">
                 <i class="fa-regular fa-copy mr-2"></i> 复制
             </button>
         </div>
     </div>
 
-    <div class="flex-1" id="preview-wrapper">
+    <div id="preview-wrapper">
         <div id="scale-wrapper">
             
             <div id="capture-target" class="poster-container">
                 <div id="poster-bg-gradient" style="background: linear-gradient(135deg, #111827 0%, #000000 100%);"></div>
-                <div class="absolute inset-0 z-[1] opacity-10" style="background-image: url('https://www.transparenttextures.com/patterns/stardust.png'); pointer-events: none;"></div>
+                <div class="noise-layer"></div>
 
                 <div class="poster-content">
                     
                     <div class="flex justify-between items-start mb-8">
                         <div class="flex items-center gap-4 min-w-0">
                             <div class="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center text-3xl font-black shrink-0 border border-white/20 shadow-lg" id="poster-avatar">U</div>
-                            <div class="min-w-0" style="padding-top: 4px;"> <h2 class="text-3xl font-black text-truncate leading-tight" id="poster-user">Username</h2>
+                            <div class="min-w-0">
+                                <h2 class="text-3xl font-black text-truncate text-safe-render" id="poster-user">Username</h2>
                                 <p class="text-xs text-white/50 uppercase tracking-widest mt-1" id="poster-period-text">全量报告</p>
                             </div>
                         </div>
                         <div class="px-4 py-1.5 rounded-full text-xs font-bold bg-white/10 text-white shrink-0 border border-white/10" id="poster-tag">观影达人</div>
                     </div>
 
-                    <div class="glass-card flex items-center justify-between px-6">
-                        <div class="flex flex-col items-center">
-                            <span class="text-3xl font-black" id="poster-hours">0</span>
-                            <span class="text-[9px] text-white/40 uppercase font-bold mt-1">专注时长(h)</span>
-                        </div>
-                        <div class="w-px h-8 bg-white/10"></div>
-                        <div class="flex flex-col items-center">
-                            <span class="text-3xl font-black" id="poster-plays">0</span>
-                            <span class="text-[9px] text-white/40 uppercase font-bold mt-1">播放次数</span>
-                        </div>
-                        <div class="w-px h-8 bg-white/10"></div>
-                        <div class="flex flex-col items-center">
-                            <span class="text-3xl font-black text-green-400" id="poster-server-plays">0</span>
-                            <span class="text-[9px] text-white/40 uppercase font-bold mt-1">全服总播放</span>
-                        </div>
-                    </div>
-
-                    <div class="mb-6 shrink-0" id="top1-section" style="display:none;">
-                        <div class="text-xs font-bold text-yellow-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                            <i class="fa-solid fa-crown"></i> 年度最爱 Top 1
-                        </div>
-                        <div class="relative w-full aspect-[2/1] rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-gray-800">
-                            <div id="top1-bg" class="img-cover w-full h-full"></div>
-                            <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
-                            <div class="absolute bottom-4 left-5 right-5">
-                                <h3 class="text-2xl font-bold text-truncate" id="poster-top1-title">-</h3>
-                                <p class="text-sm text-white/60 mt-1"><span id="poster-top1-plays" class="text-white font-bold">0</span> 次播放</p>
+                    <div class="glass-card mb-8">
+                        <div class="grid grid-cols-3 divide-x divide-white/10">
+                            <div class="flex flex-col items-center justify-center px-2">
+                                <span class="text-2xl font-black text-safe-render" id="poster-hours">0</span>
+                                <span class="text-[9px] text-white/40 uppercase font-bold">专注时长(h)</span>
+                            </div>
+                            <div class="flex flex-col items-center justify-center px-2">
+                                <span class="text-2xl font-black text-safe-render" id="poster-plays">0</span>
+                                <span class="text-[9px] text-white/40 uppercase font-bold">播放次数</span>
+                            </div>
+                            <div class="flex flex-col items-center justify-center px-2">
+                                <span class="text-2xl font-black text-green-400 text-safe-render" id="poster-server-plays">0</span>
+                                <span class="text-[9px] text-white/40 uppercase font-bold">全服总播放</span>
                             </div>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4 mb-6 shrink-0" id="top23-section" style="display:none;">
-                        <div class="glass-card flex items-center gap-3 p-3 overflow-hidden !margin-0">
-                            <div id="top2-bg" class="w-10 h-14 bg-gray-700 rounded shrink-0 img-cover shadow-sm"></div>
-                            <div class="min-w-0">
-                                <div class="text-[9px] text-white/40 font-bold mb-0.5 uppercase">TOP 2</div>
-                                <div class="text-sm font-bold text-truncate" id="poster-top2-title">-</div>
-                            </div>
-                        </div>
-                        <div class="glass-card flex items-center gap-3 p-3 overflow-hidden !margin-0">
-                            <div id="top3-bg" class="w-10 h-14 bg-gray-700 rounded shrink-0 img-cover shadow-sm"></div>
-                            <div class="min-w-0">
-                                <div class="text-[9px] text-white/40 font-bold mb-0.5 uppercase">TOP 3</div>
-                                <div class="text-sm font-bold text-truncate" id="poster-top3-title">-</div>
-                            </div>
-                        </div>
+                    <div id="empty-state" class="flex-1 flex flex-col items-center justify-center text-white/30 hidden">
+                        <i class="fa-solid fa-ghost text-6xl mb-4"></i>
+                        <p class="text-sm">该时间段暂无收视数据</p>
                     </div>
 
-                    <div class="glass-card flex-1 mb-6 px-5 py-4 min-h-0" id="top-rest-section" style="display:none;">
-                        <div class="text-[10px] text-white/30 uppercase font-bold mb-2 tracking-wider">其余上榜</div>
-                        <div id="top-rest-list" class="space-y-1">
+                    <div id="data-content-area">
+                        <div class="mb-6 shrink-0" id="top1-section">
+                            <div class="text-xs font-bold text-yellow-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                                <i class="fa-solid fa-crown"></i> 年度最爱 Top 1
                             </div>
+                            <div class="relative w-full aspect-[2/1] rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-gray-800">
+                                <div id="top1-bg" class="img-cover w-full h-full"></div>
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
+                                <div class="absolute bottom-4 left-5 right-5">
+                                    <h3 class="text-2xl font-bold line-clamp-1 text-safe-render" id="poster-top1-title">-</h3>
+                                    <p class="text-sm text-white/60"><span id="poster-top1-plays" class="text-white font-bold">0</span> 次播放</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4 mb-6 shrink-0" id="top23-section">
+                            <div class="glass-card flex items-center gap-3 p-3 overflow-hidden !margin-0">
+                                <div id="top2-bg" class="w-10 h-14 bg-gray-700 rounded shrink-0 img-cover shadow-sm"></div>
+                                <div class="min-w-0">
+                                    <div class="text-[9px] text-white/40 font-bold mb-0.5 uppercase">TOP 2</div>
+                                    <div class="text-sm font-bold text-truncate text-safe-render" id="poster-top2-title">-</div>
+                                </div>
+                            </div>
+                            <div class="glass-card flex items-center gap-3 p-3 overflow-hidden !margin-0">
+                                <div id="top3-bg" class="w-10 h-14 bg-gray-700 rounded shrink-0 img-cover shadow-sm"></div>
+                                <div class="min-w-0">
+                                    <div class="text-[9px] text-white/40 font-bold mb-0.5 uppercase">TOP 3</div>
+                                    <div class="text-sm font-bold text-truncate text-safe-render" id="poster-top3-title">-</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="glass-card flex-1 mb-6 px-5 py-4 min-h-0" id="top-rest-section">
+                            <div class="text-[10px] text-white/30 uppercase font-bold mb-2 tracking-wider">其余上榜</div>
+                            <div id="top-rest-list" class="space-y-1"></div>
+                        </div>
                     </div>
 
                     <div class="mt-auto pt-6 border-t border-white/10 shrink-0">
-                        <p id="poster-msg" class="text-sm text-white/70 italic font-light leading-relaxed">生活不仅有代码，还有电影。</p>
+                        <p id="poster-msg" class="text-sm text-white/70 italic font-light line-clamp-2 leading-relaxed">生活不仅有代码，还有电影。</p>
                         <div class="mt-4 flex justify-between items-center opacity-40">
                             <span class="text-[10px] font-mono tracking-[0.2em]">EMBY PULSE</span>
                             <i class="fa-solid fa-heart-pulse text-green-500"></i>
@@ -210,16 +247,22 @@
 {% block scripts %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
-    const quotes = ["生活不仅有代码，还有电影。", "有些鸟儿是关不住的。", "能力越大，责任越大。", "念念不忘，必有回响。", "风起，唯有努力生存。", "好的电影，是一次灵魂的洗礼。"];
     let currentPeriod = 'all';
     let currentUserId = '';
 
+    // 响应式缩放
     function resizePreview() {
-        if (window.innerWidth < 1200) {
-            const wrapper = document.getElementById('preview-wrapper');
-            const scale = (wrapper.clientWidth - 40) / 440;
+        const wrapper = document.getElementById('preview-wrapper');
+        const containerWidth = document.querySelector('.poster-container').offsetWidth;
+        // 手机端不需要缩放太多，主要看 PC 端
+        if (window.innerWidth > 768) {
+            const scale = (wrapper.clientWidth - 60) / containerWidth;
             const finalScale = Math.min(scale, 1);
             document.getElementById('scale-wrapper').style.transform = `scale(${finalScale})`;
+        } else {
+            // 手机端：让它自然滚动，或者稍微缩小一点点以适应屏幕
+            const scale = (window.innerWidth - 40) / containerWidth;
+            document.getElementById('scale-wrapper').style.transform = `scale(${Math.min(scale, 1)})`;
         }
     }
     window.addEventListener('resize', resizePreview);
@@ -252,7 +295,7 @@
                 json.data.forEach((user, index) => {
                     const div = document.createElement('div');
                     div.className = `user-option p-2 border border-gray-200 rounded cursor-pointer hover:bg-gray-50 flex items-center mb-1 transition ${index===0?'selected bg-green-50 border-green-500':''}`;
-                    div.innerHTML = `<span class="text-xs font-bold mr-3 text-green-600 w-5">${user.UserName[0].toUpperCase()}</span><span class="text-sm text-truncate font-medium">${user.UserName}</span>`;
+                    div.innerHTML = `<span class="text-xs font-bold mr-3 text-green-600 w-5">${user.UserName[0].toUpperCase()}</span><span class="text-sm text-truncate font-medium flex-1">${user.UserName}</span>`;
                     div.onclick = () => {
                         document.querySelectorAll('.user-option').forEach(el => el.className = el.className.replace('selected bg-green-50 border-green-500', ''));
                         div.className += ' selected bg-green-50 border-green-500';
@@ -303,51 +346,60 @@
                 document.getElementById('poster-tag').innerText = data.tags[0] || "观影达人";
 
                 const list = data.top_list || [];
-                
-                // Top 1
-                const s1 = document.getElementById('top1-section');
-                if(list[0]) {
-                    s1.style.display = 'block';
-                    document.getElementById('poster-top1-title').innerText = list[0].ItemName;
-                    document.getElementById('poster-top1-plays').innerText = list[0].P;
-                    setDivBg('top1-bg', `/api/proxy/image/${list[0].ItemId}/backdrop`);
-                } else {
-                    s1.style.display = 'none';
-                }
+                const hasData = data.plays > 0;
 
-                // Top 2-3
-                const s23 = document.getElementById('top23-section');
-                if(list[1]) {
-                    s23.style.display = 'grid';
-                    updateCard(2, list[1]);
-                    updateCard(3, list[2]);
-                } else {
-                    s23.style.display = 'none';
-                }
+                // 控制空状态显示
+                if (hasData) {
+                    document.getElementById('data-content-area').style.display = 'block';
+                    document.getElementById('empty-state').style.display = 'none';
+                    
+                    // Top 1
+                    if(list[0]) {
+                        document.getElementById('top1-section').style.display = 'block';
+                        document.getElementById('poster-top1-title').innerText = list[0].ItemName;
+                        document.getElementById('poster-top1-plays').innerText = list[0].P;
+                        setDivBg('top1-bg', `/api/proxy/image/${list[0].ItemId}/backdrop`);
+                    } else {
+                        document.getElementById('top1-section').style.display = 'none';
+                    }
 
-                // Top 4-10
-                const sRest = document.getElementById('top-rest-section');
-                const listContainer = document.getElementById('top-rest-list');
-                let listHtml = '';
-                let hasRest = false;
-                
-                const maxCount = Math.min(list.length, 10);
-                
-                for(let i=3; i<maxCount; i++) {
-                    hasRest = true;
-                    listHtml += `
-                    <div class="rank-item">
-                        <span class="text-[10px] text-white/40 w-6 font-bold font-mono">0${i+1}</span>
-                        <span class="text-xs font-bold flex-1 text-truncate mr-2">${list[i].ItemName}</span>
-                        <span class="text-[9px] text-white/60 font-mono">${list[i].P}次</span>
-                    </div>`;
-                }
-                
-                if(hasRest) {
-                    sRest.style.display = 'flex';
-                    listContainer.innerHTML = listHtml;
+                    // Top 2-3
+                    const s23 = document.getElementById('top23-section');
+                    if(list[1]) {
+                        s23.style.display = 'grid';
+                        updateCard(2, list[1]);
+                        updateCard(3, list[2]);
+                    } else {
+                        s23.style.display = 'none';
+                    }
+
+                    // Top 4-10
+                    const sRest = document.getElementById('top-rest-section');
+                    const listContainer = document.getElementById('top-rest-list');
+                    let listHtml = '';
+                    let hasRest = false;
+                    const maxCount = Math.min(list.length, 10);
+                    
+                    for(let i=3; i<maxCount; i++) {
+                        hasRest = true;
+                        listHtml += `
+                        <div class="rank-item">
+                            <span class="text-[10px] text-white/40 w-6 font-bold font-mono">0${i+1}</span>
+                            <span class="text-xs font-bold flex-1 text-truncate mr-2 text-safe-render">${list[i].ItemName}</span>
+                            <span class="text-[9px] text-white/60 font-mono">${list[i].P}次</span>
+                        </div>`;
+                    }
+                    
+                    if(hasRest) {
+                        sRest.style.display = 'flex';
+                        listContainer.innerHTML = listHtml;
+                    } else {
+                        sRest.style.display = 'none';
+                    }
                 } else {
-                    sRest.style.display = 'none';
+                    // 无数据状态
+                    document.getElementById('data-content-area').style.display = 'none';
+                    document.getElementById('empty-state').style.display = 'flex';
                 }
                 
                 setTimeout(resizePreview, 100);
@@ -358,19 +410,15 @@
     function updateCard(rank, item) {
         const titleEl = document.getElementById(`poster-top${rank}-title`);
         const bgId = `top${rank}-bg`;
+        const card = document.getElementById(bgId).parentElement;
+        
         if(item) {
+            card.style.visibility = 'visible';
             titleEl.innerText = item.ItemName;
             setDivBg(bgId, `/api/proxy/image/${item.ItemId}/primary`);
         } else {
-            titleEl.innerText = "-";
-            setDivBg(bgId, '');
+            card.style.visibility = 'hidden';
         }
-    }
-
-    function randomQuote() {
-        const q = quotes[Math.floor(Math.random() * quotes.length)];
-        document.getElementById('custom-msg').value = q;
-        document.getElementById('poster-msg').innerText = q;
     }
 
     async function processCapture(action) {
@@ -390,8 +438,7 @@
                 scale: 2, 
                 useCORS: true, 
                 backgroundColor: '#111827',
-                width: 440, // 固定宽度
-                // 高度不指定，让它自动根据内容高度截图
+                width: 440,
                 windowWidth: 440,
                 x: 0, y: 0
             });
@@ -405,12 +452,11 @@
                 canvas.toBlob(blob => {
                     navigator.clipboard.write([new ClipboardItem({'image/png': blob})])
                         .then(() => alert("已复制!"))
-                        .catch(() => alert("复制失败"));
+                        .catch(() => alert("复制失败，请下载"));
                 });
             }
         } catch(e) { 
             alert("生成失败，请刷新重试"); 
-            console.error(e);
         } finally {
             scaler.style.transform = originalTransform;
             btn.innerHTML = originalText;
