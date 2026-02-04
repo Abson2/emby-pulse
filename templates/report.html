@@ -8,11 +8,10 @@
     html, body { height: 100%; margin: 0; background: #f3f4f6; font-family: "Microsoft YaHei", -apple-system, sans-serif !important; overflow: hidden; }
     .app-container { display: flex; height: 100%; }
     
-    /* ================= 预览区 (Preview Area) ================= */
+    /* ================= 预览区 ================= */
     .preview-area {
         flex: 1; overflow-y: auto; display: flex; justify-content: center; align-items: flex-start;
         padding: 40px 20px; background-color: #e5e7eb; -webkit-overflow-scrolling: touch;
-        /* Mobile: 底部留出工具栏高度 */
         padding-bottom: 120px; 
     }
 
@@ -22,34 +21,29 @@
         z-index: 50; display: block; box-shadow: -5px 0 15px rgba(0,0,0,0.05); overflow-y: auto;
     }
 
-    /* ================= 📱 V26 移动端交互：底部固定工具栏 ================= */
+    /* ================= 📱 移动端交互：底部固定工具栏 ================= */
     .mobile-toolbar {
         display: none; /* Desktop hidden */
         position: fixed; bottom: 0; left: 0; width: 100%; height: 70px;
         background: white; border-top: 1px solid #eee;
-        z-index: 500; /* 最高层级 */
-        align-items: center; justify-content: space-between;
-        padding: 0 15px; box-sizing: border-box;
-        box-shadow: 0 -5px 20px rgba(0,0,0,0.05);
+        z-index: 500; align-items: center; justify-content: space-between;
+        padding: 0 15px; box-sizing: border-box; box-shadow: 0 -5px 20px rgba(0,0,0,0.05);
     }
-    
-    /* 工具栏按钮 (原生 button，绝对可点) */
-    .toolbar-btn {
-        flex: 1; height: 44px; border-radius: 8px; border: none; 
-        font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
-    }
+    .toolbar-btn { flex: 1; height: 44px; border-radius: 8px; border: none; font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
     .btn-config { background: #f3f4f6; color: #333; margin-right: 10px; border: 1px solid #ddd; }
     .btn-save { background: #16a34a; color: white; flex: 1.5; box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3); }
 
-    /* 底部抽屉 (Bottom Sheet) */
+    /* 🔥 V27 修复：抽屉交互逻辑 */
     .bottom-sheet {
-        display: none; position: fixed; bottom: 0; left: 0; width: 100%;
+        display: block; /* 必须是block，否则transform无效 */
+        visibility: hidden; /* 默认不可见 */
+        position: fixed; bottom: 0; left: 0; width: 100%;
         background: white; border-radius: 20px 20px 0 0; padding: 25px; padding-bottom: 40px;
         box-shadow: 0 -10px 40px rgba(0,0,0,0.2); z-index: 200;
-        transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        transform: translateY(100%); transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
         max-height: 80vh; overflow-y: auto;
     }
-    .bottom-sheet.active { transform: translateY(0); }
+    .bottom-sheet.active { visibility: visible; transform: translateY(0); }
 
     .overlay {
         position: fixed; inset: 0; background: rgba(0,0,0,0.5);
@@ -65,7 +59,7 @@
         .preview-area { align-items: center; padding-top: 20px; }
     }
 
-    /* ================= 海报样式 (保持不变) ================= */
+    /* ================= 海报样式 ================= */
     :root { --theme-bg: #1a1a1a; --theme-card: rgba(255,255,255,0.08); --theme-text: white; --theme-highlight: #eab308; }
     .poster-canvas {
         width: 400px; min-height: 800px; height: auto;
@@ -81,7 +75,20 @@
     
     .p-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
     .user-box { display: flex; align-items: center; gap: 12px; }
-    .avatar { width: 54px; height: 54px; border-radius: 50%; background: var(--theme-card); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; border: 2px solid rgba(255,255,255,0.3); background-size: cover; background-position: center; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+    
+    /* 🔥 V27 美化：高级头像样式 */
+    .avatar { 
+        width: 54px; height: 54px; border-radius: 50%; 
+        /* 默认渐变兜底 */
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex; align-items: center; justify-content: center; 
+        font-size: 24px; font-weight: 900; color: white;
+        border: 2px solid rgba(255,255,255,0.8); 
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        background-size: cover; background-position: center; 
+        text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+    
     .user-info h1 { font-size: 24px; font-weight: 900; margin: 0; padding: 4px 0; }
     .user-info p { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; margin: 0; padding-bottom: 2px; }
     .server-pill { background: var(--theme-card); padding: 4px 10px; border-radius: 20px; font-size: 10px; border: 1px solid rgba(255,255,255,0.1); text-align: center; }
@@ -136,7 +143,7 @@
                 <div class="p-content">
                     <div class="p-header">
                         <div class="user-box">
-                            <div class="avatar" id="p-avatar" data-type="text">U</div>
+                            <div class="avatar" id="p-avatar">U</div>
                             <div class="user-info">
                                 <h1 id="p-user">User</h1>
                                 <p id="p-period">全量观影报告</p>
@@ -231,24 +238,17 @@
 
 {% block scripts %}
 <script>
-    // 全局错误哨兵
-    window.onerror = function(msg, url, line) {
-        alert("发生错误: " + msg + "\n请刷新页面重试。");
-        return false;
-    };
+    window.onerror = function(msg) { alert("发生错误: " + msg); return false; };
 </script>
 <script>
     let currentUserId = '';
     let currentUserName = 'User';
     let currentPeriod = 'month';
-    const periodMap = {'all':'全量','year':'年度','month':'本月','week':'本周'};
 
     function checkLayout() {
         const isMobile = window.innerWidth <= 768;
         const controlsHTML = document.getElementById('mobile-controls-container').innerHTML;
         const desktopContainer = document.getElementById('desktop-controls-container');
-        
-        // 桌面端加载侧边栏内容
         if (!isMobile && desktopContainer.innerHTML.trim() === '') {
             desktopContainer.innerHTML = controlsHTML + 
             `<button onclick="savePoster()" id="pc-save-btn" style="width: 100%; padding: 12px; background: #16a34a; color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 14px; margin-top: 20px;"><i class="fa-solid fa-download"></i> 保存海报</button>`;
@@ -331,12 +331,13 @@
         }
     }
 
+    // 🔥 V27 优化：生成双色流光渐变
     function getHashGradient(name) {
         let hash = 0;
         for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-        const hue1 = Math.abs(hash % 360);
-        const hue2 = (hue1 + 40) % 360;
-        return `linear-gradient(135deg, hsl(${hue1}, 70%, 50%), hsl(${hue2}, 70%, 50%))`;
+        const h1 = Math.abs(hash % 360);
+        const h2 = (h1 + 60) % 360; // 偏移60度，形成邻近色渐变
+        return `linear-gradient(135deg, hsl(${h1}, 80%, 60%), hsl(${h2}, 80%, 60%))`;
     }
 
     async function loadAvatar() {
@@ -352,6 +353,7 @@
             avatarEl.innerText = '';
             avatarEl.dataset.src = realUrl;
         } else {
+            // 生成美观的渐变
             avatarEl.style.backgroundImage = getHashGradient(currentUserName);
             avatarEl.style.color = 'white';
             avatarEl.style.textShadow = '0 2px 4px rgba(0,0,0,0.3)';
@@ -372,7 +374,9 @@
                 });
             }
         });
-        if(json.data && json.data.length > 0) changeUser(json.data[0].UserId);
+        if(json.data && json.data.length > 0) {
+            changeUser(json.data[0].UserId); // 🔥 强制触发一次，确保头像加载
+        }
     }
 
     function changeUser(uid) {
@@ -381,7 +385,8 @@
         const sel = document.querySelector('#user-select');
         currentUserName = sel.options[sel.selectedIndex].text;
         document.getElementById('p-user').innerText = currentUserName;
-        loadAvatar();
+        
+        loadAvatar(); // 每次换人刷新头像
         loadData();
     }
 
@@ -470,16 +475,9 @@
     }
 
     async function savePoster() {
-        // 检查html2canvas是否加载
-        if(typeof html2canvas === 'undefined') {
-            alert("截图组件加载失败，请检查网络或刷新页面。");
-            return;
-        }
-
-        const btnMob = document.getElementById('mobile-save-btn');
-        const btnPc = document.getElementById('pc-save-btn');
-        if(btnMob) btnMob.innerText = '生成中...';
-        if(btnPc) btnPc.innerText = '生成中...';
+        const btns = document.querySelectorAll('#save-btn');
+        btns.forEach(b => b.innerText = '生成中...');
+        toggleSheet(false); 
 
         const wrapper = document.getElementById('scale-wrapper');
         const oldT = wrapper.style.transform;
@@ -503,12 +501,10 @@
             link.download = `EmbyReport_${currentUserId}.png`;
             link.href = canvas.toDataURL();
             link.click();
-        } catch(e) { 
-            alert('海报生成出错: ' + e); 
-        } finally { 
+        } catch(e) { alert('Err: ' + e); } 
+        finally { 
             wrapper.style.transform = oldT; 
-            if(btnMob) btnMob.innerHTML = '<i class="fa-solid fa-download"></i> 保存海报';
-            if(btnPc) btnPc.innerHTML = '<i class="fa-solid fa-download"></i> 保存海报';
+            btns.forEach(b => b.innerHTML = '<i class="fa-solid fa-download"></i> 保存海报');
         }
     }
 

@@ -18,7 +18,7 @@ EMBY_HOST = os.getenv("EMBY_HOST", "http://127.0.0.1:8096").rstrip('/')
 EMBY_API_KEY = os.getenv("EMBY_API_KEY", "").strip()
 FALLBACK_IMAGE_URL = "https://img.hotimg.com/a444d32a033994d5b.png"
 
-print(f"--- EmbyPulse V26 (Mobile Stability) ---")
+print(f"--- EmbyPulse V27 (Final Fix) ---")
 print(f"DB Path: {DB_PATH}")
 
 app = FastAPI()
