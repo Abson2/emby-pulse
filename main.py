@@ -2,8 +2,9 @@ import sqlite3
 import os
 import uvicorn
 import requests
-import datetime
-import json
+import secrets
+import random
+import time
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -11,15 +12,27 @@ from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 
-# ================= 配置区域 =================
+# ================= 配置区域 (适配 Docker 环境变量) =================
 PORT = 10307
+# 优先读取环境变量，如果没有则使用默认值
 DB_PATH = os.getenv("DB_PATH", "/emby-data/playback_reporting.db")
 EMBY_HOST = os.getenv("EMBY_HOST", "http://127.0.0.1:8096").rstrip('/')
 EMBY_API_KEY = os.getenv("EMBY_API_KEY", "").strip()
 FALLBACK_IMAGE_URL = "https://img.hotimg.com/a444d32a033994d5b.png"
 
-print(f"--- EmbyPulse V27 (Final Fix) ---")
-print(f"DB Path: {DB_PATH}")
+# 🔥 启动自检 (查看 Docker 里的变量是否生效)
+print(f"\n{'='*40}")
+print(f"--- EmbyPulse V40 (Env Ready) ---")
+print(f"1. Database Path: {DB_PATH}")
+if os.path.exists(DB_PATH):
+    print(f"   ✅ File Status: Found (Size: {os.path.getsize(DB_PATH)/1024:.2f} KB)")
+else:
+    print(f"   ❌ File Status: NOT FOUND!")
+    print(f"      👉 请检查 docker-compose.yml 的 volumes 挂载是否正确")
+
+print(f"2. Emby Host: {EMBY_HOST}")
+print(f"3. API Key: {'✅ Set' if EMBY_API_KEY else '❌ Not Set (Images will fail)'}")
+print(f"{'='*40}\n")
 
 app = FastAPI()
 
@@ -36,10 +49,15 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 # ================= 数据库工具 =================
+# 修复: 移除 async，防止主线程阻塞
 def query_db(query, args=(), one=False):
-    if not os.path.exists(DB_PATH): return None
+    if not os.path.exists(DB_PATH): 
+        # 打印错误方便调试
+        print(f"⚠️ Error: DB file not found at {DB_PATH}")
+        return None
     try:
-        conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+        # 增加 timeout 防止死锁
+        conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True, timeout=10.0)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute(query, args)
@@ -50,17 +68,26 @@ def query_db(query, args=(), one=False):
         print(f"❌ SQL Error: {e}")
         return None
 
+# 简单的内存缓存，减少 API 请求
+_user_cache = {"data": {}, "expire": 0}
+
 def get_user_map():
+    global _user_cache
+    if _user_cache["data"] and time.time() < _user_cache["expire"]:
+        return _user_cache["data"]
+        
     user_map = {}
     if EMBY_API_KEY:
         try:
-            res = requests.get(f"{EMBY_HOST}/emby/Users?api_key={EMBY_API_KEY}", timeout=1)
+            # 增加 timeout
+            res = requests.get(f"{EMBY_HOST}/emby/Users?api_key={EMBY_API_KEY}", timeout=2)
             if res.status_code == 200:
                 for u in res.json(): user_map[u['Id']] = u['Name']
+                _user_cache = {"data": user_map, "expire": time.time() + 300} # 5分钟缓存
         except: pass
     return user_map
 
-# ================= 页面路由 =================
+# ================= 页面路由 (保留 async 无影响) =================
 @app.get("/")
 async def page_dashboard(request: Request): return templates.TemplateResponse("index.html", {"request": request, "active_page": "dashboard"})
 @app.get("/content")
@@ -70,9 +97,9 @@ async def page_report(request: Request): return templates.TemplateResponse("repo
 @app.get("/details")
 async def page_details(request: Request): return templates.TemplateResponse("details.html", {"request": request, "active_page": "details"})
 
-# ================= API: 基础用户 =================
+# ================= API: 基础用户 (改为 def) =================
 @app.get("/api/users")
-async def api_get_users():
+def api_get_users():
     try:
         results = query_db("SELECT DISTINCT UserId FROM PlaybackActivity")
         if not results: return {"status": "success", "data": []}
@@ -87,9 +114,9 @@ async def api_get_users():
         return {"status": "success", "data": data}
     except Exception as e: return {"status": "error", "message": str(e)}
 
-# ================= API: 仪表盘 =================
+# ================= API: 仪表盘 (改为 def) =================
 @app.get("/api/stats/dashboard")
-async def api_dashboard(user_id: Optional[str] = None):
+def api_dashboard(user_id: Optional[str] = None):
     try:
         where, params = "WHERE 1=1", []
         if user_id and user_id != 'all':
@@ -106,13 +133,14 @@ async def api_dashboard(user_id: Optional[str] = None):
     except: return {"status": "error", "data": {"total_plays":0}}
 
 @app.get("/api/stats/recent")
-async def api_recent_activity(user_id: Optional[str] = None):
+def api_recent_activity(user_id: Optional[str] = None):
     try:
         where, params = "WHERE 1=1", []
         if user_id and user_id != 'all':
             where += " AND UserId = ?"
             params.append(user_id)
-        sql = f"SELECT DateCreated, UserId, ItemId, ItemName, ItemType FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 200"
+        # 限制 100 条，防止数据量太大
+        sql = f"SELECT DateCreated, UserId, ItemId, ItemName, ItemType FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 100"
         results = query_db(sql, params)
         if not results: return {"status": "success", "data": []}
         user_map = get_user_map()
@@ -126,15 +154,16 @@ async def api_recent_activity(user_id: Optional[str] = None):
             if ' - ' in raw_name: clean_name = raw_name.split(' - ')[0]
             item['DisplayName'] = clean_name
             if item['ItemType'] == 'Episode':
-                if clean_name in seen_keys: continue
-                seen_keys.add(clean_name)
+                key = f"{item['UserId']}_{clean_name}"
+                if key in seen_keys: continue
+                seen_keys.add(key)
             final_data.append(item)
             if len(final_data) >= 20: break 
         return {"status": "success", "data": final_data}
     except Exception as e: return {"status": "error", "data": []}
 
 @app.get("/api/live")
-async def api_live_sessions():
+def api_live_sessions():
     if not EMBY_API_KEY: return {"status": "error"}
     try:
         res = requests.get(f"{EMBY_HOST}/emby/Sessions?api_key={EMBY_API_KEY}", timeout=2)
@@ -143,9 +172,9 @@ async def api_live_sessions():
     except: pass
     return {"status": "success", "data": []}
 
-# ================= API: 排行/洞察/图表 =================
+# ================= API: 排行/洞察/图表 (改为 def) =================
 @app.get("/api/stats/top_movies")
-async def api_top_movies(user_id: Optional[str] = None, category: str = 'all', sort_by: str = 'count'):
+def api_top_movies(user_id: Optional[str] = None, category: str = 'all', sort_by: str = 'count'):
     try:
         where, params = "WHERE 1=1", []
         if user_id and user_id != 'all':
@@ -153,8 +182,12 @@ async def api_top_movies(user_id: Optional[str] = None, category: str = 'all', s
             params.append(user_id)
         if category == 'Movie': where += " AND ItemType = 'Movie'"
         elif category == 'Episode': where += " AND ItemType = 'Episode'"
-        sql = f"SELECT ItemName, ItemId, ItemType, PlayDuration FROM PlaybackActivity {where}"
+        
+        # 增加 LIMIT 限制查询量
+        sql = f"SELECT ItemName, ItemId, ItemType, PlayDuration FROM PlaybackActivity {where} LIMIT 2000"
         rows = query_db(sql, params)
+        if not rows: return {"status": "success", "data": []}
+
         aggregated = {}
         for row in rows:
             raw_name = row['ItemName']
@@ -172,7 +205,7 @@ async def api_top_movies(user_id: Optional[str] = None, category: str = 'all', s
     except: return {"status": "error", "data": []}
 
 @app.get("/api/stats/user_details")
-async def api_user_details(user_id: Optional[str] = None):
+def api_user_details(user_id: Optional[str] = None):
     try:
         where, params = "WHERE 1=1", []
         if user_id and user_id != 'all':
@@ -195,7 +228,7 @@ async def api_user_details(user_id: Optional[str] = None):
     except: return {"status": "error", "data": {"hourly": {}, "devices": [], "logs": []}}
 
 @app.get("/api/stats/chart")
-async def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'month'):
+def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'month'):
     try:
         where, params = "WHERE 1=1", []
         if user_id and user_id != 'all':
@@ -218,9 +251,9 @@ async def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'month
         return {"status": "success", "data": data}
     except: return {"status": "error", "data": {}}
 
-# ================= API: 海报生成 =================
+# ================= API: 海报生成 (改为 def) =================
 @app.get("/api/stats/poster_data")
-async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
+def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
     try:
         where, params = "WHERE 1=1", []
         date_filter = ""
@@ -274,9 +307,9 @@ async def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
         }
     except Exception as e: return {"status": "error", "message": str(e), "data": {"plays": 0, "hours": 0, "server_plays": 0, "top_list": []}}
 
-# ================= 辅助 API =================
+# ================= 辅助 API (改为 def) =================
 @app.get("/api/stats/top_users_list")
-async def api_top_users_list():
+def api_top_users_list():
     try:
         res = query_db("SELECT UserId, COUNT(*) as Plays, SUM(PlayDuration) as TotalTime FROM PlaybackActivity GROUP BY UserId ORDER BY TotalTime DESC LIMIT 5")
         if not res: return {"status": "success", "data": []}
@@ -290,7 +323,7 @@ async def api_top_users_list():
     except: return {"status": "success", "data": []}
 
 @app.get("/api/proxy/image/{item_id}/{img_type}")
-async def proxy_image(item_id: str, img_type: str):
+def proxy_image(item_id: str, img_type: str):
     target_id = item_id
     if img_type == 'primary' and EMBY_API_KEY:
         try:
@@ -313,7 +346,7 @@ async def proxy_image(item_id: str, img_type: str):
     return RedirectResponse(FALLBACK_IMAGE_URL)
 
 @app.get("/api/proxy/user_image/{user_id}")
-async def proxy_user_image(user_id: str):
+def proxy_user_image(user_id: str):
     if not EMBY_API_KEY: return Response(status_code=404)
     try:
         url = f"{EMBY_HOST}/emby/Users/{user_id}/Images/Primary?maxHeight=200"
@@ -325,7 +358,7 @@ async def proxy_user_image(user_id: str):
     return Response(status_code=404)
 
 @app.get("/api/stats/badges")
-async def api_badges(user_id: Optional[str] = None):
+def api_badges(user_id: Optional[str] = None):
     try:
         where, params = "WHERE 1=1", []
         if user_id and user_id != 'all': where += " AND UserId = ?"; params.append(user_id)
@@ -337,7 +370,7 @@ async def api_badges(user_id: Optional[str] = None):
     except: return {"status": "success", "data": []}
 
 @app.get("/api/stats/monthly_stats")
-async def api_monthly_stats(user_id: Optional[str] = None):
+def api_monthly_stats(user_id: Optional[str] = None):
     try:
         where, params = "WHERE DateCreated > date('now', '-12 months')", []
         if user_id and user_id != 'all': where += " AND UserId = ?"; params.append(user_id)
