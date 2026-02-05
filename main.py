@@ -2,10 +2,8 @@ import sqlite3
 import os
 import uvicorn
 import requests
-import datetime
-import json
-import time
-from fastapi import FastAPI, Request, Response, HTTPException
+import random
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -19,17 +17,33 @@ PORT = 10307
 DB_PATH = os.getenv("DB_PATH", "/emby-data/playback_reporting.db")
 EMBY_HOST = os.getenv("EMBY_HOST", "http://127.0.0.1:8096").rstrip('/')
 EMBY_API_KEY = os.getenv("EMBY_API_KEY", "").strip()
-# 🔥 新增: Session 密钥，生产环境建议修改
-SECRET_KEY = os.getenv("SECRET_KEY", "embypulse_secret_key_2026") 
+SECRET_KEY = os.getenv("SECRET_KEY", "embypulse_secret_key_2026")
+
+# 🔥 新增: TMDB API Key (去 https://www.themoviedb.org/settings/api 申请，留空则使用内置精选壁纸)
+TMDB_API_KEY = os.getenv("TMDB_API_KEY", "") 
+
 FALLBACK_IMAGE_URL = "https://img.hotimg.com/a444d32a033994d5b.png"
 
-print(f"--- EmbyPulse V45 (Auth System Integration) ---")
+# 🔥 内置 TMDB 高清壁纸库 (保底策略，无 Key 时使用)
+TMDB_FALLBACK_POOL = [
+    "https://image.tmdb.org/t/p/original/zfbjgQE1uSd9wiPTX4VzsLi0rGG.jpg", # Oppenheimer
+    "https://image.tmdb.org/t/p/original/rLb2cs785pePbIKYQz1CADtovh7.jpg", # Interstellar
+    "https://image.tmdb.org/t/p/original/tmU7GeKVybMWFButWEGl2M4GeiP.jpg", # The Godfather
+    "https://image.tmdb.org/t/p/original/kXfqcdQKsToO0OUXHcrrNCHDBzO.jpg", # The Shawshank Redemption
+    "https://image.tmdb.org/t/p/original/zb6fM1CX41D9rF9hdgclu0peUmy.jpg", # Galexy
+    "https://image.tmdb.org/t/p/original/vI3aUGTuRRdM7J78KIdW98Lnidq.jpg", # Dune Part Two
+    "https://image.tmdb.org/t/p/original/jXJxMcVoEuXzym3vFnjqDW4ifo6.jpg", # Dune Part One
+    "https://image.tmdb.org/t/p/original/sRLC052ieEroxViUFWa3KD77SII.jpg", # Dark Knight
+    "https://image.tmdb.org/t/p/original/mSDsSDwaP3E7dEfUPWy4J0djt4O.jpg", # Spirited Away
+    "https://image.tmdb.org/t/p/original/lzWHmYdfeFiMIY4JaMmtR7GEli3.jpg", # Your Name
+]
+
+print(f"--- EmbyPulse V46 (TMDB Login Wallpaper) ---")
 print(f"DB Path: {DB_PATH}")
 
 app = FastAPI()
 
-# 🔥 启用 Session 中间件 (用于保存登录状态)
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=86400*7) # 7天过期
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=86400*7)
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,7 +57,6 @@ if not os.path.exists("static"): os.makedirs("static")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# ================= 数据模型 =================
 class LoginModel(BaseModel):
     username: str
     password: str
@@ -73,31 +86,19 @@ def get_user_map():
         except: pass
     return user_map
 
-# ================= 🔐 认证路由 (新增) =================
+# ================= 🔐 认证与壁纸路由 =================
 
 @app.get("/login")
 async def page_login(request: Request):
-    # 如果已经登录，直接跳到首页
-    if request.session.get("user"):
-        return RedirectResponse("/")
+    if request.session.get("user"): return RedirectResponse("/")
     return templates.TemplateResponse("login.html", {"request": request})
 
 @app.post("/api/login")
 def api_login(data: LoginModel, request: Request):
-    """
-    调用 Emby 原生接口验证账号密码
-    """
     try:
-        # Emby 认证接口
         auth_url = f"{EMBY_HOST}/emby/Users/AuthenticateByName"
-        # 构造 Emby 认证头，模拟官方客户端
-        headers = {
-            "X-Emby-Authorization": 'MediaBrowser Client="EmbyPulse", Device="Web", DeviceId="EmbyPulse", Version="1.0.0"'
-        }
-        payload = {
-            "Username": data.username,
-            "Pw": data.password
-        }
+        headers = {"X-Emby-Authorization": 'MediaBrowser Client="EmbyPulse", Device="Web", DeviceId="EmbyPulse", Version="1.0.0"'}
+        payload = {"Username": data.username, "Pw": data.password}
         
         res = requests.post(auth_url, json=payload, headers=headers, timeout=5)
         
@@ -105,11 +106,9 @@ def api_login(data: LoginModel, request: Request):
             user_data = res.json()
             user_info = user_data.get("User", {})
             
-            # 🔒 关键安全检查：必须是管理员
             if not user_info.get("Policy", {}).get("IsAdministrator", False):
                 return {"status": "error", "message": "仅限 Emby 管理员登录"}
             
-            # 登录成功，写入 Session
             request.session["user"] = {
                 "id": user_info.get("Id"),
                 "name": user_info.get("Name"),
@@ -118,7 +117,6 @@ def api_login(data: LoginModel, request: Request):
             return {"status": "success", "message": "登录成功"}
         else:
             return {"status": "error", "message": "用户名或密码错误"}
-            
     except Exception as e:
         print(f"Login Error: {e}")
         return {"status": "error", "message": "连接 Emby 服务器失败"}
@@ -128,29 +126,56 @@ async def api_logout(request: Request):
     request.session.clear()
     return RedirectResponse("/login")
 
-# ================= 页面路由 (已加保护) =================
+# 🔥 新增接口: 获取 TMDB 壁纸 (优先 API，保底使用内置库)
+@app.get("/api/wallpaper")
+def api_get_wallpaper():
+    # 策略1: 如果配置了 Key，尝试从 TMDB 获取本周热门
+    if TMDB_API_KEY:
+        try:
+            url = f"https://api.themoviedb.org/3/trending/all/week?api_key={TMDB_API_KEY}&language=zh-CN"
+            res = requests.get(url, timeout=3)
+            if res.status_code == 200:
+                data = res.json()
+                results = data.get("results", [])
+                # 过滤掉没有背景图的
+                valid_items = [item for item in results if item.get("backdrop_path")]
+                if valid_items:
+                    # 随机选一个
+                    target = random.choice(valid_items)
+                    return {
+                        "status": "success", 
+                        "url": f"https://image.tmdb.org/t/p/original{target['backdrop_path']}",
+                        "title": target.get("title") or target.get("name")
+                    }
+        except Exception as e:
+            print(f"TMDB Fetch Error: {e}")
+    
+    # 策略2: 无 Key 或 请求失败，使用内置高清库
+    random_bg = random.choice(TMDB_FALLBACK_POOL)
+    return {"status": "success", "url": random_bg, "title": "Cinematic Collection"}
+
+# ================= 页面路由 (保护) =================
 @app.get("/")
 async def page_dashboard(request: Request):
-    # 🔒 登录拦截
-    if not request.session.get("user"): return RedirectResponse("/login", status_code=302)
+    if not request.session.get("user"): return RedirectResponse("/login")
     return templates.TemplateResponse("index.html", {"request": request, "active_page": "dashboard", "user": request.session.get("user")})
 
 @app.get("/content")
 async def page_content(request: Request):
-    if not request.session.get("user"): return RedirectResponse("/login", status_code=302)
+    if not request.session.get("user"): return RedirectResponse("/login")
     return templates.TemplateResponse("content.html", {"request": request, "active_page": "content", "user": request.session.get("user")})
 
 @app.get("/report")
 async def page_report(request: Request):
-    if not request.session.get("user"): return RedirectResponse("/login", status_code=302)
+    if not request.session.get("user"): return RedirectResponse("/login")
     return templates.TemplateResponse("report.html", {"request": request, "active_page": "report", "user": request.session.get("user")})
 
 @app.get("/details")
 async def page_details(request: Request):
-    if not request.session.get("user"): return RedirectResponse("/login", status_code=302)
+    if not request.session.get("user"): return RedirectResponse("/login")
     return templates.TemplateResponse("details.html", {"request": request, "active_page": "details", "user": request.session.get("user")})
 
-# ================= API: 基础用户 =================
+# ================= API: 基础数据 =================
 @app.get("/api/users")
 def api_get_users():
     try:
@@ -167,7 +192,6 @@ def api_get_users():
         return {"status": "success", "data": data}
     except Exception as e: return {"status": "error", "message": str(e)}
 
-# ================= API: 仪表盘 (含媒体库统计) =================
 @app.get("/api/stats/dashboard")
 def api_dashboard(user_id: Optional[str] = None):
     try:
@@ -195,14 +219,11 @@ def api_dashboard(user_id: Optional[str] = None):
                     library_stats["movie"] = data.get("MovieCount", 0)
                     library_stats["series"] = data.get("SeriesCount", 0)
                     library_stats["episode"] = data.get("EpisodeCount", 0)
-            except Exception as e:
-                print(f"⚠️ Library Stats Error: {e}")
+            except Exception as e: pass
 
         return {"status": "success", "data": {**base_stats, "library": library_stats}}
-
     except: return {"status": "error", "data": {"total_plays":0, "library": {}}}
 
-# ================= API: 最近播放 (LIMIT 1000) =================
 @app.get("/api/stats/recent")
 def api_recent_activity(user_id: Optional[str] = None):
     try:
@@ -300,10 +321,9 @@ def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'day'):
         if user_id and user_id != 'all':
             where += " AND UserId = ?"
             params.append(user_id)
-        
         sql = ""
         if dimension == 'week':
-            where += " AND DateCreated > date('now', '-84 days')" # 12周 = 84天
+            where += " AND DateCreated > date('now', '-84 days')" 
             sql = f"SELECT strftime('%Y-W%W', DateCreated) as Label, SUM(PlayDuration) as Duration FROM PlaybackActivity {where} GROUP BY Label ORDER BY Label"
         elif dimension == 'month':
             where += " AND DateCreated > date('now', '-12 months')"
@@ -311,16 +331,12 @@ def api_chart_stats(user_id: Optional[str] = None, dimension: str = 'day'):
         else:
             where += " AND DateCreated > date('now', '-30 days')"
             sql = f"SELECT date(DateCreated) as Label, SUM(PlayDuration) as Duration FROM PlaybackActivity {where} GROUP BY Label ORDER BY Label"
-            
         results = query_db(sql, params)
         data = {}
         if results:
-            for r in results: 
-                data[r['Label']] = int(r['Duration'])
+            for r in results: data[r['Label']] = int(r['Duration'])
         return {"status": "success", "data": data}
-    except Exception as e:
-        print(f"Chart Error: {e}")
-        return {"status": "error", "data": {}}
+    except: return {"status": "error", "data": {}}
 
 @app.get("/api/stats/poster_data")
 def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
@@ -365,16 +381,7 @@ def api_poster_data(user_id: Optional[str] = None, period: str = 'all'):
         top_list = top_list[:10]
         total_hours = round(total_duration / 3600)
         
-        return {
-            "status": "success",
-            "data": {
-                "plays": total_plays,
-                "hours": total_hours,
-                "server_plays": server_plays,
-                "top_list": top_list,
-                "tags": ["观影达人"]
-            }
-        }
+        return {"status": "success", "data": {"plays": total_plays, "hours": total_hours, "server_plays": server_plays, "top_list": top_list, "tags": ["观影达人"]}}
     except Exception as e: return {"status": "error", "message": str(e), "data": {"plays": 0, "hours": 0, "server_plays": 0, "top_list": []}}
 
 @app.get("/api/stats/top_users_list")
@@ -431,40 +438,23 @@ def api_badges(user_id: Optional[str] = None):
     try:
         where, params = "WHERE 1=1", []
         if user_id and user_id != 'all': where += " AND UserId = ?"; params.append(user_id)
-        
         badges = []
-        
         night_res = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where} AND strftime('%H', DateCreated) BETWEEN '02' AND '05'", params)
-        if night_res and night_res[0]['c'] > 5:
-            badges.append({"id": "night", "name": "修仙党", "icon": "fa-moon", "color": "text-purple-500", "bg": "bg-purple-100", "desc": "深夜是灵魂最自由的时刻"})
-            
+        if night_res and night_res[0]['c'] > 5: badges.append({"id": "night", "name": "修仙党", "icon": "fa-moon", "color": "text-purple-500", "bg": "bg-purple-100", "desc": "深夜是灵魂最自由的时刻"})
         weekend_res = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where} AND strftime('%w', DateCreated) IN ('0', '6')", params)
-        if weekend_res and weekend_res[0]['c'] > 10:
-             badges.append({"id": "weekend", "name": "周末狂欢", "icon": "fa-champagne-glasses", "color": "text-pink-500", "bg": "bg-pink-100", "desc": "工作日唯唯诺诺，周末重拳出击"})
-
+        if weekend_res and weekend_res[0]['c'] > 10: badges.append({"id": "weekend", "name": "周末狂欢", "icon": "fa-champagne-glasses", "color": "text-pink-500", "bg": "bg-pink-100", "desc": "工作日唯唯诺诺，周末重拳出击"})
         dur_res = query_db(f"SELECT SUM(PlayDuration) as d FROM PlaybackActivity {where}", params)
         total_dur = dur_res[0]['d'] if dur_res and dur_res[0]['d'] else 0
-        if total_dur > 360000:
-             badges.append({"id": "liver", "name": "Emby肝帝", "icon": "fa-fire", "color": "text-red-500", "bg": "bg-red-100", "desc": "阅片无数，心中的码比片还厚"})
-
+        if total_dur > 360000: badges.append({"id": "liver", "name": "Emby肝帝", "icon": "fa-fire", "color": "text-red-500", "bg": "bg-red-100", "desc": "阅片无数，心中的码比片还厚"})
         type_res = query_db(f"SELECT ItemType, COUNT(*) as c FROM PlaybackActivity {where} GROUP BY ItemType", params)
         type_counts = {row['ItemType']: row['c'] for row in type_res or []}
-        movies = type_counts.get('Movie', 0)
-        episodes = type_counts.get('Episode', 0)
-        
-        if movies > 20 and movies > episodes:
-             badges.append({"id": "movie", "name": "电影迷", "icon": "fa-film", "color": "text-blue-500", "bg": "bg-blue-100", "desc": "两小时体验一种人生"})
-        elif episodes > 50 and episodes > movies:
-             badges.append({"id": "series", "name": "追剧狂魔", "icon": "fa-tv", "color": "text-green-500", "bg": "bg-green-100", "desc": "下一集...再看一集就睡"})
-
+        movies = type_counts.get('Movie', 0); episodes = type_counts.get('Episode', 0)
+        if movies > 20 and movies > episodes: badges.append({"id": "movie", "name": "电影迷", "icon": "fa-film", "color": "text-blue-500", "bg": "bg-blue-100", "desc": "两小时体验一种人生"})
+        elif episodes > 50 and episodes > movies: badges.append({"id": "series", "name": "追剧狂魔", "icon": "fa-tv", "color": "text-green-500", "bg": "bg-green-100", "desc": "下一集...再看一集就睡"})
         morning_res = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where} AND strftime('%H', DateCreated) BETWEEN '06' AND '09'", params)
-        if morning_res and morning_res[0]['c'] > 5:
-            badges.append({"id": "morning", "name": "早起鸟", "icon": "fa-sun", "color": "text-orange-500", "bg": "bg-orange-100", "desc": "一日之计在于晨"})
-
+        if morning_res and morning_res[0]['c'] > 5: badges.append({"id": "morning", "name": "早起鸟", "icon": "fa-sun", "color": "text-orange-500", "bg": "bg-orange-100", "desc": "一日之计在于晨"})
         return {"status": "success", "data": badges}
-    except Exception as e:
-        print(f"Badge Error: {e}")
-        return {"status": "success", "data": []}
+    except: return {"status": "success", "data": []}
 
 @app.get("/api/stats/monthly_stats")
 def api_monthly_stats(user_id: Optional[str] = None):
