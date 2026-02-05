@@ -33,6 +33,7 @@
                 <span class="text-[10px] text-gray-400 font-bold tracking-widest uppercase block mt-0.5">映 迹</span>
             </div>
         </div>
+        
         <nav class="flex-1 px-4 py-6 space-y-2">
             <a href="/" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 {% if active_page == 'dashboard' %}active{% else %}text-gray-500{% endif %}">
                 <i class="fa-solid fa-chart-line w-6"></i> <span class="ml-2">仪表盘</span>
@@ -47,13 +48,21 @@
                 <i class="fa-solid fa-wand-magic-sparkles w-6"></i> <span class="ml-2">映迹工坊</span>
             </a>
         </nav>
+
         <div class="p-4 border-t border-gray-100">
-            <div class="flex items-center">
-                <div class="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center font-bold text-green-700">A</div>
-                <div class="ml-3">
-                    <p class="text-sm font-medium text-gray-900">管理员</p>
-                    <p class="text-xs text-green-600 flex items-center"><span class="w-2 h-2 bg-green-500 rounded-full mr-1"></span>在线</p>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center overflow-hidden">
+                    <div class="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center font-bold text-green-700 shrink-0">
+                        {{ (user.name[0] if user and user.name else 'A') | upper }}
+                    </div>
+                    <div class="ml-3 truncate">
+                        <p class="text-sm font-medium text-gray-900 truncate">{{ user.name if user else '管理员' }}</p>
+                        <p class="text-xs text-green-600 flex items-center"><span class="w-2 h-2 bg-green-500 rounded-full mr-1"></span>在线</p>
+                    </div>
                 </div>
+                <a href="/logout" title="退出登录" class="text-gray-400 hover:text-red-500 transition p-2 rounded-full hover:bg-red-50">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                </a>
             </div>
         </div>
     </aside>
@@ -81,6 +90,11 @@
                 <i class="fa-solid fa-wand-magic-sparkles w-6"></i> <span class="ml-2">映迹工坊</span>
             </a>
         </nav>
+        <div class="p-4 border-t border-gray-100 bg-gray-50">
+            <a href="/logout" class="flex items-center justify-center w-full px-4 py-2 bg-white border border-gray-200 text-red-500 rounded-lg shadow-sm font-bold text-sm">
+                <i class="fa-solid fa-right-from-bracket mr-2"></i> 退出登录
+            </a>
+        </div>
     </aside>
 
     <main class="flex-1 flex flex-col h-full overflow-hidden relative w-full">

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - EmbyPulse</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;500;700;900&display=swap');
+        body { font-family: 'Noto Sans SC', sans-serif; }
+        
+        .bg-poster {
+            position: fixed; inset: 0; z-index: -1;
+            background-size: cover; background-position: center;
+            transition: opacity 1s ease-in-out;
+            opacity: 0;
+        }
+        .bg-overlay {
+            position: fixed; inset: 0; z-index: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0.3));
+            backdrop-filter: blur(8px);
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen text-white">
+
+    <div id="bg-img" class="bg-poster"></div>
+    <div class="bg-overlay"></div>
+
+    <div class="glass-panel w-full max-w-md p-8 rounded-2xl z-10 mx-4 transition-all duration-300" id="login-card">
+        <div class="text-center mb-8">
+            <i class="fa-solid fa-heart-pulse text-green-400 text-4xl mb-4 animate-pulse"></i>
+            <h1 class="text-3xl font-black tracking-tight">EmbyPulse</h1>
+            <p class="text-gray-300 text-sm mt-2">管理员身份验证</p>
+        </div>
+
+        <form id="login-form" class="space-y-6" onsubmit="handleLogin(event)">
+            <div>
+                <label class="block text-xs font-bold uppercase text-gray-400 mb-2">Emby 用户名</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400"><i class="fa-solid fa-user"></i></span>
+                    <input type="text" id="username" required 
+                        class="w-full bg-black/20 border border-white/10 rounded-lg py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+                        placeholder="请输入用户名">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-gray-400 mb-2">密码</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400"><i class="fa-solid fa-lock"></i></span>
+                    <input type="password" id="password"
+                        class="w-full bg-black/20 border border-white/10 rounded-lg py-3 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+                        placeholder="请输入密码 (如无密码请留空)">
+                </div>
+            </div>
+
+            <button type="submit" id="submit-btn"
+                class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-lg shadow-lg transform transition hover:scale-[1.02] active:scale-95 flex items-center justify-center">
+                <span>登 录</span>
+                <i class="fa-solid fa-arrow-right ml-2"></i>
+            </button>
+        </form>
+        
+        <p class="text-center text-xs text-gray-500 mt-8">
+            &copy; 2026 EmbyPulse Data Center
+        </p>
+    </div>
+
+    <script>
+        // 1. 动态获取背景图
+        async function loadBackground() {
+            try {
+                // 复用 Top Movies 接口获取一张高分电影海报
+                const res = await fetch('/api/stats/top_movies?limit=1');
+                const json = await res.json();
+                if(json.status === 'success' && json.data.length > 0) {
+                    const item = json.data[Math.floor(Math.random() * json.data.length)]; // 随机取一张
+                    const imgUrl = `/api/proxy/image/${item.ItemId}/backdrop`;
+                    
+                    const img = new Image();
+                    img.src = imgUrl;
+                    img.onload = () => {
+                        const el = document.getElementById('bg-img');
+                        el.style.backgroundImage = `url('${imgUrl}')`;
+                        el.style.opacity = '1';
+                    };
+                }
+            } catch(e) { console.error("BG Load Error:", e); }
+        }
+        loadBackground();
+
+        // 2. 登录逻辑
+        async function handleLogin(e) {
+            e.preventDefault();
+            const btn = document.getElementById('submit-btn');
+            const card = document.getElementById('login-card');
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+
+            // Loading 状态
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+            btn.disabled = true;
+            btn.classList.add('opacity-70', 'cursor-not-allowed');
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user, password: pass })
+                });
+                const json = await res.json();
+
+                if(json.status === 'success') {
+                    window.location.href = '/';
+                } else {
+                    throw new Error(json.message);
+                }
+            } catch (err) {
+                // 错误处理
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                btn.classList.remove('opacity-70', 'cursor-not-allowed');
+                
+                // 错误动画
+                card.classList.add('shake');
+                setTimeout(() => card.classList.remove('shake'), 500);
+                
+                // 简单的 Toast 提示 (也可以用 alert)
+                const toast = document.createElement('div');
+                toast.className = 'fixed top-5 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-full shadow-xl z-50 text-sm font-bold flex items-center animate-bounce';
+                toast.innerHTML = `<i class="fa-solid fa-circle-exclamation mr-2"></i> ${err.message}`;
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 3000);
+            }
+        }
+    </script>
+</body>
+</html>
