@@ -84,7 +84,7 @@ TMDB_FALLBACK_POOL = [
     "https://image.tmdb.org/t/p/original/lzWHmYdfeFiMIY4JaMmtR7GEli3.jpg",
 ]
 
-print(f"--- EmbyPulse V54 (Ultimate Bot) ---")
+print(f"--- EmbyPulse V55 (Notification Fix) ---")
 
 app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=86400*7)
@@ -149,7 +149,7 @@ def get_user_map():
         except: pass
     return user_map
 
-# ================= 🤖 Telegram Bot 核心逻辑 (v2.2) =================
+# ================= 🤖 Telegram Bot 核心逻辑 =================
 class TelegramBot:
     def __init__(self):
         self.running = False
@@ -187,12 +187,9 @@ class TelegramBot:
     # 🔥 IP 归属地查询
     def _get_location(self, ip):
         if not ip: return "未知"
-        # 内网 IP 判断
         if ip.startswith("192.168.") or ip.startswith("10.") or ip.startswith("127.") or ip == "::1":
             return "局域网 / 内网"
-        
         try:
-            # 使用 ip-api.com (免费, 限制每分钟45次)
             url = f"http://ip-api.com/json/{ip}?lang=zh-CN"
             res = requests.get(url, timeout=3)
             if res.status_code == 200:
@@ -244,11 +241,12 @@ class TelegramBot:
                 data["photo"] = photo_io
                 requests.post(url, data=data, proxies=self._get_proxies(), timeout=20)
             else:
+                photo_io.seek(0) # 确保指针在开头
                 files = {"photo": ("image.jpg", photo_io, "image/jpeg")}
                 requests.post(url, data=data, files=files, proxies=self._get_proxies(), timeout=20)
         except Exception as e: 
             print(f"Bot SendPhoto Error: {e}")
-            self.send_message(chat_id, caption) # 降级发文字
+            self.send_message(chat_id, caption)
 
     # 发送文字
     def send_message(self, chat_id, text, parse_mode="HTML"):
@@ -284,7 +282,7 @@ class TelegramBot:
             self.send_message(chat_id, "🚫 <b>Access Denied</b>")
             return
         if text.startswith("/start"):
-            self.send_message(chat_id, "👋 <b>EmbyPulse v2.2</b>\n\n指令列表：\n/stats - 图文日报\n/now - 实时状态\n/recent - 最近记录\n/top - 排行榜\n/search [名] - 搜记录")
+            self.send_message(chat_id, "👋 <b>EmbyPulse</b>\n\n指令列表：\n/stats - 图文日报\n/now - 实时状态\n/recent - 最近记录\n/top - 排行榜\n/search [名] - 搜记录")
         elif text.startswith("/stats"): self._cmd_stats(chat_id)
         elif text.startswith("/recent"): self._cmd_recent(chat_id)
         elif text.startswith("/now"): self._cmd_now(chat_id)
@@ -313,18 +311,15 @@ class TelegramBot:
                             sid = s.get("Id")
                             current_active_ids.append(sid)
                             
-                            # 提取基础信息
                             item = s["NowPlayingItem"]
                             item_id = item.get("Id")
                             name = item.get("Name", "未知")
                             series = item.get("SeriesName")
                             
-                            # 🔥 解析剧集编号
                             season_num = item.get("ParentIndexNumber")
                             ep_num = item.get("IndexNumber")
                             media_type = "🎬 电影"
                             title_fmt = name
-                            
                             if series:
                                 media_type = "📚 剧集"
                                 if season_num is not None and ep_num is not None:
@@ -333,44 +328,34 @@ class TelegramBot:
                                 else:
                                     title_fmt = f"{series} - {name}"
                             
-                            # 计算进度
                             ticks = s.get("PlayState", {}).get("PositionTicks", 0)
                             total = item.get("RunTimeTicks", 1)
                             pct = (ticks / total) * 100 if total > 0 else 0
                             pct_str = f"{pct:.2f}%"
                             
-                            # 用户与设备
                             user = s.get("UserName", "User")
                             client = s.get("Client", "Unknown")
                             device = s.get("DeviceName", "Unknown")
                             device_str = f"{client} {device}"
                             
-                            # IP 地址 (处理 ::ffff: 前缀)
                             remote = s.get("RemoteEndPoint", "Unknown")
-                            ip = remote.split(":")[0] if remote else "Unknown" # 简单分割
+                            ip = remote.split(":")[0] if remote else "Unknown"
                             if "ffff" in ip: 
                                 ip_match = re.search(r'\d+\.\d+\.\d+\.\d+', ip)
                                 if ip_match: ip = ip_match.group(0)
                             
-                            # 1. 如果是新会话 -> 查IP，发通知，存缓存
                             if sid not in self.active_sessions:
                                 location = self._get_location(ip)
                                 now_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                                 
                                 session_data = {
-                                    "title": title_fmt,
-                                    "type": media_type,
-                                    "user": user,
-                                    "ip": ip,
-                                    "location": location,
-                                    "device": device_str,
-                                    "start_time": now_time,
-                                    "item_id": item_id,
-                                    "pct": pct_str # 初始进度
+                                    "title": title_fmt, "type": media_type,
+                                    "user": user, "ip": ip, "location": location,
+                                    "device": device_str, "start_time": now_time,
+                                    "item_id": item_id, "pct": pct_str
                                 }
                                 self.active_sessions[sid] = session_data
                                 
-                                # 发送开始消息
                                 msg = (
                                     f"▶️ <b>【{user}】开始播放</b>\n"
                                     f"📺 <b>{title_fmt}</b>\n"
@@ -385,12 +370,10 @@ class TelegramBot:
                                 if img: self.send_photo(admin_id, img, msg)
                                 else: self.send_message(admin_id, msg)
                             
-                            # 2. 如果是已有会话 -> 更新缓存中的进度 (为了停止时显示最终进度)
                             else:
                                 self.active_sessions[sid]["pct"] = pct_str
 
                     # 3. 检查停止 (在缓存中但不在当前列表)
-                    # Create a list of stopped session IDs to avoid runtime error during iteration
                     stopped_sids = [sid for sid in self.active_sessions if sid not in current_active_ids]
                     
                     for sid in stopped_sids:
@@ -407,23 +390,21 @@ class TelegramBot:
                             f"📱 设备：{info['device']}\n"
                             f"🕒 时间：{stop_time}"
                         )
-                        # 停止通常不发图，只发文字，避免刷屏 (或者你想发图也可以)
-                        self.send_message(admin_id, msg)
+                        # 🔥 停止播放也发送海报 (修复点)
+                        img = self._download_emby_image(info['item_id'], 'Backdrop') or self._download_emby_image(info['item_id'], 'Primary')
+                        if img: self.send_photo(admin_id, img, msg)
+                        else: self.send_message(admin_id, msg)
                         
-                        # 清除缓存
                         del self.active_sessions[sid]
                 
                 time.sleep(10)
-            except Exception as e:
-                # print(f"Monitor Error: {e}")
-                time.sleep(10)
+            except Exception as e: time.sleep(10)
 
-    # --- 指令逻辑 (保持 v2.1 优化后的逻辑) ---
+    # --- 指令逻辑 ---
     
     def _cmd_stats(self, chat_id):
         where, params = get_base_filter('all')
         total_plays = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}", params)[0]['c']
-        
         today_where = where + " AND DateCreated > date('now', 'start of day', 'localtime')"
         today_plays = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {today_where}", params)[0]['c']
         today_dur = query_db(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {today_where}", params)[0]['c'] or 0
@@ -630,11 +611,7 @@ def api_test_bot(request: Request):
         else: return {"status": "error", "message": f"API Error: {res.text}"}
     except Exception as e: return {"status": "error", "message": f"Connect Error: {str(e)}"}
 
-# ... 保持原有的 Login, Logout, Wallpaper, Page Routes, API Routes 不变 ...
-# 请确保原有的代码（如 @app.get("/login"), @app.get("/api/stats/dashboard") 等）都在这里
-# (为了不重复刷屏，这里省略了未修改的旧代码，请在合并时保留它们)
-
-# ----------------- 以下是需要保留的旧代码引用占位 -----------------
+# ================= 原有 API 保持不变 =================
 @app.get("/login")
 async def page_login(request: Request):
     if request.session.get("user"): return RedirectResponse("/")
