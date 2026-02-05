@@ -1,0 +1,155 @@
+{% extends "layout.html" %}
+{% block title %}机器人助手 - EmbyPulse{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto w-full px-4 md:px-8 py-8 pb-24">
+    
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h1 class="text-2xl font-black text-gray-900 dark:text-white">机器人助手</h1>
+            <p class="text-xs text-gray-500 mt-1">Telegram 远程管理与通知</p>
+        </div>
+        <button onclick="saveConfig()" id="save-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-200 dark:shadow-none transition flex items-center">
+            <i class="fa-solid fa-save mr-2"></i> 保存配置
+        </button>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6">
+            <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider mb-4 flex items-center">
+                <i class="fa-brands fa-telegram text-blue-500 mr-2"></i> 连接设置
+            </h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">Bot Token</label>
+                    <input type="password" id="tg_bot_token" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
+                    <p class="text-[10px] text-gray-400 mt-1">从 @BotFather 获取</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">Admin Chat ID</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="tg_chat_id" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition" placeholder="123456789">
+                        <button onclick="testConnection()" id="test-btn" class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 px-4 rounded-lg font-bold text-xs whitespace-nowrap transition border border-gray-200 dark:border-gray-600">
+                            测试连接
+                        </button>
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-1">用于接收通知的管理员 ID (白名单)</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6">
+            <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider mb-4 flex items-center">
+                <i class="fa-solid fa-toggle-on text-green-500 mr-2"></i> 功能开关
+            </h3>
+            
+            <div class="flex items-center justify-between py-3 border-b border-gray-50 dark:border-gray-700/50">
+                <div>
+                    <h4 class="text-sm font-bold text-gray-800 dark:text-gray-200">启用机器人</h4>
+                    <p class="text-xs text-gray-400 mt-0.5">开启后可使用指令查询数据</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="enable_bot" class="sr-only peer">
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+            </div>
+
+            <div class="flex items-center justify-between py-3 pt-4">
+                <div>
+                    <h4 class="text-sm font-bold text-gray-800 dark:text-gray-200">播放状态通知</h4>
+                    <p class="text-xs text-gray-400 mt-0.5">有人开始/停止播放时发送消息</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="enable_notify" class="sr-only peer">
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6">
+        <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider mb-4">
+            <i class="fa-solid fa-terminal text-gray-400 mr-2"></i> 可用指令
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                <span class="font-mono text-blue-500 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded text-xs">/stats</span>
+                <span class="text-gray-600 dark:text-gray-300">查看今日播放、累计播放及媒体库库存概览。</span>
+            </div>
+            <div class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                <span class="font-mono text-blue-500 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded text-xs">/now</span>
+                <span class="text-gray-600 dark:text-gray-300">查看当前正在播放的内容、用户及进度。</span>
+            </div>
+            <div class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                <span class="font-mono text-blue-500 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded text-xs">/recent</span>
+                <span class="text-gray-600 dark:text-gray-300">列出最近 5 条播放历史记录。</span>
+            </div>
+            <div class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                <span class="font-mono text-blue-500 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded text-xs">/check</span>
+                <span class="text-gray-600 dark:text-gray-300">检查 Emby 服务器连接状态与延迟。</span>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function init() {
+        try {
+            const res = await fetch('/api/bot/settings');
+            const json = await res.json();
+            if(json.status === 'success') {
+                const d = json.data;
+                document.getElementById('tg_bot_token').value = d.tg_bot_token || '';
+                document.getElementById('tg_chat_id').value = d.tg_chat_id || '';
+                document.getElementById('enable_bot').checked = d.enable_bot || false;
+                document.getElementById('enable_notify').checked = d.enable_notify || false;
+            }
+        } catch(e) { console.error(e); }
+    }
+
+    async function saveConfig() {
+        const btn = document.getElementById('save-btn');
+        const oldHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> 保存中';
+        btn.disabled = true;
+
+        const payload = {
+            tg_bot_token: document.getElementById('tg_bot_token').value,
+            tg_chat_id: document.getElementById('tg_chat_id').value,
+            enable_bot: document.getElementById('enable_bot').checked,
+            enable_notify: document.getElementById('enable_notify').checked
+        };
+
+        try {
+            const res = await fetch('/api/bot/settings', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const json = await res.json();
+            alert(json.status === 'success' ? '✅ 配置已保存，机器人正在重启...' : '❌ 保存失败');
+        } catch(e) { alert('❌ 网络错误'); } 
+        finally { btn.innerHTML = oldHtml; btn.disabled = false; }
+    }
+
+    async function testConnection() {
+        const btn = document.getElementById('test-btn');
+        btn.innerText = '发送中...';
+        btn.disabled = true;
+        
+        // 临时保存一下配置，确保后端拿到的是最新的
+        await saveConfig();
+
+        try {
+            const res = await fetch('/api/bot/test', { method: 'POST' });
+            const json = await res.json();
+            alert(json.status === 'success' ? '✅ 测试消息已发送，请检查 Telegram' : '❌ 发送失败: ' + json.message);
+        } catch(e) { alert('❌ 网络错误'); }
+        finally { btn.innerText = '测试连接'; btn.disabled = false; }
+    }
+
+    init();
+</script>
+{% endblock %}

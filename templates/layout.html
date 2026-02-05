@@ -69,6 +69,9 @@
             <a href="/report" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-800 {% if active_page == 'report' %}active{% else %}text-gray-500 dark:text-gray-400{% endif %}">
                 <i class="fa-solid fa-wand-magic-sparkles w-6"></i> <span class="ml-2">映迹工坊</span>
             </a>
+            <a href="/bot" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-800 {% if active_page == 'bot' %}active{% else %}text-gray-500 dark:text-gray-400{% endif %}">
+                <i class="fa-solid fa-robot w-6"></i> <span class="ml-2">机器人助手</span>
+            </a>
             <a href="/settings" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-800 {% if active_page == 'settings' %}active{% else %}text-gray-500 dark:text-gray-400{% endif %}">
                 <i class="fa-solid fa-gear w-6"></i> <span class="ml-2">系统设置</span>
             </a>
@@ -111,18 +114,11 @@
             <a href="/" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-800 {% if active_page == 'dashboard' %}active{% else %}text-gray-500 dark:text-gray-400{% endif %}">
                 <i class="fa-solid fa-chart-line w-6"></i> <span class="ml-2">仪表盘</span>
             </a>
-            <a href="/content" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-800 {% if active_page == 'content' %}active{% else %}text-gray-500 dark:text-gray-400{% endif %}">
-                <i class="fa-solid fa-film w-6"></i> <span class="ml-2">内容排行</span>
-            </a>
-            <a href="/details" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-800 {% if active_page == 'details' %}active{% else %}text-gray-500 dark:text-gray-400{% endif %}">
-                <i class="fa-solid fa-magnifying-glass-chart w-6"></i> <span class="ml-2">数据洞察</span>
-            </a>
-            <a href="/report" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-800 {% if active_page == 'report' %}active{% else %}text-gray-500 dark:text-gray-400{% endif %}">
-                <i class="fa-solid fa-wand-magic-sparkles w-6"></i> <span class="ml-2">映迹工坊</span>
-            </a>
-            <a href="/settings" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-800 {% if active_page == 'settings' %}active{% else %}text-gray-500 dark:text-gray-400{% endif %}">
-                <i class="fa-solid fa-gear w-6"></i> <span class="ml-2">系统设置</span>
-            </a>
+            <a href="/content" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-800 {% if active_page == 'content' %}active{% else %}text-gray-500 dark:text-gray-400{% endif %}"><i class="fa-solid fa-film w-6"></i> <span class="ml-2">内容排行</span></a>
+            <a href="/details" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-800 {% if active_page == 'details' %}active{% else %}text-gray-500 dark:text-gray-400{% endif %}"><i class="fa-solid fa-magnifying-glass-chart w-6"></i> <span class="ml-2">数据洞察</span></a>
+            <a href="/report" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-800 {% if active_page == 'report' %}active{% else %}text-gray-500 dark:text-gray-400{% endif %}"><i class="fa-solid fa-wand-magic-sparkles w-6"></i> <span class="ml-2">映迹工坊</span></a>
+            <a href="/bot" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-800 {% if active_page == 'bot' %}active{% else %}text-gray-500 dark:text-gray-400{% endif %}"><i class="fa-solid fa-robot w-6"></i> <span class="ml-2">机器人助手</span></a>
+            <a href="/settings" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 dark:hover:bg-gray-800 {% if active_page == 'settings' %}active{% else %}text-gray-500 dark:text-gray-400{% endif %}"><i class="fa-solid fa-gear w-6"></i> <span class="ml-2">系统设置</span></a>
         </nav>
         <div class="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30 flex gap-2">
             <button onclick="toggleTheme()" class="flex-1 flex items-center justify-center px-4 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-200 rounded-lg shadow-sm font-bold text-sm">
@@ -156,7 +152,6 @@
             const sidebar = document.getElementById('mobile-sidebar');
             const overlay = document.getElementById('mobile-overlay');
             const isClosed = sidebar.classList.contains('sidebar-closed');
-            
             if (isClosed) {
                 sidebar.classList.remove('sidebar-closed');
                 sidebar.classList.add('sidebar-open');
