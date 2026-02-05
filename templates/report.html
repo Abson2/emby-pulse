@@ -4,24 +4,61 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <script src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <style>
-    /* ... (保留头部通用样式) ... */
+    /* 基础布局 */
     html, body { height: 100%; margin: 0; background: #f3f4f6; font-family: "Microsoft YaHei", -apple-system, sans-serif !important; overflow: hidden; }
     .app-container { display: flex; height: 100%; }
-    .preview-area { flex: 1; overflow-y: auto; display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px; padding-top: 30px; background-color: #e5e7eb; -webkit-overflow-scrolling: touch; padding-bottom: 140px; }
-    .control-panel { width: 360px; background: white; padding: 20px; border-left: 1px solid #ddd; z-index: 50; display: block; box-shadow: -5px 0 15px rgba(0,0,0,0.05); overflow-y: auto; }
-    .mobile-toolbar { display: none; position: fixed; bottom: 0; left: 0; width: 100%; height: 70px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-top: 1px solid rgba(0,0,0,0.1); z-index: 500; align-items: center; justify-content: space-between; padding: 0 15px; box-sizing: border-box; box-shadow: 0 -5px 20px rgba(0,0,0,0.1); }
+    
+    /* 预览区 */
+    .preview-area { 
+        flex: 1; overflow-y: auto; display: flex; justify-content: center; align-items: flex-start; 
+        padding: 40px 20px; padding-top: 30px; padding-bottom: 140px;
+        background-color: #e5e7eb; -webkit-overflow-scrolling: touch; 
+        transition: background-color 0.3s;
+    }
+    
+    /* 控制面板 (PC) */
+    .control-panel { 
+        width: 360px; background: white; padding: 20px; border-left: 1px solid #ddd; 
+        z-index: 50; display: block; box-shadow: -5px 0 15px rgba(0,0,0,0.05); overflow-y: auto; 
+        transition: all 0.3s;
+    }
+    
+    /* 移动端底部栏 */
+    .mobile-toolbar { 
+        display: none; position: fixed; bottom: 0; left: 0; width: 100%; height: 70px; 
+        background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); 
+        border-top: 1px solid rgba(0,0,0,0.1); z-index: 500; 
+        align-items: center; justify-content: space-between; padding: 0 15px; 
+        box-sizing: border-box; box-shadow: 0 -5px 20px rgba(0,0,0,0.1); 
+    }
     .toolbar-btn { flex: 1; height: 44px; border-radius: 8px; border: none; font-weight: bold; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; }
     .btn-config { background: #f3f4f6; color: #333; margin-right: 10px; border: 1px solid #ddd; }
     .btn-save { background: #16a34a; color: white; flex: 1.5; box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3); }
-    .bottom-sheet { display: block; visibility: hidden; position: fixed; bottom: 0; left: 0; width: 100%; background: white; border-radius: 20px 20px 0 0; padding: 25px; padding-bottom: 40px; box-shadow: 0 -10px 40px rgba(0,0,0,0.2); z-index: 600; transform: translateY(100%); transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); max-height: 85vh; overflow-y: auto; }
+    
+    /* 底部弹窗 (Mobile) */
+    .bottom-sheet { 
+        display: block; visibility: hidden; position: fixed; bottom: 0; left: 0; width: 100%; 
+        background: white; border-radius: 20px 20px 0 0; padding: 25px; padding-bottom: 40px; 
+        box-shadow: 0 -10px 40px rgba(0,0,0,0.2); z-index: 600; 
+        transform: translateY(100%); transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); 
+        max-height: 85vh; overflow-y: auto; 
+    }
     .bottom-sheet.active { visibility: visible; transform: translateY(0); }
     .sheet-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     .sheet-title { font-weight: 900; font-size: 18px; color: #333; }
     .sheet-close { width: 30px; height: 30px; border-radius: 50%; background: #f3f4f6; display: flex; align-items: center; justify-content: center; color: #666; cursor: pointer; }
     .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 550; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
     .overlay.active { opacity: 1; pointer-events: auto; }
-    @media (max-width: 768px) { .app-container { flex-direction: column; } .control-panel { display: none !important; } .mobile-toolbar { display: flex; } .preview-area { align-items: flex-start; } }
     
+    /* 响应式 */
+    @media (max-width: 768px) { 
+        .app-container { flex-direction: column; } 
+        .control-panel { display: none !important; } 
+        .mobile-toolbar { display: flex; } 
+        .preview-area { align-items: flex-start; } 
+    }
+    
+    /* 海报样式 (独立主题，不随界面暗色模式改变) */
     :root { --theme-bg: #1a1a1a; --theme-card: rgba(255,255,255,0.08); --theme-text: white; --theme-highlight: #eab308; }
     .poster-canvas { width: 400px; height: fit-content; min-height: auto; padding-bottom: 20px; background: var(--theme-bg); color: var(--theme-text); position: relative; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 30px 60px rgba(0,0,0,0.5); line-height: 1.6; font-family: "Microsoft YaHei", sans-serif !important; transition: background 0.3s; transform-origin: top center; }
     #poster-bg-img { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; filter: blur(50px) brightness(0.4); transform: scale(1.2); opacity: 0; transition: opacity 0.5s; height: 100%; }
@@ -30,19 +67,12 @@
     .p-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
     .user-box { display: flex; align-items: center; gap: 12px; }
     
-    /* 🔥 修正头像 CSS */
     .avatar { 
         width: 54px; height: 54px; border-radius: 50%; 
-        background-color: #e5e7eb; 
-        display: flex; align-items: center; justify-content: center; 
-        font-size: 26px; 
-        color: white; 
-        border: 2px solid rgba(255,255,255,0.8); 
+        background-color: #e5e7eb; display: flex; align-items: center; justify-content: center; 
+        font-size: 26px; color: white; border: 2px solid rgba(255,255,255,0.8); 
         box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-        /* 强制使用 cover 填充，防止变形 */
-        background-size: cover !important; 
-        background-position: center !important; 
-        background-repeat: no-repeat !important;
+        background-size: cover !important; background-position: center !important; background-repeat: no-repeat !important;
         z-index: 20; position: relative;
     }
     
@@ -76,12 +106,34 @@
     .rank-meta-row { font-size: 9px; opacity: 0.7; display: flex; gap: 8px; }
     .p-footer { margin-top: 15px; text-align: center; opacity: 0.4; font-size: 10px; letter-spacing: 2px; }
     .empty-box { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; min-height: 200px; text-align: center; }
+    
+    /* 控件样式 */
     .ctrl-label { font-size: 12px; font-weight: bold; color: #666; margin-bottom: 8px; display: block; }
     .btn-group { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap; }
-    .btn { flex: 1; padding: 10px; border: 1px solid #ddd; background: #fff; font-weight: bold; border-radius: 8px; font-size: 12px; cursor: pointer; min-width: 60px; white-space: nowrap; }
+    .btn { flex: 1; padding: 10px; border: 1px solid #ddd; background: #fff; font-weight: bold; border-radius: 8px; font-size: 12px; cursor: pointer; min-width: 60px; white-space: nowrap; color: #374151; transition: all 0.2s; }
     .btn.active { background: #111827; color: white; border-color: #111827; }
     .theme-dots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px; }
     .dot { height: 40px; border-radius: 8px; cursor: pointer; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; font-size: 10px; color: white; font-weight: bold; text-shadow: 0 1px 2px black; }
+
+    /* 🔥 暗色模式适配 override 🔥 */
+    html.dark body { background: #111827 !important; }
+    html.dark .preview-area { background-color: #0f172a; } 
+    html.dark .control-panel { background: #1f2937; border-left-color: #374151; }
+    html.dark .mobile-toolbar { background: rgba(31, 41, 55, 0.95); border-top-color: #374151; }
+    html.dark .toolbar-btn.btn-config { background: #374151; color: white; border-color: #4b5563; }
+    
+    html.dark .bottom-sheet { background: #1f2937; color: #e5e7eb; }
+    html.dark .sheet-title { color: white; }
+    html.dark .sheet-close { background: #374151; color: white; }
+    
+    html.dark .ctrl-label { color: #d1d5db; }
+    html.dark .btn { background: #374151; border-color: #4b5563; color: #e5e7eb; }
+    html.dark .btn.active { background: #f3f4f6; color: #111827; border-color: #fff; }
+    html.dark .btn:hover:not(.active) { background: #4b5563; }
+    
+    /* 下拉框适配 */
+    .ctrl-select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px; background: #f9fafb; color: #333; outline: none; }
+    html.dark .ctrl-select { background-color: #374151; border-color: #4b5563; color: white; }
 </style>
 {% endblock %}
 
@@ -159,9 +211,10 @@
             <div class="sheet-title">配置选项</div>
             <div class="sheet-close" onclick="toggleSheet(false)"><i class="fa-solid fa-xmark"></i></div>
         </div>
+        
         <div id="mobile-controls-container">
             <label class="ctrl-label">选择用户</label>
-            <select id="user-select" onchange="changeUser(this.value)" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px; background: #f9fafb;">
+            <select id="user-select" class="ctrl-select" onchange="changeUser(this.value)">
                 <option>Loading...</option>
             </select>
 
@@ -173,7 +226,7 @@
                 <button class="btn" onclick="setPeriod('week', this)">本周</button>
             </div>
 
-            <label class="ctrl-label">主题配色</label>
+            <label class="ctrl-label">海报主题</label>
             <div class="theme-dots">
                 <div class="dot" style="background: #1a1a1a;" onclick="setTheme('#1a1a1a', 'white')">黑金</div>
                 <div class="dot" style="background: #2e1065;" onclick="setTheme('#2e1065', 'white')">赛博</div>

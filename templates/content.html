@@ -18,18 +18,18 @@
     
     <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
         <div class="text-center md:text-left">
-            <h1 class="text-2xl font-black text-gray-900">风云榜</h1>
+            <h1 class="text-2xl font-black text-gray-900 dark:text-white">风云榜</h1>
             <p class="text-xs text-gray-500 mt-1">服务器最受欢迎的内容</p>
         </div>
         
-        <div class="flex flex-wrap justify-center items-center gap-2 bg-white p-1.5 rounded-xl shadow-sm border border-gray-100">
-            <button onclick="setCategory('all')" class="cat-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gray-100 text-gray-800" data-cat="all">全部</button>
-            <button onclick="setCategory('Movie')" class="cat-btn px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-500 hover:bg-gray-50" data-cat="Movie">电影</button>
-            <button onclick="setCategory('Episode')" class="cat-btn px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-500 hover:bg-gray-50" data-cat="Episode">剧集</button>
+        <div class="flex flex-wrap justify-center items-center gap-2 bg-white dark:bg-gray-800 p-1.5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <button onclick="setCategory('all')" class="cat-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200" data-cat="all">全部</button>
+            <button onclick="setCategory('Movie')" class="cat-btn px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600" data-cat="Movie">电影</button>
+            <button onclick="setCategory('Episode')" class="cat-btn px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600" data-cat="Episode">剧集</button>
             
-            <div class="w-px h-5 bg-gray-200 mx-1"></div>
+            <div class="w-px h-5 bg-gray-200 dark:bg-gray-600 mx-1"></div>
             
-            <select id="user-select" onchange="changeUser()" class="bg-transparent text-xs font-bold text-gray-600 focus:outline-none cursor-pointer max-w-[100px] truncate">
+            <select id="user-select" onchange="changeUser()" class="bg-transparent text-xs font-bold text-gray-600 dark:text-gray-300 focus:outline-none cursor-pointer max-w-[100px] truncate">
                 <option value="all">🌏 全服</option>
             </select>
         </div>
@@ -44,12 +44,12 @@
         <div class="flex flex-col md:flex-row items-center md:items-end justify-center gap-6 md:gap-4 px-2" id="podium-section">
             </div>
 
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden max-w-4xl mx-auto w-full">
-            <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-                <h3 class="font-bold text-gray-700 text-sm">其余上榜名单</h3>
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden max-w-4xl mx-auto w-full">
+            <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/50 flex justify-between items-center">
+                <h3 class="font-bold text-gray-700 dark:text-gray-300 text-sm">其余上榜名单</h3>
                 <span class="text-xs text-gray-400">Top 4 - 20</span>
             </div>
-            <div id="list-section" class="divide-y divide-gray-50">
+            <div id="list-section" class="divide-y divide-gray-50 dark:divide-gray-700/50">
                 </div>
         </div>
     </div>
@@ -57,27 +57,22 @@
 {% endblock %}
 {% block scripts %}
 <script>
-    let state = {
-        user: 'all',
-        category: 'all',
-        sortBy: 'count'
-    };
+    let state = { user: 'all', category: 'all', sortBy: 'count' };
 
     async function init() {
         await loadUsers();
         loadContent();
     }
 
-    // 切换分类
     function setCategory(cat) {
         state.category = cat;
         document.querySelectorAll('.cat-btn').forEach(btn => {
             if(btn.dataset.cat === cat) {
-                btn.classList.add('bg-gray-100', 'text-gray-800');
-                btn.classList.remove('text-gray-500');
+                btn.classList.add('bg-gray-100', 'dark:bg-gray-700', 'text-gray-800', 'dark:text-gray-200');
+                btn.classList.remove('text-gray-500', 'dark:text-gray-400');
             } else {
-                btn.classList.remove('bg-gray-100', 'text-gray-800');
-                btn.classList.add('text-gray-500');
+                btn.classList.remove('bg-gray-100', 'dark:bg-gray-700', 'text-gray-800', 'dark:text-gray-200');
+                btn.classList.add('text-gray-500', 'dark:text-gray-400');
             }
         });
         loadContent();
@@ -107,9 +102,7 @@
     async function loadContent() {
         const loading = document.getElementById('loading');
         const content = document.getElementById('content-area');
-        
-        loading.classList.remove('hidden');
-        content.classList.add('hidden');
+        loading.classList.remove('hidden'); content.classList.add('hidden');
 
         try {
             const url = `/api/stats/top_movies?user_id=${state.user}&category=${state.category}&sort_by=${state.sortBy}`;
@@ -118,28 +111,20 @@
             
             if(json.status === 'success' && json.data.length > 0) {
                 const list = json.data;
-                
-                // 拆分 Top 3 和 其余
                 const top3 = [];
-                // 🔥 关键修改：按 1, 2, 3 的顺序放入数组，方便手机端垂直堆叠
                 if(list[0]) top3.push({...list[0], rank: 1});
                 if(list[1]) top3.push({...list[1], rank: 2});
                 if(list[2]) top3.push({...list[2], rank: 3});
-                
                 const others = list.slice(3);
 
                 renderPodium(top3);
                 renderList(others);
                 
-                loading.classList.add('hidden');
-                content.classList.remove('hidden');
+                loading.classList.add('hidden'); content.classList.remove('hidden');
             } else {
-                loading.innerHTML = `<div class="py-10"><i class="fa-solid fa-ghost text-4xl text-gray-200 mb-4"></i><p>暂无数据</p></div>`;
+                loading.innerHTML = `<div class="py-10"><i class="fa-solid fa-ghost text-4xl text-gray-200 dark:text-gray-700 mb-4"></i><p>暂无数据</p></div>`;
             }
-        } catch (e) {
-            console.error(e);
-            loading.innerText = "Error loading data";
-        }
+        } catch (e) { console.error(e); loading.innerText = "Error loading data"; }
     }
 
     function renderPodium(items) {
@@ -149,29 +134,22 @@
         items.forEach(item => {
             const imgUrl = `/api/proxy/image/${item.ItemId}/primary`;
             const isFirst = item.rank === 1;
-            
-            // 样式逻辑
             let heightClass = isFirst ? 'h-64 md:h-80 w-48 md:w-64' : 'h-48 md:h-60 w-36 md:w-48';
             let borderClass = `rank-${item.rank}-border`;
             let crownHtml = isFirst ? '<i class="fa-solid fa-crown crown-icon animate-bounce"></i>' : '';
             let rankBadgeColor = isFirst ? 'bg-yellow-500' : (item.rank === 2 ? 'bg-gray-400' : 'bg-amber-700');
             
-            // 🔥 核心排序魔法：
-            // 手机端 (默认)：按 DOM 顺序 (1->2->3) 垂直排列
-            // 电脑端 (md)：使用 order 属性重排 -> 第2名(order-1), 第1名(order-2), 第3名(order-3)
             let orderClass = '';
-            if (item.rank === 1) orderClass = 'order-1 md:order-2 z-10'; // 冠军：手机第1，电脑中间
-            if (item.rank === 2) orderClass = 'order-2 md:order-1';      // 亚军：手机第2，电脑左边
-            if (item.rank === 3) orderClass = 'order-3 md:order-3';      // 季军：手机第3，电脑右边
+            if (item.rank === 1) orderClass = 'order-1 md:order-2 z-10'; 
+            if (item.rank === 2) orderClass = 'order-2 md:order-1';      
+            if (item.rank === 3) orderClass = 'order-3 md:order-3';      
 
             html += `
             <div class="podium-card relative flex flex-col items-center group shrink-0 ${orderClass}">
                 ${crownHtml}
                 <div class="relative rounded-2xl overflow-hidden border-4 ${borderClass} ${heightClass} bg-gray-800 shadow-xl">
-                    <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700"
-                         onerror="this.src='https://via.placeholder.com/300x450/374151/9ca3af?text=No+Cover'">
+                    <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" onerror="this.src='https://via.placeholder.com/300x450/374151/9ca3af?text=No+Cover'">
                     <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent"></div>
-                    
                     <div class="absolute bottom-0 left-0 right-0 p-3 text-center">
                         <div class="inline-block ${rankBadgeColor} text-white text-[10px] font-bold px-2 py-0.5 rounded-full mb-1">#${item.rank}</div>
                         <h3 class="text-white font-bold text-sm md:text-lg line-clamp-1 leading-tight">${item.ItemName}</h3>
@@ -185,10 +163,7 @@
 
     function renderList(items) {
         const container = document.getElementById('list-section');
-        if(items.length === 0) {
-            container.innerHTML = '<div class="p-8 text-center text-gray-400 text-sm">暂无更多排名</div>';
-            return;
-        }
+        if(items.length === 0) { container.innerHTML = '<div class="p-8 text-center text-gray-400 text-sm">暂无更多排名</div>'; return; }
 
         let html = '';
         items.forEach((item, index) => {
@@ -196,17 +171,16 @@
             const imgUrl = `/api/proxy/image/${item.ItemId}/primary`;
             
             html += `
-            <div class="flex items-center p-3 md:p-4 hover:bg-gray-50 transition group">
+            <div class="flex items-center p-3 md:p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition group">
                 <div class="w-8 text-center font-bold text-gray-400 text-base md:text-lg mr-3 md:mr-4 italic">#${rank}</div>
-                <div class="w-8 h-12 md:w-10 md:h-14 rounded bg-gray-200 overflow-hidden shrink-0 mr-3 md:mr-4 shadow-sm relative">
-                     <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-105 transition"
-                          onerror="this.src='https://via.placeholder.com/100x150/e5e7eb/9ca3af?text=No'">
+                <div class="w-8 h-12 md:w-10 md:h-14 rounded bg-gray-200 dark:bg-gray-700 overflow-hidden shrink-0 mr-3 md:mr-4 shadow-sm relative">
+                     <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-105 transition" onerror="this.src='https://via.placeholder.com/100x150/e5e7eb/9ca3af?text=No'">
                 </div>
                 <div class="flex-1 min-w-0">
-                    <h4 class="text-sm font-bold text-gray-800 truncate group-hover:text-green-600 transition">${item.ItemName}</h4>
+                    <h4 class="text-sm font-bold text-gray-800 dark:text-gray-200 truncate group-hover:text-green-600 transition">${item.ItemName}</h4>
                     <div class="text-xs text-gray-500 mt-0.5 flex items-center gap-3">
-                        <span><i class="fa-solid fa-play text-gray-300 mr-1"></i>${item.PlayCount}</span>
-                        <span><i class="fa-regular fa-clock text-gray-300 mr-1"></i>${Math.round(item.TotalTime/60)}m</span>
+                        <span><i class="fa-solid fa-play text-gray-300 dark:text-gray-600 mr-1"></i>${item.PlayCount}</span>
+                        <span><i class="fa-regular fa-clock text-gray-300 dark:text-gray-600 mr-1"></i>${Math.round(item.TotalTime/60)}m</span>
                     </div>
                 </div>
             </div>`;
