@@ -88,7 +88,7 @@ class TelegramBot:
                 files = {"photo": ("image.jpg", photo_io, "image/jpeg")}
                 requests.post(url, data=data, files=files, proxies=self._get_proxies(), timeout=30)
         except Exception as e: 
-            print(f"Bot Photo Error: {e}")
+            logger.error(f"Bot Photo Error: {e}")
             self.send_message(chat_id, caption)
 
     def send_message(self, chat_id, text, parse_mode="HTML"):
@@ -98,7 +98,7 @@ class TelegramBot:
             url = f"https://api.telegram.org/bot{token}/sendMessage"
             requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode}, proxies=self._get_proxies(), timeout=10)
         except Exception as e:
-            print(f"Bot Send Error: {e}")
+            logger.error(f"Bot Send Error: {e}")
 
     # ================= Webhook 推送业务逻辑 =================
 
@@ -110,8 +110,7 @@ class TelegramBot:
             user = data.get("User", {}).get("Name", "未知用户")
             item = data.get("Item", {})
             session = data.get("Session", {})
-            
-            # 标题与剧集格式
+
             title = item.get("Name", "未知内容")
             series_name = item.get("SeriesName")
             if series_name:
@@ -119,7 +118,6 @@ class TelegramBot:
                 p_idx = item.get("ParentIndexNumber", 1)
                 title = f"剧集 {series_name} S{str(p_idx).zfill(2)}E{str(idx).zfill(2)} {title}"
 
-            # 进度计算
             pos = data.get("PlaybackPositionTicks") or session.get("PlayState", {}).get("PositionTicks", 0)
             total = item.get("RunTimeTicks", 1)
             progress = f"{(pos / total * 100):.2f}%" if total > 0 else "0.00%"
@@ -149,28 +147,35 @@ class TelegramBot:
     def push_new_media(self, item_id):
         """针对 STRM 文件 404 问题的多重重试入库通知"""
         if not cfg.get("enable_library_notify") or not cfg.get("tg_chat_id"): return
-        cid = str(cfg.get("tg_chat_id")); host = cfg.get("emby_host"); key = cfg.get("emby_api_key")
+        cid = str(cfg.get("tg_chat_id"))
+        host = cfg.get("emby_host")
+        key = cfg.get("emby_api_key")
         
         item = None
-        for i in range(3): # 最多等待 40 秒
-            time.sleep(10 if i == 0 else 15) 
+        for i in range(3):  # 最多等待 40 秒
+            time.sleep(10 if i == 0 else 15)
             try:
                 res = requests.get(f"{host}/emby/Items/{item_id}?api_key={key}", timeout=10)
                 if res.status_code == 200:
                     item = res.json()
                     break
-                print(f"DEBUG: 资源 {item_id} 详情不可见({res.status_code})，正在进行第 {i+1} 次重试...")
-            except: pass
+                logger.debug(f"资源 {item_id} 详情不可见({res.status_code})，正在进行第 {i+1} 次重试...")
+            except Exception as e:
+                logger.error(f"请求失败: {e}")
         
-        if not item: return
+        if not item:
+            logger.error(f"无法获取到资源 {item_id} 的信息")
+            return
 
+        # 获取媒体的具体信息
         try:
             name = item.get("Name", "")
             if item.get("Type") == "Episode":
                 name = f"{item.get('SeriesName','')} S{str(item.get('ParentIndexNumber',1)).zfill(2)}E{str(item.get('IndexNumber',1)).zfill(2)}"
             
             overview = item.get("Overview", "暂无简介...")
-            if len(overview) > 150: overview = overview[:140] + "..."
+            if len(overview) > 150: 
+                overview = overview[:140] + "..."
             
             caption = (
                 f"📺 <b>新入库 {name}</b>\n"
@@ -179,10 +184,10 @@ class TelegramBot:
                 f"📝 剧情：{overview}"
             )
             img = self._download_emby_image(item_id, 'Primary')
-            # 降级：如果没海报，带占位图发送，确保通知必达
+            # 如果没海报，带占位图发送，确保通知必达
             self.send_photo(cid, img if img else REPORT_COVER_URL, caption)
         except Exception as e:
-            logger.error(f"Library Push Error: {e}")
+            logger.error(f"入库通知发送失败: {e}")
 
     # ================= 机器人指令系统 (全量恢复) =================
     def _set_commands(self):
