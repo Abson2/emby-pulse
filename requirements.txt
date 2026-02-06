@@ -3,4 +3,5 @@ uvicorn
 requests
 jinja2
 python-multipart
-# Pillow  <-- 如果您以后要加绘图库就把 # 去掉，现在不需要
+itsdangerous  <-- 必须加这个！
+aiofiles      <-- 建议加上，静态文件可能需要
