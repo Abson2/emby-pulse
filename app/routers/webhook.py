@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from app.services.bot_service import bot
 from app.core.config import cfg
 import json
@@ -7,7 +7,7 @@ router = APIRouter()
 
 @router.post("/api/v1/webhook")
 async def emby_webhook(request: Request, background_tasks: BackgroundTasks):
-    # 🔥 核心：验证 URL 中的 token 参数
+    # 验证 Webhook Token
     query_token = request.query_params.get("token")
     if query_token != cfg.get("webhook_token"):
         print(f"🚫 Webhook 授权失败: {query_token}")
@@ -21,21 +21,20 @@ async def emby_webhook(request: Request, background_tasks: BackgroundTasks):
             form = await request.form()
             data = json.loads(form.get("data", "{}"))
 
-        event_raw = data.get("Event", "")
-        event = event_raw.lower().strip()
-        
-        if event: print(f"🔔 Webhook 收到事件: {event_raw}")
+        event_raw = data.get("Event", "").lower().strip()
+        print(f"🔔 Webhook 收到事件: {event_raw}")
 
-        # 1. 媒体库变动 (新入库)
-        if event in ["library.new", "item.added"]:
+        # 处理入库通知
+        if event_raw in ["library.new", "item.added"]:
             item = data.get("Item", {})
             if item.get("Id") and item.get("Type") in ["Movie", "Episode", "Series"]:
+                # 这里我们直接推送到 Telegram
                 background_tasks.add_task(bot.push_new_media, item.get("Id"))
 
-        # 2. 播放开始/停止
-        elif event == "playback.start":
+        # 处理播放事件
+        elif event_raw == "playback.start":
             background_tasks.add_task(bot.push_playback_event, data, "start")
-        elif event == "playback.stop":
+        elif event_raw == "playback.stop":
             background_tasks.add_task(bot.push_playback_event, data, "stop")
 
         return {"status": "success"}
