@@ -1,7 +1,9 @@
 __pycache__/
 *.pyc
-.DS_Store
 .env
-venv/
-data/
-playback_reporting.db
+.DS_Store
+# 忽略配置文件夹里的内容，但保留文件夹本身
+config/*
+!config/.gitkeep
+# 忽略本地测试数据
+*.db

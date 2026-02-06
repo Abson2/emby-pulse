@@ -1,6 +1,6 @@
 fastapi
 uvicorn
+requests
 jinja2
 python-multipart
-requests
-itsdangerous
+# Pillow  <-- 如果您以后要加绘图库就把 # 去掉，现在不需要
