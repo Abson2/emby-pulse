@@ -38,7 +38,7 @@
             </div>
         </div>
 
-        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6 h-fit">
             <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider mb-4 flex items-center">
                 <i class="fa-solid fa-toggle-on text-green-500 mr-2"></i> 功能开关
             </h3>
@@ -65,15 +65,40 @@
                 </label>
             </div>
 
-            <div class="flex items-center justify-between py-3 pt-4">
-                <div>
-                    <h4 class="text-sm font-bold text-gray-800 dark:text-gray-200">新资源入库通知</h4>
-                    <p class="text-xs text-gray-400 mt-0.5">Emby 添加新电影/剧集时发送海报</p>
+            <div class="py-3 pt-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h4 class="text-sm font-bold text-gray-800 dark:text-gray-200">新资源入库通知</h4>
+                        <p class="text-xs text-gray-400 mt-0.5">Emby 添加新电影/剧集时发送海报</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="enable_library_notify" class="sr-only peer" onchange="toggleWebhookInfo(this)">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+                    </label>
                 </div>
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" id="enable_library_notify" class="sr-only peer" onchange="checkWebhookTip(this)">
-                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
-                </label>
+
+                <div id="webhook-info" class="hidden mt-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 rounded-xl p-4 text-xs transition-all duration-300">
+                    <div class="flex items-start gap-3">
+                        <i class="fa-solid fa-circle-info text-purple-500 mt-0.5 text-sm"></i>
+                        <div class="space-y-3 w-full">
+                            <p class="font-bold text-purple-900 dark:text-purple-100">请前往 Emby 后台配置 Webhook 才能生效：</p>
+                            
+                            <div class="space-y-1">
+                                <p class="text-purple-700 dark:text-purple-300 opacity-80">Webhook Url (点击全选复制)</p>
+                                <div class="relative group">
+                                    <input type="text" id="webhook-url" readonly onclick="this.select()"
+                                        class="w-full bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-800/50 rounded-lg px-3 py-2 font-mono text-purple-700 dark:text-purple-300 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/30 cursor-pointer">
+                                </div>
+                            </div>
+
+                            <ul class="list-disc list-inside space-y-1 text-purple-800 dark:text-purple-200 opacity-80 leading-relaxed">
+                                <li>Emby 后台 -> <strong>Webhook</strong> -> <strong>添加 Webhook</strong></li>
+                                <li>事件勾选：<strong>新媒体已添加 (New Media Added)</strong></li>
+                                <li>数据类型：<strong>application/json</strong></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -117,18 +142,27 @@
                 document.getElementById('tg_chat_id').value = d.tg_chat_id || '';
                 document.getElementById('enable_bot').checked = d.enable_bot || false;
                 document.getElementById('enable_notify').checked = d.enable_notify || false;
-                // 🔥 新增：加载入库通知状态
-                document.getElementById('enable_library_notify').checked = d.enable_library_notify || false;
+                
+                // 加载入库通知状态并触发 UI 显示
+                const libNotify = document.getElementById('enable_library_notify');
+                libNotify.checked = d.enable_library_notify || false;
+                toggleWebhookInfo(libNotify); 
             }
         } catch(e) { console.error(e); }
     }
 
-    // 🔥 新增：入库通知开启提示
-    function checkWebhookTip(el) {
-        if(el.checked) {
+    // 控制 Webhook 指引显示
+    function toggleWebhookInfo(el) {
+        const infoBox = document.getElementById('webhook-info');
+        const urlInput = document.getElementById('webhook-url');
+        
+        if (el.checked) {
+            infoBox.classList.remove('hidden');
+            // 自动获取当前域名拼接 API 地址
             const host = window.location.protocol + "//" + window.location.host;
-            const webhookUrl = `${host}/api/v1/webhook`;
-            alert(`🔔 重要提示：\n\n开启此功能后，您必须前往 Emby 后台 -> Webhook 菜单：\n\n1. 点击 "添加 Webhook"\n2. Url 填入: ${webhookUrl}\n3. 事件勾选: "新媒体已添加 (New Media Added)"\n\n配置完成后，新资源入库才会发送通知！`);
+            urlInput.value = `${host}/api/v1/webhook`;
+        } else {
+            infoBox.classList.add('hidden');
         }
     }
 
@@ -143,7 +177,6 @@
             tg_chat_id: document.getElementById('tg_chat_id').value,
             enable_bot: document.getElementById('enable_bot').checked,
             enable_notify: document.getElementById('enable_notify').checked,
-            // 🔥 新增
             enable_library_notify: document.getElementById('enable_library_notify').checked
         };
 
