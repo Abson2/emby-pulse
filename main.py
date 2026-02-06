@@ -9,6 +9,8 @@ import random
 import threading
 import io
 import re
+import uuid
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,7 +19,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict
-from contextlib import asynccontextmanager
 
 # ================= 配置与持久化 =================
 CONFIG_DIR = "/app/config"
@@ -69,6 +70,18 @@ cfg = ConfigManager()
 # ================= 基础设置 =================
 PORT = 10307
 SECRET_KEY = os.getenv("SECRET_KEY", "embypulse_secret_key_2026")
+TMDB_FALLBACK_POOL = [
+    "https://image.tmdb.org/t/p/original/zfbjgQE1uSd9wiPTX4VzsLi0rGG.jpg",
+    "https://image.tmdb.org/t/p/original/rLb2cs785pePbIKYQz1CADtovh7.jpg",
+    "https://image.tmdb.org/t/p/original/tmU7GeKVybMWFButWEGl2M4GeiP.jpg",
+    "https://image.tmdb.org/t/p/original/kXfqcdQKsToO0OUXHcrrNCHDBzO.jpg",
+    "https://image.tmdb.org/t/p/original/zb6fM1CX41D9rF9hdgclu0peUmy.jpg", 
+    "https://image.tmdb.org/t/p/original/vI3aUGTuRRdM7J78KIdW98Lnidq.jpg",
+    "https://image.tmdb.org/t/p/original/jXJxMcVoEuXzym3vFnjqDW4ifo6.jpg",
+    "https://image.tmdb.org/t/p/original/sRLC052ieEroxViUFWa3KD77SII.jpg",
+    "https://image.tmdb.org/t/p/original/mSDsSDwaP3E7dEfUPWy4J0djt4O.jpg",
+    "https://image.tmdb.org/t/p/original/lzWHmYdfeFiMIY4JaMmtR7GEli3.jpg",
+]
 
 # ================= 数据模型 =================
 class LoginModel(BaseModel):
@@ -97,7 +110,7 @@ class UserUpdateModel(BaseModel):
     user_id: str
     password: Optional[str] = None
     is_disabled: Optional[bool] = None
-    expire_date: Optional[str] = None
+    expire_date: Optional[str] = None 
 class NewUserModel(BaseModel):
     name: str
     password: str
@@ -107,7 +120,7 @@ class NewUserModel(BaseModel):
 def init_db():
     if not os.path.exists(DB_PATH): return
     try:
-        conn = sqlite3.connect(DB_PATH) 
+        conn = sqlite3.connect(DB_PATH) # 标准连接
         c = conn.cursor()
         c.execute('''CREATE TABLE IF NOT EXISTS users_meta (
                         user_id TEXT PRIMARY KEY,
@@ -125,7 +138,7 @@ init_db()
 def query_db(query, args=(), one=False):
     if not os.path.exists(DB_PATH): return None
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=10.0)
+        conn = sqlite3.connect(DB_PATH, timeout=10.0) 
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute(query, args)
@@ -165,7 +178,7 @@ def get_user_map():
         except: pass
     return user_map
 
-# ================= 🤖 Telegram Bot =================
+# ================= 🤖 Telegram Bot (修复语法错误版) =================
 class TelegramBot:
     def __init__(self):
         self.running = False
@@ -218,6 +231,7 @@ class TelegramBot:
             {"command": "stats", "description": "📊 日报"},
             {"command": "now", "description": "🟢 状态"},
             {"command": "recent", "description": "🕰 记录"},
+            {"command": "top", "description": "🏆 榜单"},
             {"command": "check", "description": "✅ 检查"}
         ]
         try: requests.post(f"https://api.telegram.org/bot{token}/setMyCommands", json={"commands": commands}, proxies=self._get_proxies(), timeout=10)
@@ -233,20 +247,27 @@ class TelegramBot:
         except: pass
         return None
 
+    # 🔥 修复：send_photo 语法错误 (移除重复的 data 参数)
     def send_photo(self, chat_id, photo_io, caption, parse_mode="HTML"):
         token = cfg.get("tg_bot_token")
         if not token: return
         try:
             url = f"https://api.telegram.org/bot{token}/sendPhoto"
+            # 基础表单数据
             data = {"chat_id": chat_id, "caption": caption, "parse_mode": parse_mode}
+            
             if isinstance(photo_io, str):
-                data['photo'] = photo_io
+                # 如果是 URL 字符串，直接放入 data
+                data["photo"] = photo_io
                 requests.post(url, data=data, proxies=self._get_proxies(), timeout=20)
-            else: 
+            else:
+                # 如果是文件对象，放入 files
                 photo_io.seek(0)
                 files = {"photo": ("image.jpg", photo_io, "image/jpeg")}
                 requests.post(url, data=data, files=files, proxies=self._get_proxies(), timeout=20)
-        except Exception as e: self.send_message(chat_id, caption)
+        except Exception as e: 
+            print(f"Bot Photo Error: {e}")
+            self.send_message(chat_id, caption)
 
     def send_message(self, chat_id, text, parse_mode="HTML"):
         token = cfg.get("tg_bot_token")
@@ -279,11 +300,14 @@ class TelegramBot:
             self.send_message(chat_id, "🚫 <b>Access Denied</b>")
             return
         if text.startswith("/start"):
-            self.send_message(chat_id, "👋 <b>EmbyPulse</b>\n\n指令列表：\n/stats - 图文日报\n/now - 实时状态\n/recent - 最近记录\n/check - 服务器状态")
+            self.send_message(chat_id, "👋 <b>EmbyPulse</b>\n\n指令列表：\n/stats - 图文日报\n/now - 实时状态\n/recent - 最近记录\n/top - 排行榜\n/search [名] - 搜记录")
         elif text.startswith("/stats"): self._cmd_stats(chat_id)
         elif text.startswith("/recent"): self._cmd_recent(chat_id)
         elif text.startswith("/now"): self._cmd_now(chat_id)
         elif text.startswith("/check"): self._cmd_check(chat_id)
+        elif text.startswith("/top"): self._cmd_top(chat_id)
+        elif text.startswith("/history"): self._cmd_history(chat_id, text[9:].strip())
+        elif text.startswith("/search"): self._cmd_search(chat_id, text[7:].strip())
 
     def _monitor_loop(self):
         admin_id = str(cfg.get("tg_chat_id"))
@@ -313,8 +337,10 @@ class TelegramBot:
                                 if img: self.send_photo(admin_id, img, msg)
                                 else: self.send_message(admin_id, msg)
                                 self.active_sessions[sid] = {"title": title_fmt}
+                    
                     stopped_sids = [sid for sid in self.active_sessions if sid not in current_active_ids]
-                    for sid in stopped_sids: del self.active_sessions[sid]
+                    for sid in stopped_sids:
+                        del self.active_sessions[sid]
                 time.sleep(10)
             except Exception as e: time.sleep(10)
 
@@ -381,6 +407,34 @@ class TelegramBot:
 
     def _cmd_check(self, chat_id): self.send_message(chat_id, "✅ Online")
 
+    def _cmd_history(self, chat_id, username):
+        if not username: return self.send_message(chat_id, "用法: /history 用户名")
+        user_map = get_user_map(); target_id = None
+        for uid, name in user_map.items():
+            if name.lower() == username.lower(): target_id = uid; break
+        if not target_id: return self.send_message(chat_id, f"🚫 找不到用户: {username}")
+        where, params = get_base_filter('all') 
+        sql = f"SELECT DateCreated, ItemName, PlayDuration FROM PlaybackActivity {where} AND UserId = ? ORDER BY DateCreated DESC LIMIT 10"
+        rows = query_db(sql, params + [target_id])
+        if not rows: return self.send_message(chat_id, f"📭 {username} 暂无记录")
+        msg = f"👤 <b>{username} 的最近记录</b>\n───────────────\n"
+        for r in rows:
+            t = r['DateCreated'].split(' ')[0][5:]; dur = round((r['PlayDuration'] or 0) / 60)
+            msg += f"• {t} | {dur}m | {r['ItemName']}\n"
+        self.send_message(chat_id, msg)
+
+    def _cmd_search(self, chat_id, keyword):
+        if not keyword: return self.send_message(chat_id, "请提供关键词")
+        where, params = get_base_filter('all')
+        sql = f"SELECT DateCreated, UserId, ItemName FROM PlaybackActivity {where} AND ItemName LIKE ? ORDER BY DateCreated DESC LIMIT 8"
+        rows = query_db(sql, params + [f"%{keyword}%"]); user_map = get_user_map()
+        if not rows: return self.send_message(chat_id, f"🔍 无结果")
+        msg = f"🔍 <b>搜索: {keyword}</b>\n\n"
+        for r in rows:
+            u = user_map.get(r['UserId'], "User"); d = r['DateCreated'].split(' ')[0]
+            msg += f"• {d} <b>{u}</b>\n  {r['ItemName']}\n"
+        self.send_message(chat_id, msg)
+
 bot = TelegramBot()
 
 @asynccontextmanager
@@ -389,7 +443,7 @@ async def lifespan(app: FastAPI):
     yield
     bot.stop()
 
-print(f"--- EmbyPulse V63.0 (Proxy Fix) ---")
+print(f"--- EmbyPulse V64.0 (Stable) ---")
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=86400*7)
@@ -399,7 +453,54 @@ if not os.path.exists("static"): os.makedirs("static")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# ================= 🚀 用户管理 API (替身攻击版) =================
+# 🔥🔥🔥 1. 页面路由 (优先加载，防 404) 🔥🔥🔥
+
+@app.get("/")
+async def page_dashboard(request: Request):
+    if not request.session.get("user"): return RedirectResponse("/login")
+    return templates.TemplateResponse("index.html", {"request": request, "active_page": "dashboard", "user": request.session.get("user")})
+
+@app.get("/users_manage")
+async def page_users_manage(request: Request):
+    if not request.session.get("user"): return RedirectResponse("/login")
+    return templates.TemplateResponse("users.html", {"request": request, "active_page": "users_manage", "user": request.session.get("user")})
+
+@app.get("/bot")
+async def page_bot(request: Request):
+    if not request.session.get("user"): return RedirectResponse("/login")
+    context = {"request": request, "active_page": "bot", "user": request.session.get("user")}
+    context.update(cfg.get_all()) # 修复 Bot 页面
+    return templates.TemplateResponse("bot.html", context)
+
+@app.get("/content")
+async def page_content(request: Request):
+    if not request.session.get("user"): return RedirectResponse("/login")
+    return templates.TemplateResponse("content.html", {"request": request, "active_page": "content", "user": request.session.get("user")})
+
+@app.get("/report")
+async def page_report(request: Request):
+    if not request.session.get("user"): return RedirectResponse("/login")
+    return templates.TemplateResponse("report.html", {"request": request, "active_page": "report", "user": request.session.get("user")})
+
+@app.get("/details")
+async def page_details(request: Request):
+    if not request.session.get("user"): return RedirectResponse("/login")
+    return templates.TemplateResponse("details.html", {"request": request, "active_page": "details", "user": request.session.get("user")})
+
+@app.get("/settings")
+async def page_settings(request: Request):
+    if not request.session.get("user"): return RedirectResponse("/login")
+    return templates.TemplateResponse("settings.html", {"request": request, "active_page": "settings", "user": request.session.get("user")})
+
+@app.get("/login")
+async def page_login(request: Request):
+    if request.session.get("user"): return RedirectResponse("/")
+    return templates.TemplateResponse("login.html", {"request": request})
+
+@app.get("/logout")
+async def api_logout(request: Request): request.session.clear(); return RedirectResponse("/login")
+
+# ================= 🚀 API 逻辑 (替身法 + 增强日志) =================
 
 @app.get("/api/manage/users")
 def api_manage_users(request: Request):
@@ -427,21 +528,37 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
     if not request.session.get("user"): return {"status": "error"}
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     print(f"📝 Update User: {data.user_id}")
-    
     try:
         if data.expire_date is not None:
             exist = query_db("SELECT 1 FROM users_meta WHERE user_id = ?", (data.user_id,), one=True)
             if exist: query_db("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (data.expire_date, data.user_id))
             else: query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (data.user_id, data.expire_date, datetime.datetime.now().isoformat()))
         
-        # 🔥 修复：尝试使用强制覆盖
+        # 🔥🔥🔥 替身改密逻辑 🔥🔥🔥
         if data.password:
-            print(f"🔑 Password change for {data.user_id}...")
-            # 方案：强制 ResetPassword=True
-            payload = {"NewPassword": data.password, "ResetPassword": True}
-            r = requests.post(f"{host}/emby/Users/{data.user_id}/Password?api_key={key}", json=payload)
-            print(f"🔑 Emby [{r.status_code}]: {r.text}")
-            # 如果是 204，通常代表成功
+            print(f"🔑 [Hack] Changing password for {data.user_id}...")
+            # 1. 获取用户名
+            u_info = requests.get(f"{host}/emby/Users/{data.user_id}?api_key={key}").json()
+            u_name = u_info['Name']
+            
+            # 2. 强制置空 (Reset)
+            requests.post(f"{host}/emby/Users/{data.user_id}/Password?api_key={key}", json={"Id": data.user_id, "NewPassword": "", "ResetPassword": True})
+            
+            # 3. 模拟登录
+            auth_header = 'MediaBrowser Client="EmbyPulse", Device="Web", DeviceId="EmbyPulse", Version="1.0.0"'
+            auth_res = requests.post(f"{host}/emby/Users/AuthenticateByName", json={"Username": u_name, "Pw": ""}, headers={"X-Emby-Authorization": auth_header}, timeout=5)
+            
+            if auth_res.status_code == 200:
+                u_token = auth_res.json().get("AccessToken")
+                print(f"✅ Impersonation Login OK. Token: {u_token[:5]}...")
+                # 4. 用户自改
+                user_auth = f'MediaBrowser Client="EmbyPulse", Device="Web", DeviceId="EmbyPulse", Version="1.0.0", Token="{u_token}"'
+                final_res = requests.post(f"{host}/emby/Users/{data.user_id}/Password", json={"CurrentPassword": "", "NewPassword": data.password}, headers={"X-Emby-Authorization": user_auth})
+                print(f"🔑 Final Set: {final_res.status_code}")
+                if final_res.status_code not in [200, 204]: return {"status": "error", "message": f"替身改密失败: {final_res.text}"}
+            else:
+                print(f"⚠️ Impersonation Failed [{auth_res.status_code}]. Fallback Admin.")
+                requests.post(f"{host}/emby/Users/{data.user_id}/Password?api_key={key}", json={"NewPassword": data.password})
 
         if data.is_disabled is not None:
             p_res = requests.get(f"{host}/emby/Users/{data.user_id}?api_key={key}")
@@ -449,56 +566,35 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
                 policy = p_res.json().get('Policy', {}); policy['IsDisabled'] = data.is_disabled
                 requests.post(f"{host}/emby/Users/{data.user_id}/Policy?api_key={key}", json=policy)
         return {"status": "success", "message": "更新成功"}
-    except Exception as e: 
-        print(f"❌ Error: {e}"); return {"status": "error", "message": str(e)}
+    except Exception as e: print(f"❌ Error: {e}"); return {"status": "error", "message": str(e)}
 
 @app.post("/api/manage/user/new")
 def api_manage_user_new(data: NewUserModel, request: Request):
     if not request.session.get("user"): return {"status": "error"}
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     print(f"📝 New User: {data.name}")
-
     try:
-        # 1. 创建空用户
         res = requests.post(f"{host}/emby/Users/New?api_key={key}", json={"Name": data.name})
         if res.status_code != 200: return {"status": "error", "message": f"创建失败: {res.text}"}
         new_id = res.json()['Id']
-        print(f"✅ User ID: {new_id}")
-        
-        # 2. 解除禁用
         requests.post(f"{host}/emby/Users/{new_id}/Policy?api_key={key}", json={"IsDisabled": False})
-
-        # 3. 🔥🔥 替身攻击法：模拟该用户登录并修改自己的密码 🔥🔥
+        
+        # 🔥🔥🔥 替身设置初始密码 🔥🔥🔥
         if data.password:
-            print(f"🥷 Impersonating user to set password...")
-            # A. 模拟空密码登录
+            print(f"🔑 [Hack] Setting initial password...")
             auth_header = 'MediaBrowser Client="EmbyPulse", Device="Web", DeviceId="EmbyPulse", Version="1.0.0"'
             auth_res = requests.post(f"{host}/emby/Users/AuthenticateByName", json={"Username": data.name, "Pw": ""}, headers={"X-Emby-Authorization": auth_header}, timeout=5)
-            
             if auth_res.status_code == 200:
-                user_token = auth_res.json().get("AccessToken")
-                print(f"✅ Got User Token: {user_token[:10]}...")
-                
-                # B. 以用户身份调用改密接口
-                user_auth_header = f'MediaBrowser Client="EmbyPulse", Device="Web", DeviceId="EmbyPulse", Version="1.0.0", Token="{user_token}"'
-                # Emby 官方改密：旧密码为空，新密码为目标密码
-                change_res = requests.post(f"{host}/emby/Users/{new_id}/Password", json={"CurrentPassword": "", "NewPassword": data.password}, headers={"X-Emby-Authorization": user_auth_header})
-                print(f"🔑 Self-Change Response [{change_res.status_code}]: {change_res.text}")
-                
-                if change_res.status_code not in [200, 204]:
-                    print("⚠️ Self-change failed, falling back to Admin Reset")
-                    # Fallback
-                    requests.post(f"{host}/emby/Users/{new_id}/Password?api_key={key}", json={"NewPassword": data.password, "ResetPassword": True})
+                u_token = auth_res.json().get("AccessToken")
+                user_auth = f'MediaBrowser Client="EmbyPulse", Device="Web", DeviceId="EmbyPulse", Version="1.0.0", Token="{u_token}"'
+                requests.post(f"{host}/emby/Users/{new_id}/Password", json={"CurrentPassword": "", "NewPassword": data.password}, headers={"X-Emby-Authorization": user_auth})
             else:
-                print(f"⚠️ Impersonation failed [{auth_res.status_code}], user might require password. Fallback to Admin.")
-                requests.post(f"{host}/emby/Users/{new_id}/Password?api_key={key}", json={"NewPassword": data.password, "ResetPassword": True})
+                requests.post(f"{host}/emby/Users/{new_id}/Password?api_key={key}", json={"NewPassword": data.password})
 
         if data.expire_date:
             query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (new_id, data.expire_date, datetime.datetime.now().isoformat()))
-            
         return {"status": "success", "message": "用户创建成功"}
-    except Exception as e: 
-        print(f"❌ Error: {e}"); return {"status": "error", "message": str(e)}
+    except Exception as e: print(f"❌ Error: {e}"); return {"status": "error", "message": str(e)}
 
 @app.delete("/api/manage/user/{user_id}")
 def api_manage_user_delete(user_id: str, request: Request):
@@ -526,18 +622,19 @@ def api_get_users():
         return {"status": "success", "data": []}
     except Exception as e: return {"status": "error", "message": str(e)}
 
-# ================= 页面路由 =================
-@app.get("/users_manage")
-async def page_users_manage(request: Request):
-    if not request.session.get("user"): return RedirectResponse("/login")
-    return templates.TemplateResponse("users.html", {"request": request, "active_page": "users_manage", "user": request.session.get("user")})
-
-@app.get("/bot")
-async def page_bot(request: Request):
-    if not request.session.get("user"): return RedirectResponse("/login")
-    context = {"request": request, "active_page": "bot", "user": request.session.get("user")}
-    context.update(cfg.get_all())
-    return templates.TemplateResponse("bot.html", context)
+@app.post("/api/login")
+def api_login(data: LoginModel, request: Request):
+    try:
+        host = cfg.get("emby_host")
+        if not host: return {"status": "error", "message": "请配置 EMBY_HOST"}
+        res = requests.post(f"{host}/emby/Users/AuthenticateByName", json={"Username": data.username, "Pw": data.password}, headers={"X-Emby-Authorization": 'MediaBrowser Client="EmbyPulse", Device="Web", DeviceId="EmbyPulse", Version="1.0.0"'}, timeout=5)
+        if res.status_code == 200:
+            user_info = res.json().get("User", {})
+            if not user_info.get("Policy", {}).get("IsAdministrator", False): return {"status": "error", "message": "仅限管理员"}
+            request.session["user"] = {"id": user_info.get("Id"), "name": user_info.get("Name"), "is_admin": True}
+            return {"status": "success"}
+        else: return {"status": "error", "message": "验证失败"}
+    except Exception as e: return {"status": "error", "message": str(e)}
 
 @app.get("/api/bot/settings")
 def api_get_bot_settings(request: Request): return {"status": "success", "data": cfg.get_all()}
@@ -547,15 +644,15 @@ def api_save_bot_settings(data: BotSettingsModel, request: Request):
     cfg.set("enable_bot", data.enable_bot); cfg.set("enable_notify", data.enable_notify)
     bot.stop()
     if data.enable_bot: threading.Timer(1.0, bot.start).start()
-    return {"status": "success", "message": "配置已保存"}
+    return {"status": "success"}
 @app.post("/api/bot/test")
 def api_test_bot(request: Request):
-    token = cfg.get("tg_bot_token"); chat_id = cfg.get("tg_chat_id")
-    if not token: return {"status": "error", "message": "请先保存配置"}
+    token = cfg.get("tg_bot_token"); chat_id = cfg.get("tg_chat_id"); proxy = cfg.get("proxy_url")
+    if not token: return {"status": "error"}
     try:
-        proxies = cfg.get("proxy_url"); p_dict = {"http": proxies, "https": proxies} if proxies else None
-        res = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json={"chat_id": chat_id, "text": "🎉 测试消息"}, proxies=p_dict, timeout=10)
-        return {"status": "success"} if res.status_code == 200 else {"status": "error", "message": res.text}
+        proxies = {"http": proxy, "https": proxy} if proxy else None
+        res = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json={"chat_id": chat_id, "text": "Test"}, proxies=proxies, timeout=10)
+        return {"status": "success"} if res.status_code == 200 else {"status": "error"}
     except Exception as e: return {"status": "error", "message": str(e)}
 
 @app.get("/api/settings")
@@ -566,7 +663,7 @@ def api_save_settings(data: SettingsModel, request: Request):
     cfg.set("tmdb_api_key", data.tmdb_api_key); cfg.set("proxy_url", data.proxy_url); cfg.set("hidden_users", data.hidden_users)
     return {"status": "success"}
 
-# 🔥 修复：媒体库统计超时
+# 🔥 修复：超时时间 10s
 @app.get("/api/stats/dashboard")
 def api_dashboard(user_id: Optional[str] = None):
     try:
@@ -574,16 +671,16 @@ def api_dashboard(user_id: Optional[str] = None):
         plays = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}", params)[0]['c']
         users = query_db(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where} AND DateCreated > date('now', '-30 days')", params)[0]['c']
         dur = query_db(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}", params)[0]['c'] or 0
-        base_stats = {"total_plays": plays, "active_users": users, "total_duration": dur}
-        library_stats = {"movie": 0, "series": 0, "episode": 0}
+        base = {"total_plays": plays, "active_users": users, "total_duration": dur}
+        lib = {"movie": 0, "series": 0, "episode": 0}
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         if key and host:
             try:
                 res = requests.get(f"{host}/emby/Items/Counts?api_key={key}", timeout=10)
                 if res.status_code == 200:
-                    d = res.json(); library_stats = {"movie": d.get("MovieCount"), "series": d.get("SeriesCount"), "episode": d.get("EpisodeCount")}
+                    d = res.json(); lib = {"movie": d.get("MovieCount"), "series": d.get("SeriesCount"), "episode": d.get("EpisodeCount")}
             except Exception as e: print(f"⚠️ Dashboard Error: {e}")
-        return {"status": "success", "data": {**base_stats, "library": library_stats}}
+        return {"status": "success", "data": {**base, "library": lib}}
     except: return {"status": "error", "data": {"total_plays":0, "library": {}}}
 
 @app.get("/api/stats/recent")
@@ -619,8 +716,7 @@ def api_top_movies(user_id: Optional[str] = None, category: str = 'all', sort_by
             clean = row['ItemName'].split(' - ')[0]
             if clean not in aggregated: aggregated[clean] = {'ItemName': clean, 'ItemId': row['ItemId'], 'PlayCount': 0, 'TotalTime': 0}
             aggregated[clean]['PlayCount'] += 1; aggregated[clean]['TotalTime'] += (row['PlayDuration'] or 0); aggregated[clean]['ItemId'] = row['ItemId']
-        res = list(aggregated.values())
-        res.sort(key=lambda x: x['TotalTime'] if sort_by == 'time' else x['PlayCount'], reverse=True)
+        res = list(aggregated.values()); res.sort(key=lambda x: x['TotalTime'] if sort_by == 'time' else x['PlayCount'], reverse=True)
         return {"status": "success", "data": res[:50]}
     except: return {"status": "error", "data": []}
 @app.get("/api/stats/user_details")
@@ -698,7 +794,7 @@ def proxy_user_image(user_id: str, tag: Optional[str] = None):
     except: pass
     return Response(status_code=404)
 
-# 🔥 恢复：成就系统
+# 🔥 恢复：成就系统逻辑
 @app.get("/api/stats/badges")
 def api_badges(user_id: Optional[str] = None):
     try:
