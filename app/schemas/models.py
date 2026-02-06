@@ -36,5 +36,6 @@ class UserUpdateModel(BaseModel):
 
 class NewUserModel(BaseModel):
     name: str
-    password: str
+    # 🔥 关键修复：设为 Optional，解决前端不传密码导致的 422 错误
+    password: Optional[str] = None 
     expire_date: Optional[str] = None
