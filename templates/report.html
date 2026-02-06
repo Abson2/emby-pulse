@@ -4,8 +4,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <script src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <style>
-    /* 基础布局 */
-    html, body { height: 100%; margin: 0; background: #f3f4f6; font-family: "Microsoft YaHei", -apple-system, sans-serif !important; overflow: hidden; }
+    /* 基础布局 - 🔥 修复：移除了强制的 font-family，现在它会跟随全局主题 */
+    html, body { height: 100%; margin: 0; background: #f3f4f6; overflow: hidden; }
+    
     .app-container { display: flex; height: 100%; }
     
     /* 预览区 */
@@ -59,8 +60,17 @@
     }
     
     /* 海报样式 (独立主题，不随界面暗色模式改变) */
+    /* 🔥 注意：这里保留 font-family，因为生成图片需要确定的字体，但它只影响海报内部 */
     :root { --theme-bg: #1a1a1a; --theme-card: rgba(255,255,255,0.08); --theme-text: white; --theme-highlight: #eab308; }
-    .poster-canvas { width: 400px; height: fit-content; min-height: auto; padding-bottom: 20px; background: var(--theme-bg); color: var(--theme-text); position: relative; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 30px 60px rgba(0,0,0,0.5); line-height: 1.6; font-family: "Microsoft YaHei", sans-serif !important; transition: background 0.3s; transform-origin: top center; }
+    .poster-canvas { 
+        width: 400px; height: fit-content; min-height: auto; padding-bottom: 20px; 
+        background: var(--theme-bg); color: var(--theme-text); position: relative; 
+        overflow: hidden; display: flex; flex-direction: column; 
+        box-shadow: 0 30px 60px rgba(0,0,0,0.5); line-height: 1.6; 
+        font-family: "Microsoft YaHei", "Noto Sans SC", sans-serif !important; 
+        transition: background 0.3s; transform-origin: top center; 
+    }
+    
     #poster-bg-img { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; filter: blur(50px) brightness(0.4); transform: scale(1.2); opacity: 0; transition: opacity 0.5s; height: 100%; }
     #poster-bg-gradient { position: absolute; inset: 0; z-index: 1; background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.5) 100%); height: 100%; }
     .p-content { position: relative; z-index: 10; padding: 40px 30px; display: block; }
@@ -543,3 +553,4 @@
     init();
 </script>
 {% endblock %}
+}
