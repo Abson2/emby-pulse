@@ -14,8 +14,12 @@ def api_get_settings(request: Request):
 @router.post("/api/settings")
 def api_save_settings(data: SettingsModel, request: Request):
     if not request.session.get("user"): return {"status": "error"}
-    cfg.set("emby_host", data.emby_host.rstrip('/')); cfg.set("emby_api_key", data.emby_api_key)
-    cfg.set("tmdb_api_key", data.tmdb_api_key); cfg.set("proxy_url", data.proxy_url); cfg.set("hidden_users", data.hidden_users)
+    cfg.set("emby_host", data.emby_host.rstrip('/'))
+    cfg.set("emby_api_key", data.emby_api_key)
+    cfg.set("tmdb_api_key", data.tmdb_api_key)
+    cfg.set("proxy_url", data.proxy_url)
+    cfg.set("webhook_token", data.webhook_token) # 🔥 保存令牌
+    cfg.set("hidden_users", data.hidden_users)
     return {"status": "success"}
 
 @router.get("/api/wallpaper")

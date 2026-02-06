@@ -6,7 +6,7 @@
     <div class="flex items-center justify-between mb-8">
         <div>
             <h1 class="text-2xl font-black text-gray-900 dark:text-white">机器人助手</h1>
-            <p class="text-xs text-gray-500 mt-1">Telegram 远程管理与通知</p>
+            <p class="text-xs text-gray-500 mt-1">Telegram 远程管理、状态监控与新资源通知</p>
         </div>
         <button onclick="saveConfig()" id="save-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-200 dark:shadow-none transition flex items-center">
             <i class="fa-solid fa-save mr-2"></i> 保存配置
@@ -23,7 +23,7 @@
                 <div>
                     <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">Bot Token</label>
                     <input type="password" id="tg_bot_token" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
-                    <p class="text-[10px] text-gray-400 mt-1">从 @BotFather 获取</p>
+                    <p class="text-[10px] text-gray-400 mt-1">从 @BotFather 获取机器人身份令牌</p>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">Admin Chat ID</label>
@@ -33,7 +33,7 @@
                             测试连接
                         </button>
                     </div>
-                    <p class="text-[10px] text-gray-400 mt-1">用于接收通知的管理员 ID (白名单)</p>
+                    <p class="text-[10px] text-gray-400 mt-1">用于接收通知的 Telegram ID (仅此 ID 有权使用指令)</p>
                 </div>
             </div>
         </div>
@@ -57,7 +57,7 @@
             <div class="flex items-center justify-between py-3 border-b border-gray-50 dark:border-gray-700/50">
                 <div>
                     <h4 class="text-sm font-bold text-gray-800 dark:text-gray-200">播放状态通知</h4>
-                    <p class="text-xs text-gray-400 mt-0.5">有人开始/停止播放时发送消息</p>
+                    <p class="text-xs text-gray-400 mt-0.5">有人开始/停止播放时发送即时消息</p>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" id="enable_notify" class="sr-only peer">
@@ -69,7 +69,7 @@
                 <div class="flex items-center justify-between">
                     <div>
                         <h4 class="text-sm font-bold text-gray-800 dark:text-gray-200">新资源入库通知</h4>
-                        <p class="text-xs text-gray-400 mt-0.5">Emby 添加新电影/剧集时发送海报</p>
+                        <p class="text-xs text-gray-400 mt-0.5">Emby 添加新内容时自动发送海报</p>
                     </div>
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" id="enable_library_notify" class="sr-only peer" onchange="toggleWebhookInfo(this)">
@@ -84,18 +84,19 @@
                             <p class="font-bold text-purple-900 dark:text-purple-100">请前往 Emby 后台配置 Webhook 才能生效：</p>
                             
                             <div class="space-y-1">
-                                <p class="text-purple-700 dark:text-purple-300 opacity-80">Webhook Url (点击全选复制)</p>
+                                <p class="text-purple-700 dark:text-purple-300 opacity-80">Webhook Url (已自动携带 Token)</p>
                                 <div class="relative group">
                                     <input type="text" id="webhook-url" readonly onclick="this.select()"
-                                        class="w-full bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-800/50 rounded-lg px-3 py-2 font-mono text-purple-700 dark:text-purple-300 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/30 cursor-pointer">
+                                        class="w-full bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-800/50 rounded-lg px-3 py-2 font-mono text-purple-700 dark:text-purple-300 text-xs focus:outline-none cursor-pointer">
                                 </div>
                             </div>
 
                             <ul class="list-disc list-inside space-y-1 text-purple-800 dark:text-purple-200 opacity-80 leading-relaxed">
                                 <li>Emby 后台 -> <strong>Webhook</strong> -> <strong>添加 Webhook</strong></li>
-                                <li>事件勾选：<strong>新媒体已添加 (New Media Added)</strong></li>
+                                <li>事件勾选：<strong>New Media Added</strong>, <strong>Playback Start/Stop</strong></li>
                                 <li>数据类型：<strong>application/json</strong></li>
                             </ul>
+                            <p class="text-[10px] text-gray-400 italic">提示：安全令牌可在【系统设置】中更改</p>
                         </div>
                     </div>
                 </div>
@@ -105,24 +106,50 @@
 
     <div class="mt-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6">
         <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider mb-4">
-            <i class="fa-solid fa-terminal text-gray-400 mr-2"></i> 可用指令
+            <i class="fa-solid fa-terminal text-gray-400 mr-2"></i> 机器人指令集
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
                 <span class="font-mono text-blue-500 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded text-xs">/stats</span>
-                <span class="text-gray-600 dark:text-gray-300">查看今日播放、累计播放及媒体库库存概览。</span>
+                <div class="flex-1">
+                    <p class="text-gray-800 dark:text-gray-200 font-bold text-xs">媒体超级日报</p>
+                    <p class="text-gray-500 dark:text-gray-400 text-[11px] mt-0.5">汇总今日播放量、活跃用户排行及媒体生成精美日报图片。</p>
+                </div>
             </div>
             <div class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
                 <span class="font-mono text-blue-500 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded text-xs">/now</span>
-                <span class="text-gray-600 dark:text-gray-300">查看当前正在播放的内容、用户及进度。</span>
+                <div class="flex-1">
+                    <p class="text-gray-800 dark:text-gray-200 font-bold text-xs">正在播放状态</p>
+                    <p class="text-gray-500 dark:text-gray-400 text-[11px] mt-0.5">列出当前服务器上所有活跃会话、观看用户、内容标题及实时进度百分比。</p>
+                </div>
+            </div>
+            <div class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                <span class="font-mono text-blue-500 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded text-xs">/latest</span>
+                <div class="flex-1">
+                    <p class="text-gray-800 dark:text-gray-200 font-bold text-xs">最近入库影片</p>
+                    <p class="text-gray-500 dark:text-gray-400 text-[11px] mt-0.5">主动从媒体库中抓取最近入库的 5 部影片（含入库日期）。</p>
+                </div>
             </div>
             <div class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
                 <span class="font-mono text-blue-500 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded text-xs">/recent</span>
-                <span class="text-gray-600 dark:text-gray-300">列出最近 5 条播放历史记录。</span>
+                <div class="flex-1">
+                    <p class="text-gray-800 dark:text-gray-200 font-bold text-xs">最近播放记录</p>
+                    <p class="text-gray-500 dark:text-gray-400 text-[11px] mt-0.5">显示历史记录中最近的 10 条播放动态（含时间、用户、片名）。</p>
+                </div>
             </div>
             <div class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
                 <span class="font-mono text-blue-500 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded text-xs">/check</span>
-                <span class="text-gray-600 dark:text-gray-300">检查 Emby 服务器连接状态与延迟。</span>
+                <div class="flex-1">
+                    <p class="text-gray-800 dark:text-gray-200 font-bold text-xs">系统健康检查</p>
+                    <p class="text-gray-500 dark:text-gray-400 text-[11px] mt-0.5">检查 Emby 服务器连接延迟、版本号及内/外网访问地址。</p>
+                </div>
+            </div>
+            <div class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                <span class="font-mono text-blue-500 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded text-xs">/help</span>
+                <div class="flex-1">
+                    <p class="text-gray-800 dark:text-gray-200 font-bold text-xs">帮助菜单</p>
+                    <p class="text-gray-500 dark:text-gray-400 text-[11px] mt-0.5">列出所有机器人指令的用法说明。</p>
+                </div>
             </div>
         </div>
     </div>
@@ -132,6 +159,8 @@
 
 {% block scripts %}
 <script>
+    let globalToken = 'embypulse';
+
     async function init() {
         try {
             const res = await fetch('/api/bot/settings');
@@ -143,24 +172,28 @@
                 document.getElementById('enable_bot').checked = d.enable_bot || false;
                 document.getElementById('enable_notify').checked = d.enable_notify || false;
                 
-                // 加载入库通知状态并触发 UI 显示
+                // 加载入库通知状态
                 const libNotify = document.getElementById('enable_library_notify');
                 libNotify.checked = d.enable_library_notify || false;
+                
+                // 加载 Token 用于生成 URL
+                globalToken = d.webhook_token || 'embypulse';
+                
                 toggleWebhookInfo(libNotify); 
             }
         } catch(e) { console.error(e); }
     }
 
-    // 控制 Webhook 指引显示
+    // 控制 Webhook 指引显示与 URL 生成
     function toggleWebhookInfo(el) {
         const infoBox = document.getElementById('webhook-info');
         const urlInput = document.getElementById('webhook-url');
         
         if (el.checked) {
             infoBox.classList.remove('hidden');
-            // 自动获取当前域名拼接 API 地址
+            // 获取当前主机名并拼接带 Token 的地址
             const host = window.location.protocol + "//" + window.location.host;
-            urlInput.value = `${host}/api/v1/webhook`;
+            urlInput.value = `${host}/api/v1/webhook?token=${globalToken}`;
         } else {
             infoBox.classList.add('hidden');
         }
@@ -182,11 +215,17 @@
 
         try {
             const res = await fetch('/api/bot/settings', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(payload)
             });
             const json = await res.json();
-            alert(json.status === 'success' ? '✅ 配置已保存，机器人正在重启...' : '❌ 保存失败');
+            if (json.status === 'success') {
+                alert('✅ 配置已保存，机器人服务正在重载...');
+                init(); // 刷新页面数据
+            } else {
+                alert('❌ 保存失败');
+            }
         } catch(e) { alert('❌ 网络错误'); } 
         finally { btn.innerHTML = oldHtml; btn.disabled = false; }
     }
@@ -196,12 +235,13 @@
         btn.innerText = '发送中...';
         btn.disabled = true;
         
+        // 测试前自动保存当前界面的配置
         await saveConfig();
 
         try {
             const res = await fetch('/api/bot/test', { method: 'POST' });
             const json = await res.json();
-            alert(json.status === 'success' ? '✅ 测试消息已发送，请检查 Telegram' : '❌ 发送失败: ' + json.message);
+            alert(json.status === 'success' ? '✅ 测试消息已成功发送，请查收 Telegram！' : '❌ 发送失败: ' + json.message);
         } catch(e) { alert('❌ 网络错误'); }
         finally { btn.innerText = '测试连接'; btn.disabled = false; }
     }

@@ -3,8 +3,7 @@ import time
 import requests
 import datetime
 import io
-import json
-from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
+from app.core.config import cfg, REPORT_COVER_URL
 from app.core.database import query_db, get_base_filter
 from app.services.report_service import report_gen, HAS_PIL
 
@@ -19,29 +18,21 @@ class TelegramBot:
     def start(self):
         if self.running: return
         if not cfg.get("tg_bot_token"): return
-        
         self.running = True
         self._set_commands()
-        
         self.poll_thread = threading.Thread(target=self._polling_loop, daemon=True)
         self.poll_thread.start()
-        
         self.schedule_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
         self.schedule_thread.start()
-        
-        print("🤖 Bot Started (Enhanced Mode)")
+        print("🤖 Bot Started")
 
-    def stop(self): 
-        self.running = False
+    def stop(self): self.running = False
 
     def _get_proxies(self):
         proxy = cfg.get("proxy_url")
         return {"http": proxy, "https": proxy} if proxy else None
 
-    # ================= 工具函数 =================
-
     def _get_location(self, ip):
-        """查询 IP 归属地 (ip-api.com)"""
         if not ip or ip in ['127.0.0.1', '::1', '0.0.0.0']: return "本地连接"
         try:
             res = requests.get(f"http://ip-api.com/json/{ip}?lang=zh-CN", timeout=3)
@@ -53,7 +44,6 @@ class TelegramBot:
         return "未知位置"
 
     def _download_emby_image(self, item_id, img_type='Primary'):
-        """下载 Emby 图片"""
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         if not key or not host: return None
         try:
@@ -63,12 +53,12 @@ class TelegramBot:
         except: pass
         return None
 
-    def send_photo(self, chat_id, photo_io, caption, parse_mode="HTML"):
+    def send_photo(self, chat_id, photo_io, caption):
         token = cfg.get("tg_bot_token")
         if not token: return
         try:
             url = f"https://api.telegram.org/bot{token}/sendPhoto"
-            data = {"chat_id": chat_id, "caption": caption, "parse_mode": parse_mode}
+            data = {"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"}
             if isinstance(photo_io, str):
                 data['photo'] = photo_io
                 requests.post(url, data=data, proxies=self._get_proxies(), timeout=20)
@@ -76,121 +66,85 @@ class TelegramBot:
                 photo_io.seek(0)
                 files = {"photo": ("image.jpg", photo_io, "image/jpeg")}
                 requests.post(url, data=data, files=files, proxies=self._get_proxies(), timeout=30)
-        except Exception as e: 
-            self.send_message(chat_id, caption)
+        except: self.send_message(chat_id, caption)
 
-    def send_message(self, chat_id, text, parse_mode="HTML"):
+    def send_message(self, chat_id, text):
         token = cfg.get("tg_bot_token")
         if not token: return
         try:
             url = f"https://api.telegram.org/bot{token}/sendMessage"
-            requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode}, proxies=self._get_proxies(), timeout=10)
+            requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"}, proxies=self._get_proxies(), timeout=10)
         except: pass
 
     # ================= 核心推送逻辑 =================
 
     def push_playback_event(self, data, action="start"):
-        """处理 播放/停止 通知"""
         if not cfg.get("enable_notify") or not cfg.get("tg_chat_id"): return
-        
         try:
-            chat_id = str(cfg.get("tg_chat_id"))
-            user_name = data.get("User", {}).get("Name", "未知用户")
+            cid = str(cfg.get("tg_chat_id"))
+            user = data.get("User", {}).get("Name", "未知用户")
             item = data.get("Item", {})
             session = data.get("Session", {})
             
-            # 标题与类型处理
             title = item.get("Name", "未知内容")
-            type_cn = "剧集" if item.get("Type") == "Episode" else "电影"
             if item.get("SeriesName"):
-                idx = item.get("IndexNumber", 0)
-                p_idx = item.get("ParentIndexNumber", 1)
-                title = f"{item.get('SeriesName')} S{str(p_idx).zfill(2)}E{str(idx).zfill(2)} {title}"
+                title = f"{item.get('SeriesName')} S{str(item.get('ParentIndexNumber',1)).zfill(2)}E{str(item.get('IndexNumber',0)).zfill(2)} {title}"
 
-            # 进度计算
             ticks = data.get("PlaybackPositionTicks") or session.get("PlayState", {}).get("PositionTicks", 0)
             total = item.get("RunTimeTicks", 1)
             progress = f"{(ticks / total * 100):.2f}%" if total > 0 else "0.00%"
-
-            # 网络与设备
             ip = session.get("RemoteEndPoint", "127.0.0.1")
-            location = self._get_location(ip)
-            device = f"{session.get('Client', 'Emby')} {session.get('DeviceName', '')}"
+            loc = self._get_location(ip)
 
             emoji = "▶️" if action == "start" else "⏹️"
             act_txt = "开始播放" if action == "start" else "停止播放"
-
             msg = (
-                f"{emoji} <b>【{user_name}】{act_txt} {title}</b>\n"
-                f"📚 类型：{type_cn}\n"
+                f"{emoji} <b>【{user}】{act_txt}</b> {title}\n"
+                f"📚 类型：{'剧集' if item.get('Type')=='Episode' else '电影'}\n"
                 f"🔄 进度：{progress}\n"
-                f"🌐 IP地址：{ip} {location}\n"
-                f"📱 设备： {device}\n"
+                f"🌐 IP地址：{ip} {loc}\n"
+                f"📱 设备：{session.get('Client','Emby')} {session.get('DeviceName','')}\n"
                 f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
             
-            # 尝试发送海报/横幅
-            item_id = item.get("Id")
-            img = self._download_emby_image(item_id, 'Backdrop') or self._download_emby_image(item_id, 'Primary')
-            if img:
-                self.send_photo(chat_id, img, msg)
-            else:
-                self.send_message(chat_id, msg)
-        except Exception as e: print(f"Push Error: {e}")
+            img = self._download_emby_image(item.get("Id"), 'Backdrop') or self._download_emby_image(item.get("Id"), 'Primary')
+            if img: self.send_photo(cid, img, msg)
+            else: self.send_message(cid, msg)
+        except: pass
 
     def push_new_media(self, item_id):
-        """处理新资源入库通知 (降级保障)"""
         if not cfg.get("enable_library_notify") or not cfg.get("tg_chat_id"): return
-        
-        chat_id = str(cfg.get("tg_chat_id"))
-        host = cfg.get("emby_host"); key = cfg.get("emby_api_key")
-        time.sleep(8) # 延长等待时间
-
+        cid = str(cfg.get("tg_chat_id")); host = cfg.get("emby_host"); key = cfg.get("emby_api_key")
+        time.sleep(8) 
         try:
-            url = f"{host}/emby/Items/{item_id}?api_key={key}"
-            res = requests.get(url, timeout=10)
+            res = requests.get(f"{host}/emby/Items/{item_id}?api_key={key}", timeout=10)
             if res.status_code != 200: return
             item = res.json()
-            
             name = item.get("Name", "")
-            type_raw = item.get("Type", "Movie")
-            overview = item.get("Overview", "暂无简介...")
-            rating = item.get("CommunityRating", "N/A")
+            if item.get("Type") == "Episode":
+                name = f"{item.get('SeriesName','')} S{str(item.get('ParentIndexNumber',1)).zfill(2)}E{str(item.get('IndexNumber',1)).zfill(2)}"
             
+            overview = item.get("Overview", "暂无简介...")
             if len(overview) > 120: overview = overview[:115] + "..."
             
-            type_cn = "电影"; display_title = name
-            if type_raw == "Episode":
-                type_cn = "剧集"
-                display_title = f"{item.get('SeriesName', '')} S{str(item.get('ParentIndexNumber',1)).zfill(2)}E{str(item.get('IndexNumber',1)).zfill(2)}"
-            
             caption = (
-                f"📺 <b>新入库 {type_cn} {display_title}</b>\n"
-                f"⭐ 评分：{rating}/10 ｜ 📚 类型：{type_cn}\n"
+                f"📺 <b>新入库 {name}</b>\n"
+                f"⭐ 评分：{item.get('CommunityRating','N/A')}/10\n"
                 f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
                 f"📝 剧情：{overview}"
             )
-
-            # 图片降级逻辑：如果没图，不再静默，改用默认图推送
             img = self._download_emby_image(item_id, 'Primary')
-            if img:
-                self.send_photo(chat_id, img, caption)
-            else:
-                self.send_photo(chat_id, REPORT_COVER_URL, caption)
+            # 降级策略：没海报也发，确保通知不丢失
+            self.send_photo(cid, img if img else REPORT_COVER_URL, caption)
         except: pass
 
-    # ================= 指令系统实现 =================
+    # ================= 机器人指令实现 =================
 
     def _set_commands(self):
         token = cfg.get("tg_bot_token")
-        cmds = [
-            {"command": "stats", "description": "📊 超级日报"},
-            {"command": "now", "description": "🟢 正在播放"},
-            {"command": "latest", "description": "🆕 最近入库"},
-            {"command": "recent", "description": "📜 播放历史"},
-            {"command": "check", "description": "📡 系统检查"},
-            {"command": "help", "description": "🤖 帮助菜单"}
-        ]
+        cmds = [{"command": "stats", "description": "📊 超级日报"}, {"command": "now", "description": "🟢 正在播放"},
+                {"command": "latest", "description": "🆕 最近入库"}, {"command": "recent", "description": "📜 播放历史"},
+                {"command": "check", "description": "📡 系统检查"}, {"command": "help", "description": "🤖 帮助菜单"}]
         try: requests.post(f"https://api.telegram.org/bot{token}/setMyCommands", json={"commands": cmds}, proxies=self._get_proxies())
         except: pass
 
@@ -198,8 +152,7 @@ class TelegramBot:
         token = cfg.get("tg_bot_token"); admin_id = str(cfg.get("tg_chat_id"))
         while self.running:
             try:
-                url = f"https://api.telegram.org/bot{token}/getUpdates"
-                res = requests.get(url, params={"offset": self.offset, "timeout": 30}, proxies=self._get_proxies(), timeout=35)
+                res = requests.get(f"https://api.telegram.org/bot{token}/getUpdates", params={"offset": self.offset, "timeout": 30}, proxies=self._get_proxies(), timeout=35)
                 if res.status_code == 200:
                     for u in res.json().get("result", []):
                         self.offset = u["update_id"] + 1
@@ -222,10 +175,8 @@ class TelegramBot:
     def _cmd_stats(self, cid):
         where, params = get_base_filter('all')
         plays = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where} AND DateCreated > date('now', 'start of day')", params)[0]['c']
-        # 修复活跃用户统计：排除空值并按播放量排序
         users = query_db(f"SELECT user_name, COUNT(*) as cnt FROM PlaybackActivity {where} AND DateCreated > date('now', 'start of day') AND user_name != '' GROUP BY user_name ORDER BY cnt DESC LIMIT 5", params)
         user_txt = "\n".join([f"🏆 {u['user_name']} ({u['cnt']}次)" for u in users]) if users else "无"
-        
         caption = f"📊 <b>今日媒体数据汇总</b>\n\n▶️ 今日播放：{plays} 次\n👥 活跃排行：\n{user_txt}"
         img = report_gen.generate_report('all', 'day') if HAS_PIL else REPORT_COVER_URL
         self.send_photo(cid, img, caption)
@@ -276,11 +227,10 @@ class TelegramBot:
             res = requests.get(f"{host}/emby/System/Info?api_key={key}", timeout=5)
             if res.status_code == 200:
                 info = res.json()
-                # 修复 IP 显示
                 local = (info.get('LocalAddresses') or [info.get('LocalAddress')])[0]
                 wan = (info.get('RemoteAddresses') or [info.get('WanAddress')])[0]
                 self.send_message(cid, f"✅ <b>系统在线</b>\n延迟: {int((time.time()-start)*1000)}ms\n内网: {local}\n外网: {wan}")
-        except: self.send_message(cid, "❌ 无法连接")
+        except: self.send_message(cid, "❌ 连接错误")
 
     def _cmd_help(self, cid):
         msg = "🤖 <b>指令列表</b>\n/stats - 日报\n/now - 正在播放\n/latest - 最近入库\n/recent - 历史记录\n/check - 健康检查"
