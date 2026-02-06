@@ -7,10 +7,10 @@ router = APIRouter()
 @router.post("/api/v1/webhook")
 async def emby_webhook(request: Request, background_tasks: BackgroundTasks):
     """
-    统一处理 Emby Webhook 事件 (支持 播放开始/停止、新入库)
+    统一处理 Emby Webhook 事件
     """
     try:
-        # 1. 解析数据 (兼容 JSON 和 Form)
+        # 兼容性处理
         content_type = request.headers.get("content-type", "")
         if "application/json" in content_type:
             data = await request.json()
@@ -19,39 +19,37 @@ async def emby_webhook(request: Request, background_tasks: BackgroundTasks):
             raw_data = form.get("data", "{}")
             data = json.loads(raw_data)
 
-        # 2. 获取事件类型 (转为小写以兼容不同 Emby 版本)
+        # 获取事件类型 (转小写，这是修复的关键！)
         event_raw = data.get("Event", "")
         event = event_raw.lower().strip()
         
         # 调试日志
         if event:
-            print(f"🔔 Webhook Event: {event_raw}")
+            print(f"🔔 Webhook收到事件: {event_raw}")
 
-        # 3. 路由分发
-        
-        # [场景A] 新资源入库 (library.new)
-        if event == "library.new":
+        # 1. 新资源入库 (兼容 library.new 和 item.added)
+        if event in ["library.new", "item.added"]:
             item = data.get("Item", {})
             item_id = item.get("Id")
             item_type = item.get("Type")
             
-            # 只处理电影和剧集单集
+            # 过滤不需要的类型
             if item_id and item_type in ["Movie", "Episode"]:
-                print(f"   -> 触发入库推送: {item.get('Name')}")
+                print(f"   -> 准备推送入库: {item.get('Name')}")
                 background_tasks.add_task(bot.push_new_media, item_id)
 
-        # [场景B] 播放开始 (playback.start)
+        # 2. 播放开始
         elif event == "playback.start":
-            print(f"   -> 触发开始播放推送")
+            print(f"   -> 准备推送播放开始")
             background_tasks.add_task(bot.push_playback_event, data, "start")
 
-        # [场景C] 播放停止 (playback.stop)
+        # 3. 播放停止
         elif event == "playback.stop":
-            print(f"   -> 触发停止播放推送")
+            print(f"   -> 准备推送播放停止")
             background_tasks.add_task(bot.push_playback_event, data, "stop")
 
         return {"status": "success"}
     
     except Exception as e:
-        print(f"❌ Webhook 处理错误: {e}")
+        print(f"❌ Webhook Error: {e}")
         return {"status": "error", "message": str(e)}
