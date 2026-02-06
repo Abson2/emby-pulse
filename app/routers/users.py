@@ -59,8 +59,8 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
         # 不再使用替身，不再发送 ResetPassword=True
         if data.password:
             print(f"🔑 Admin Force Setting Password for {data.user_id}...")
-            # 只发送 NewPassword，Emby 会直接覆盖哈希
-            payload = {"NewPassword": data.password}
+            # 必须加上 ResetPassword: True 告诉 Emby 这是强制重置，否则管理员无法覆盖密码
+            payload = {"NewPassword": data.password, "ResetPassword": True}
             r = requests.post(f"{host}/emby/Users/{data.user_id}/Password?api_key={key}", json=payload)
             
             if r.status_code not in [200, 204]:
