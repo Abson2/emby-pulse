@@ -17,6 +17,8 @@ class TelegramBot:
         self.schedule_thread = None 
         self.offset = 0
         self.last_check_min = -1
+        # 缓存用户ID到用户名的映射，避免频繁查API
+        self.user_cache = {}
         
     def start(self):
         if self.running: return
@@ -27,13 +29,29 @@ class TelegramBot:
         self.poll_thread.start()
         self.schedule_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
         self.schedule_thread.start()
-        print("🤖 Bot Service Started (Poster Optimization Mode)")
+        print("🤖 Bot Service Started (Stable + Poster Fix)")
 
     def stop(self): self.running = False
 
     def _get_proxies(self):
         proxy = cfg.get("proxy_url")
         return {"http": proxy, "https": proxy} if proxy else None
+
+    # 🔥 核心修复：通过 API 将 UserId 转为 UserName
+    def _get_username(self, user_id):
+        if user_id in self.user_cache: return self.user_cache[user_id]
+        
+        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
+        if not key or not host: return user_id
+        
+        try:
+            # 查所有用户刷新缓存
+            res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=2)
+            if res.status_code == 200:
+                for u in res.json():
+                    self.user_cache[u['Id']] = u['Name']
+        except: pass
+        return self.user_cache.get(user_id, "Unknown User")
 
     def _get_location(self, ip):
         if not ip or ip in ['127.0.0.1', '::1', '0.0.0.0']: return "本地连接"
@@ -50,10 +68,11 @@ class TelegramBot:
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         if not key or not host: return None
         try:
+            # 增加 quality=90 优化图片质量
             if image_tag:
-                url = f"{host}/emby/Items/{item_id}/Images/{img_type}?maxHeight=800&maxWidth=1200&quality=90&tag={image_tag}"
+                url = f"{host}/emby/Items/{item_id}/Images/{img_type}?maxHeight=800&maxWidth=600&quality=90&tag={image_tag}"
             else:
-                url = f"{host}/emby/Items/{item_id}/Images/{img_type}?maxHeight=800&maxWidth=1200&quality=90&api_key={key}"
+                url = f"{host}/emby/Items/{item_id}/Images/{img_type}?maxHeight=800&maxWidth=600&quality=90&api_key={key}"
             
             res = requests.get(url, timeout=15)
             if res.status_code == 200: return io.BytesIO(res.content)
@@ -87,9 +106,8 @@ class TelegramBot:
 
     # ================= 业务逻辑 =================
 
-    # 纯读取模式：不写入数据库
     def save_playback_activity(self, data):
-        pass 
+        pass # 只读模式，不写入
 
     def push_playback_event(self, data, action="start"):
         if not cfg.get("enable_notify") or not cfg.get("tg_chat_id"): return
@@ -127,42 +145,31 @@ class TelegramBot:
                 f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
             
-            # 🔥 优化：如果是剧集，优先使用 SeriesId 获取海报
+            # 🔥 海报优化：优先使用 SeriesId 获取竖屏海报
             target_id = item.get("Id")
             if item.get("Type") == "Episode" and item.get("SeriesId"):
                 target_id = item.get("SeriesId")
             
-            # 这里的 Primary 就是海报了
             img_io = self._download_emby_image(target_id, 'Primary') 
-            
-            # 如果没拿到海报，尝试用单集的背景图兜底
-            if not img_io: 
-                img_io = self._download_emby_image(item.get("Id"), 'Backdrop')
+            if not img_io: img_io = self._download_emby_image(item.get("Id"), 'Backdrop')
 
             if img_io: self.send_photo(chat_id, img_io, msg)
-            else: self.send_message(cid, msg)
+            else: self.send_message(chat_id, msg)
         except: pass
 
     def push_new_media(self, item_id, fallback_item=None):
         if not cfg.get("enable_library_notify") or not cfg.get("tg_chat_id"): return
         cid = str(cfg.get("tg_chat_id")); host = cfg.get("emby_host"); key = cfg.get("emby_api_key")
 
-        direct_tag = None
-        if fallback_item:
-            direct_tag = fallback_item.get("ImageTags", {}).get("Primary")
-
-        if direct_tag:
-            item = fallback_item
-        else:
-            item = None
-            for i in range(3):
-                time.sleep(10 + i*15)
-                try:
-                    res = requests.get(f"{host}/emby/Items/{item_id}?api_key={key}", timeout=10)
-                    if res.status_code == 200:
-                        item = res.json()
-                        if item.get("ImageTags", {}).get("Primary"): break
-                except: pass
+        item = None
+        for i in range(3):
+            time.sleep(10 + i*15)
+            try:
+                res = requests.get(f"{host}/emby/Items/{item_id}?api_key={key}", timeout=10)
+                if res.status_code == 200:
+                    item = res.json()
+                    if item.get("ImageTags", {}).get("Primary"): break
+            except: pass
         
         final = item if item else fallback_item
         if not final: return
@@ -194,15 +201,13 @@ class TelegramBot:
                 f"📝 剧情：{overview}"
             )
 
-            # 🔥 优化：如果是剧集，尝试获取 SeriesId 并下载其海报
-            # 注意：如果此时使用了 SeriesId，fallback_item 里的 ImageTag (单集的) 可能就不适用了
-            # 所以如果换 ID，就不传 tag，让 _download_emby_image 自己去查最新的
+            # 🔥 海报优化：剧集使用 SeriesId
             target_id = item_id
             use_tag = final.get("ImageTags", {}).get("Primary")
             
             if type_raw == "Episode" and final.get("SeriesId"):
                 target_id = final.get("SeriesId")
-                use_tag = None # 换了ID，tag失效，需要重新查询
+                use_tag = None 
 
             img_io = self._download_emby_image(target_id, 'Primary', image_tag=use_tag)
             
@@ -253,29 +258,49 @@ class TelegramBot:
         elif text.startswith("/check"): self._cmd_check(cid)
         elif text.startswith("/help"): self._cmd_help(cid)
 
-    # 统计逻辑 (保持插件适配)
+    # 🔥 核心修复：统计逻辑
+    # 1. 增加数据库返回值的 None 检查
+    # 2. 将 UserName 改回 UserId (因为插件数据库没 UserName)
     def _cmd_stats(self, chat_id, period='day'):
         where, params = get_base_filter('all') 
         
         if period == 'week': time_filter = "date('now', '-7 days')"
         elif period == 'month': time_filter = "date('now', 'start of month')"
         elif period == 'year': time_filter = "date('now', 'start of year')"
-        else: time_filter = "date('now', 'start of day')" # day
+        else: time_filter = "date('now', 'start of day')" 
 
         where += f" AND DateCreated > {time_filter}"
         
         try:
-            plays = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}", params)[0]['c']
-            dur = query_db(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}", params)[0]['c'] or 0
+            # 1. 查询总数
+            plays_res = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}", params)
+            if not plays_res: 
+                raise Exception("数据库查询返回空 (Table missing or DB locked)")
+            plays = plays_res[0]['c']
+            
+            # 2. 查询时长
+            dur_res = query_db(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}", params)
+            dur = dur_res[0]['c'] if dur_res and dur_res[0]['c'] else 0
             hours = round(dur / 3600, 1)
-            users = query_db(f"SELECT COUNT(DISTINCT UserName) as c FROM PlaybackActivity {where}", params)[0]['c']
-            top = query_db(f"SELECT UserName, SUM(PlayDuration) as t FROM PlaybackActivity {where} GROUP BY UserName ORDER BY t DESC LIMIT 1", params)
-            top_str = f"{top[0]['UserName']} ({round(top[0]['t']/3600, 1)}h)" if top else "暂无"
+            
+            # 3. 活跃用户 (查 UserId)
+            users_res = query_db(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where}", params)
+            users = users_res[0]['c'] if users_res else 0
 
+            # 4. 榜首 (查 UserId -> 转 Name)
+            top = query_db(f"SELECT UserId, SUM(PlayDuration) as t FROM PlaybackActivity {where} GROUP BY UserId ORDER BY t DESC LIMIT 1", params)
+            top_str = "暂无"
+            if top:
+                name = self._get_username(top[0]['UserId']) # ID转名
+                u_h = round(top[0]['t'] / 3600, 1)
+                top_str = f"{name} ({u_h}h)"
+
+            # 5. 热门内容
             tops = query_db(f"SELECT ItemName, COUNT(*) as c FROM PlaybackActivity {where} GROUP BY ItemName ORDER BY c DESC LIMIT 3", params)
             top_content = ""
-            for i, item in enumerate(tops):
-                top_content += f"{['🥇','🥈','🥉'][i]} {item['ItemName']} ({item['c']}次)\n"
+            if tops:
+                for i, item in enumerate(tops):
+                    top_content += f"{['🥇','🥈','🥉'][i]} {item['ItemName']} ({item['c']}次)\n"
 
             caption = (
                 f"📊 <b>EmbyPulse {period}报告</b>\n───────────────\n"
@@ -293,7 +318,7 @@ class TelegramBot:
 
         except Exception as e:
             logger.error(f"Stats Error: {e}")
-            self.send_message(chat_id, f"❌ 数据库查询失败")
+            self.send_message(chat_id, f"❌ 统计失败: 数据库查询错误")
 
     def _cmd_now(self, cid):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -322,16 +347,20 @@ class TelegramBot:
             self.send_message(cid, msg)
         except: self.send_message(cid, "❌ 查询失败")
 
+    # 🔥 核心修复：最近播放 (查 UserId -> 转 Name)
     def _cmd_recent(self, cid):
         try:
-            rows = query_db("SELECT UserName, ItemName, DateCreated FROM PlaybackActivity ORDER BY DateCreated DESC LIMIT 10")
+            rows = query_db("SELECT UserId, ItemName, DateCreated FROM PlaybackActivity ORDER BY DateCreated DESC LIMIT 10")
             if not rows: return self.send_message(cid, "📭 无记录")
             msg = "📜 <b>最近播放</b>\n"
             for r in rows:
                 date = r['DateCreated'][:16].replace('T', ' ')
-                msg += f"\n⏰ {date} | {r['UserName']}\n🎬 {r['ItemName']}\n"
+                name = self._get_username(r['UserId'])
+                msg += f"\n⏰ {date} | {name}\n🎬 {r['ItemName']}\n"
             self.send_message(cid, msg)
-        except Exception as e: self.send_message(cid, f"❌ 查询失败")
+        except Exception as e: 
+            logger.error(f"Recent Error: {e}")
+            self.send_message(cid, f"❌ 查询失败")
 
     def _cmd_check(self, cid):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -361,13 +390,17 @@ class TelegramBot:
             except: time.sleep(60)
 
     def _check_user_expiration(self):
-        users = query_db("SELECT user_id, expire_date FROM users_meta WHERE expire_date IS NOT NULL AND expire_date != ''")
-        today = datetime.datetime.now().strftime("%Y-%m-%d")
-        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
-        for u in users:
-            if u['expire_date'] < today:
-                try: requests.post(f"{host}/emby/Users/{u['user_id']}/Policy?api_key={key}", json={"IsDisabled": True})
-                except: pass
+        # 简单检查逻辑，保持不变
+        try:
+            users = query_db("SELECT user_id, expire_date FROM users_meta WHERE expire_date IS NOT NULL AND expire_date != ''")
+            if not users: return
+            today = datetime.datetime.now().strftime("%Y-%m-%d")
+            key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
+            for u in users:
+                if u['expire_date'] < today:
+                    try: requests.post(f"{host}/emby/Users/{u['user_id']}/Policy?api_key={key}", json={"IsDisabled": True})
+                    except: pass
+        except: pass
     
     def push_now(self, user_id, period, theme):
         if not cfg.get("tg_chat_id"): return False
