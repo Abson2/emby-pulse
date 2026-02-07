@@ -4,6 +4,7 @@ import requests
 import datetime
 import io
 import logging
+import urllib.parse
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter
 from app.services.report_service import report_gen, HAS_PIL
@@ -29,7 +30,7 @@ class TelegramBot:
         self.poll_thread.start()
         self.schedule_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
         self.schedule_thread.start()
-        print("🤖 Bot Service Started (Localized Reports)")
+        print("🤖 Bot Service Started (Search + Poster + Reports)")
 
     def stop(self): self.running = False
 
@@ -214,7 +215,8 @@ class TelegramBot:
 
     def _set_commands(self):
         token = cfg.get("tg_bot_token")
-        cmds = [{"command": "stats", "description": "📊 今日日报"},
+        cmds = [{"command": "search", "description": "🔍 搜索资源"},
+                {"command": "stats", "description": "📊 今日日报"},
                 {"command": "weekly", "description": "📅 本周周报"},
                 {"command": "monthly", "description": "🗓️ 本月月报"},
                 {"command": "yearly", "description": "📜 年度总结"},
@@ -243,7 +245,8 @@ class TelegramBot:
 
     def _handle_message(self, msg, cid):
         text = msg.get("text", "").strip()
-        if text.startswith("/stats"): self._cmd_stats(cid, 'day')
+        if text.startswith("/search"): self._cmd_search(cid, text)
+        elif text.startswith("/stats"): self._cmd_stats(cid, 'day')
         elif text.startswith("/weekly"): self._cmd_stats(cid, 'week')
         elif text.startswith("/monthly"): self._cmd_stats(cid, 'month')
         elif text.startswith("/yearly"): self._cmd_stats(cid, 'year')
@@ -253,11 +256,67 @@ class TelegramBot:
         elif text.startswith("/check"): self._cmd_check(cid)
         elif text.startswith("/help"): self._cmd_help(cid)
 
-    # 🔥 核心修改：完全中文化标题
+    # 🔥 新增：资源搜索功能
+    def _cmd_search(self, chat_id, text):
+        parts = text.split(' ', 1)
+        if len(parts) < 2:
+            return self.send_message(chat_id, "🔍 <b>搜索格式错误</b>\n请使用: <code>/search 关键词</code>\n例如: <code>/search 庆余年</code>")
+        
+        keyword = parts[1].strip()
+        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
+        
+        try:
+            # 搜索 API：限制 Movie,Series，递归搜索，限制 5 条
+            encoded_key = urllib.parse.quote(keyword)
+            url = f"{host}/emby/Items?SearchTerm={encoded_key}&IncludeItemTypes=Movie,Series&Recursive=true&Limit=5&api_key={key}"
+            
+            res = requests.get(url, timeout=10)
+            items = res.json().get("Items", [])
+            
+            if not items:
+                return self.send_message(chat_id, f"📭 未找到与 <b>{keyword}</b> 相关的资源")
+            
+            # 取第一个结果作为主展示
+            top_item = items[0]
+            name = top_item.get("Name")
+            year = top_item.get("ProductionYear", "")
+            rating = top_item.get("CommunityRating", "N/A")
+            overview = top_item.get("Overview", "暂无简介")
+            if len(overview) > 120: overview = overview[:120] + "..."
+            
+            type_icon = "🎬" if top_item.get("Type") == "Movie" else "📺"
+            
+            # 构建回复文案
+            caption = (
+                f"{type_icon} <b>{name}</b> ({year})\n"
+                f"⭐ 评分: {rating}\n"
+                f"📝 简介: {overview}\n"
+            )
+            
+            # 如果有更多结果，列在下面
+            if len(items) > 1:
+                caption += "\n🔎 <b>其他结果:</b>\n"
+                for i, sub in enumerate(items[1:]):
+                    sub_year = sub.get("ProductionYear", "")
+                    sub_type = "电影" if sub.get("Type") == "Movie" else "剧集"
+                    caption += f"{i+2}. {sub.get('Name')} ({sub_year}) [{sub_type}]\n"
+
+            # 下载海报 (复用已有逻辑，会自动处理剧集ID)
+            img_io = self._download_emby_image(top_item.get("Id"), 'Primary')
+            
+            if img_io:
+                self.send_photo(chat_id, img_io, caption)
+            else:
+                self.send_message(chat_id, caption)
+
+        except Exception as e:
+            logger.error(f"Search Error: {e}")
+            self.send_message(chat_id, "❌ 搜索时发生错误")
+
+    # 核心统计逻辑 (Top 5 用户 + Top 10 内容 + 中文标题)
     def _cmd_stats(self, chat_id, period='day'):
         where, params = get_base_filter('all') 
         
-        # 1. 标题与时间映射
         titles = {
             'day': '今日日报',
             'week': '本周周报',
@@ -274,7 +333,7 @@ class TelegramBot:
         where += f" AND DateCreated > {time_filter}"
         
         try:
-            # 2. 基础统计
+            # 基础统计
             plays_res = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}", params)
             if not plays_res: raise Exception("DB Error")
             plays = plays_res[0]['c']
@@ -286,20 +345,19 @@ class TelegramBot:
             users_res = query_db(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where}", params)
             users = users_res[0]['c'] if users_res else 0
 
-            # 3. 活跃用户榜 (Top 5)
+            # 活跃用户榜 (Top 5)
             top_users = query_db(f"SELECT UserId, SUM(PlayDuration) as t FROM PlaybackActivity {where} GROUP BY UserId ORDER BY t DESC LIMIT 5", params)
             user_str = ""
             if top_users:
                 for i, u in enumerate(top_users):
                     name = self._get_username(u['UserId'])
                     h = round(u['t'] / 3600, 1)
-                    # 前3名用奖牌，后面用数字
                     prefix = ['🥇','🥈','🥉'][i] if i < 3 else f"{i+1}."
                     user_str += f"{prefix} {name} ({h}h)\n"
             else:
                 user_str = "暂无数据"
 
-            # 4. 热门内容榜 (Top 10)
+            # 热门内容榜 (Top 10)
             tops = query_db(f"SELECT ItemName, COUNT(*) as c FROM PlaybackActivity {where} GROUP BY ItemName ORDER BY c DESC LIMIT 10", params)
             top_content = ""
             if tops:
@@ -309,7 +367,6 @@ class TelegramBot:
             else:
                 top_content = "暂无数据"
 
-            # 5. 构建优化后的中文文案
             caption = (
                 f"📊 <b>EmbyPulse {title_cn}</b>\n"
                 f"───────────────\n"
@@ -388,7 +445,7 @@ class TelegramBot:
         except: self.send_message(cid, "❌ 离线")
 
     def _cmd_help(self, cid):
-        self.send_message(cid, "🤖 /stats, /weekly, /monthly, /now, /latest, /recent, /check")
+        self.send_message(cid, "🤖 /search, /stats, /weekly, /monthly, /now, /latest, /recent, /check")
 
     def _scheduler_loop(self):
         while self.running:
