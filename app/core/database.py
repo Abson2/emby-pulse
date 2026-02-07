@@ -14,8 +14,7 @@ def init_db():
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         
-        # 1. 只创建机器人专属的配置表 (users_meta)
-        # 不去碰插件的 PlaybackActivity 表，防止冲突
+        # 1. 只初始化机器人专属配置表 (不碰插件的表)
         c.execute('''CREATE TABLE IF NOT EXISTS users_meta (
                         user_id TEXT PRIMARY KEY,
                         expire_date TEXT,
@@ -25,7 +24,7 @@ def init_db():
         
         conn.commit()
         conn.close()
-        print("✅ Database initialized (Read-Only Mode for PlaybackActivity).")
+        print("✅ Database initialized (Plugin Read-Only Mode).")
     except Exception as e: 
         print(f"❌ DB Init Error: {e}")
 
@@ -51,11 +50,14 @@ def query_db(query, args=(), one=False):
 def get_base_filter(user_id_filter):
     where = "WHERE 1=1"
     params = []
-    # 注意：插件数据库的列名通常是 UserId (PascalCase)
+    
+    # 注意：插件数据库列名通常是 UserId (PascalCase)
+    # 如果您的插件版本不同，可能需要改为 user_id，但标准版是 UserId
     if user_id_filter and user_id_filter != 'all':
         where += " AND UserId = ?"
         params.append(user_id_filter)
     
+    # 隐藏用户过滤
     hidden = cfg.get("hidden_users")
     if (not user_id_filter or user_id_filter == 'all') and hidden and len(hidden) > 0:
         placeholders = ','.join(['?'] * len(hidden))
