@@ -30,7 +30,7 @@ class TelegramBot:
         self.poll_thread.start()
         self.schedule_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
         self.schedule_thread.start()
-        print("🤖 Bot Service Started (Full Media Info)")
+        print("🤖 Bot Service Started (Deep Search Mode)")
 
     def stop(self): self.running = False
 
@@ -40,15 +40,12 @@ class TelegramBot:
 
     def _get_username(self, user_id):
         if user_id in self.user_cache: return self.user_cache[user_id]
-        
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         if not key or not host: return user_id
-        
         try:
             res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=2)
             if res.status_code == 200:
-                for u in res.json():
-                    self.user_cache[u['Id']] = u['Name']
+                for u in res.json(): self.user_cache[u['Id']] = u['Name']
         except: pass
         return self.user_cache.get(user_id, "Unknown User")
 
@@ -71,7 +68,6 @@ class TelegramBot:
                 url = f"{host}/emby/Items/{item_id}/Images/{img_type}?maxHeight=800&maxWidth=600&quality=90&tag={image_tag}"
             else:
                 url = f"{host}/emby/Items/{item_id}/Images/{img_type}?maxHeight=800&maxWidth=600&quality=90&api_key={key}"
-            
             res = requests.get(url, timeout=15)
             if res.status_code == 200: return io.BytesIO(res.content)
         except: pass
@@ -83,9 +79,7 @@ class TelegramBot:
         try:
             url = f"https://api.telegram.org/bot{token}/sendPhoto"
             data = {"chat_id": chat_id, "caption": caption, "parse_mode": parse_mode}
-            if reply_markup:
-                data["reply_markup"] = json.dumps(reply_markup)
-                
+            if reply_markup: data["reply_markup"] = json.dumps(reply_markup)
             if isinstance(photo_io, str):
                 data['photo'] = photo_io
                 requests.post(url, data=data, proxies=self._get_proxies(), timeout=20)
@@ -107,9 +101,6 @@ class TelegramBot:
 
     # ================= 业务逻辑 =================
 
-    def save_playback_activity(self, data):
-        pass 
-
     def push_playback_event(self, data, action="start"):
         if not cfg.get("enable_notify") or not cfg.get("tg_chat_id"): return
         try:
@@ -117,42 +108,21 @@ class TelegramBot:
             user = data.get("User", {})
             item = data.get("Item", {})
             session = data.get("Session", {})
-            
             title = item.get("Name", "未知内容")
             if item.get("SeriesName"): 
-                idx = item.get("IndexNumber", 0)
-                parent_idx = item.get("ParentIndexNumber", 1)
+                idx = item.get("IndexNumber", 0); parent_idx = item.get("ParentIndexNumber", 1)
                 title = f"{item.get('SeriesName')} S{str(parent_idx).zfill(2)}E{str(idx).zfill(2)} {title}"
-
             type_cn = "剧集" if item.get("Type") == "Episode" else "电影"
-            
-            ticks = data.get("PlaybackPositionTicks")
+            ticks = data.get("PlaybackPositionTicks"); total = item.get("RunTimeTicks", 1)
             if ticks is None: ticks = session.get("PlayState", {}).get("PositionTicks", 0)
-            total = item.get("RunTimeTicks", 1)
             pct = f"{(ticks / total * 100):.2f}%" if total > 0 else "0.00%"
-
-            emoji = "▶️" if action == "start" else "⏹️"
-            act = "开始播放" if action == "start" else "停止播放"
-            ip = session.get("RemoteEndPoint", "127.0.0.1")
-            loc = self._get_location(ip)
-
-            msg = (
-                f"{emoji} <b>【{user.get('Name')}】{act}</b>\n"
-                f"📺 {title}\n"
-                f"📚 类型：{type_cn}\n"
-                f"🔄 进度：{pct}\n"
-                f"🌐 地址：{ip} ({loc})\n"
-                f"📱 设备：{session.get('Client')} on {session.get('DeviceName')}\n"
-                f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            )
-            
+            emoji = "▶️" if action == "start" else "⏹️"; act = "开始播放" if action == "start" else "停止播放"
+            ip = session.get("RemoteEndPoint", "127.0.0.1"); loc = self._get_location(ip)
+            msg = (f"{emoji} <b>【{user.get('Name')}】{act}</b>\n📺 {title}\n📚 类型：{type_cn}\n🔄 进度：{pct}\n🌐 地址：{ip} ({loc})\n📱 设备：{session.get('Client')} on {session.get('DeviceName')}\n🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             target_id = item.get("Id")
-            if item.get("Type") == "Episode" and item.get("SeriesId"):
-                target_id = item.get("SeriesId")
-            
+            if item.get("Type") == "Episode" and item.get("SeriesId"): target_id = item.get("SeriesId")
             img_io = self._download_emby_image(target_id, 'Primary') 
             if not img_io: img_io = self._download_emby_image(item.get("Id"), 'Backdrop')
-
             if img_io: self.send_photo(chat_id, img_io, msg)
             else: self.send_message(chat_id, msg)
         except: pass
@@ -160,7 +130,6 @@ class TelegramBot:
     def push_new_media(self, item_id, fallback_item=None):
         if not cfg.get("enable_library_notify") or not cfg.get("tg_chat_id"): return
         cid = str(cfg.get("tg_chat_id")); host = cfg.get("emby_host"); key = cfg.get("emby_api_key")
-
         item = None
         for i in range(3):
             time.sleep(10 + i*15)
@@ -170,46 +139,24 @@ class TelegramBot:
                     item = res.json()
                     if item.get("ImageTags", {}).get("Primary"): break
             except: pass
-        
         final = item if item else fallback_item
         if not final: return
-
         try:
-            name = final.get("Name", "未知")
-            type_raw = final.get("Type", "Movie")
-            overview = final.get("Overview", "暂无简介...")
-            rating = final.get("CommunityRating", "N/A")
+            name = final.get("Name", "未知"); type_raw = final.get("Type", "Movie")
+            overview = final.get("Overview", "暂无简介..."); rating = final.get("CommunityRating", "N/A")
             year = final.get("ProductionYear", "")
-            
             if len(overview) > 150: overview = overview[:140] + "..."
-            
-            type_cn = "电影"
-            display_title = name
+            type_cn = "电影"; display_title = name
             if type_raw == "Episode":
                 type_cn = "剧集"
-                s_name = final.get("SeriesName", "")
-                s_idx = final.get("ParentIndexNumber", 1)
-                e_idx = final.get("IndexNumber", 1)
+                s_name = final.get("SeriesName", ""); s_idx = final.get("ParentIndexNumber", 1); e_idx = final.get("IndexNumber", 1)
                 display_title = f"{s_name} S{str(s_idx).zfill(2)}E{str(e_idx).zfill(2)}"
                 if name and "Episode" not in name: display_title += f" {name}"
             elif type_raw == "Series": type_cn = "剧集"
-
-            caption = (
-                f"📺 <b>新入库 {type_cn}</b>\n{display_title} ({year})\n\n"
-                f"⭐ 评分：{rating}/10\n"
-                f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-                f"📝 剧情：{overview}"
-            )
-
-            target_id = item_id
-            use_tag = final.get("ImageTags", {}).get("Primary")
-            
-            if type_raw == "Episode" and final.get("SeriesId"):
-                target_id = final.get("SeriesId")
-                use_tag = None 
-
+            caption = (f"📺 <b>新入库 {type_cn}</b>\n{display_title} ({year})\n\n⭐ 评分：{rating}/10\n🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n📝 剧情：{overview}")
+            target_id = item_id; use_tag = final.get("ImageTags", {}).get("Primary")
+            if type_raw == "Episode" and final.get("SeriesId"): target_id = final.get("SeriesId"); use_tag = None 
             img_io = self._download_emby_image(target_id, 'Primary', image_tag=use_tag)
-            
             if img_io: self.send_photo(cid, img_io, caption)
             else: self.send_photo(cid, REPORT_COVER_URL, caption)
         except: pass
@@ -240,7 +187,7 @@ class TelegramBot:
                     for u in res.json().get("result", []):
                         self.offset = u["update_id"] + 1
                         if "message" in u:
-                            cid = str(u["message"]["chat"]["id"])
+                            cid = str(u["message"]["chat"]["id"]); 
                             if admin_id and cid != admin_id: continue
                             self._handle_message(u["message"], cid)
                 else: time.sleep(5)
@@ -259,60 +206,54 @@ class TelegramBot:
         elif text.startswith("/check"): self._cmd_check(cid)
         elif text.startswith("/help"): self._cmd_help(cid)
 
-    # 🔥 核心升级：通用媒体信息解析 (支持 Series 和 Movie)
-    def _parse_media_info(self, item):
-        info_parts = []
-        
-        # 1. 尝试获取分辨率和码率
-        # 无论 Movie 还是 Series，都尝试从 MediaSources 获取
-        # Series 这一层通常没有 MediaSources，如果有则直接用
+    # 🔥 辅助：从 Item 提取画质信息 (分辨率/特效/码率)
+    def _extract_tech_info(self, item):
         sources = item.get("MediaSources", [])
+        if not sources: return None
         
-        # 如果是剧集且没有源，尝试获取第一集的源（模拟探测）
-        # 这里为了响应速度，我们只解析当前 Item 携带的 Sources
-        # 如果 Emby 没返回 Series 的 Source，我们就不显示，避免二次请求拖慢速度
+        info_parts = []
+        video = next((s for s in sources[0].get("MediaStreams", []) if s.get("Type") == "Video"), None)
         
-        if sources:
-            video = next((s for s in sources[0].get("MediaStreams", []) if s.get("Type") == "Video"), None)
-            if video:
-                # 分辨率
-                w = video.get("Width", 0)
-                if w >= 3800: res = "4K"
-                elif w >= 1900: res = "1080P"
-                elif w >= 1200: res = "720P"
-                else: res = "SD"
-                
-                # 特效
-                extra = []
-                v_range = video.get("VideoRange", "")
-                title = video.get("DisplayTitle", "").upper()
-                if "HDR" in v_range or "HDR" in title: extra.append("HDR")
-                if "DOVI" in title or "DOLBY VISION" in title: extra.append("DoVi")
-                
-                res_str = f"{res}"
-                if extra: res_str += f" {' '.join(extra)}"
-                info_parts.append(res_str)
+        if video:
+            # 1. 分辨率
+            w = video.get("Width", 0)
+            if w >= 3800: res = "4K"
+            elif w >= 1900: res = "1080P"
+            elif w >= 1200: res = "720P"
+            else: res = "SD"
+            
+            # 2. 特效 (HDR/DoVi)
+            extra = []
+            v_range = video.get("VideoRange", "")
+            title = video.get("DisplayTitle", "").upper()
+            if "HDR" in v_range or "HDR" in title: extra.append("HDR")
+            if "DOVI" in title or "DOLBY VISION" in title: extra.append("DoVi")
+            
+            res_str = f"{res}"
+            if extra: res_str += f" {' '.join(extra)}"
+            info_parts.append(res_str)
 
-                # 码率
-                bitrate = sources[0].get("Bitrate", 0)
-                if bitrate > 0:
-                    mbps = int(bitrate / 1000000)
-                    info_parts.append(f"{mbps}Mbps")
+            # 3. 码率
+            bitrate = sources[0].get("Bitrate", 0)
+            if bitrate > 0:
+                mbps = int(bitrate / 1000000)
+                info_parts.append(f"{mbps}Mbps")
         
-        return " | ".join(info_parts)
+        return " | ".join(info_parts) if info_parts else None
 
+    # 🔥 核心升级：搜索逻辑
     def _cmd_search(self, chat_id, text):
         parts = text.split(' ', 1)
         if len(parts) < 2:
-            return self.send_message(chat_id, "🔍 <b>搜索格式错误</b>\n请使用: <code>/search 关键词</code>\n例如: <code>/search 庆余年</code>")
+            return self.send_message(chat_id, "🔍 <b>搜索格式错误</b>\n请使用: <code>/search 关键词</code>")
         
         keyword = parts[1].strip()
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         
         try:
+            # 1. 基础搜索 (MediaSources 对电影有效，对剧集通常无效)
             encoded_key = urllib.parse.quote(keyword)
-            # 请求字段
-            fields = "CommunityRating,ProductionYear,Genres,Overview,OfficialRating,ProviderIds,MediaSources,RecursiveItemCount"
+            fields = "CommunityRating,ProductionYear,Genres,Overview,OfficialRating,ProviderIds,MediaSources"
             url = f"{host}/emby/Items?SearchTerm={encoded_key}&IncludeItemTypes=Movie,Series&Recursive=true&Fields={fields}&Limit=5&api_key={key}"
             
             res = requests.get(url, timeout=10)
@@ -322,33 +263,50 @@ class TelegramBot:
                 return self.send_message(chat_id, f"📭 未找到与 <b>{keyword}</b> 相关的资源")
             
             top = items[0]
+            type_raw = top.get("Type")
+            
+            # 🔥 剧集深度查询 (解决 0集 和 无画质 问题)
+            tech_info_str = "📼 未知画质"
+            ep_count_str = ""
+            
+            if type_raw == "Series":
+                try:
+                    # 查真实集数 & 第一集样本
+                    # ParentId=剧集ID, IncludeItemTypes=Episode (只查集), Limit=1 (只要一集测画质)
+                    sub_url = f"{host}/emby/Items?ParentId={top['Id']}&Recursive=true&IncludeItemTypes=Episode&Fields=MediaSources&Limit=1&api_key={key}"
+                    sub_res = requests.get(sub_url, timeout=5)
+                    if sub_res.status_code == 200:
+                        sub_data = sub_res.json()
+                        # A. 真实集数 (TotalRecordCount 是最准的)
+                        real_count = sub_data.get("TotalRecordCount", 0)
+                        ep_count_str = f"📊 库内: {real_count} 集"
+                        
+                        # B. 拿第一集测画质
+                        if sub_data.get("Items"):
+                            sample_ep = sub_data["Items"][0]
+                            parsed_tech = self._extract_tech_info(sample_ep)
+                            if parsed_tech: tech_info_str = f"📼 {parsed_tech}"
+                except:
+                    ep_count_str = "📊 库内: N/A 集"
+            else:
+                # 电影直接解析
+                parsed_tech = self._extract_tech_info(top)
+                if parsed_tech: tech_info_str = f"📼 {parsed_tech}"
+
+            # 构建显示
             name = top.get("Name")
-            year = top.get("ProductionYear", "")
-            year_str = f"({year})" if year else ""
+            year_str = f"({top.get('ProductionYear')})" if top.get("ProductionYear") else ""
             rating = top.get("CommunityRating", "N/A")
             genres = " / ".join(top.get("Genres", [])[:3]) or "未分类"
             overview = top.get("Overview", "暂无简介")
             if len(overview) > 100: overview = overview[:100] + "..."
-            
-            type_raw = top.get("Type")
             type_icon = "🎬" if type_raw == "Movie" else "📺"
             
-            # 🔥 构建信息行
-            info_line = ""
-            
-            # 1. 媒体画质信息 (分辨率/HDR/码率)
-            tech_info = self._parse_media_info(top)
-            
+            # 组合信息行
+            info_line = tech_info_str
             if type_raw == "Series":
-                # 剧集：显示集数 + 画质
-                ep_count = top.get("RecursiveItemCount", 0)
-                info_line = f"📊 库内: {ep_count} 集"
-                if tech_info: info_line += f" | {tech_info}"
-            else:
-                # 电影：显示画质
-                if tech_info: info_line = f"📼 {tech_info}"
-                else: info_line = "📼 未知画质"
-
+                info_line = f"{ep_count_str} | {tech_info_str}"
+                
             caption = (
                 f"{type_icon} <b>{name}</b> {year_str}\n"
                 f"⭐️ {rating}  |  🎭 {genres}\n"
@@ -357,36 +315,25 @@ class TelegramBot:
                 f"📝 <b>简介</b>: {overview}\n"
             )
             
+            # 其他结果列表
             if len(items) > 1:
                 caption += "\n🔎 <b>其他结果:</b>\n"
                 for i, sub in enumerate(items[1:]):
                     sub_year = f"({sub.get('ProductionYear')})" if sub.get('ProductionYear') else ""
-                    
-                    # 子项简略信息
-                    sub_extra = ""
-                    sub_tech = self._parse_media_info(sub)
-                    
-                    if sub.get("Type") == "Series":
-                        sub_extra = f"[{sub.get('RecursiveItemCount', 0)}集]"
-                    elif sub_tech:
-                        # 电影如果能解析出4K就显示4K
-                        if "4K" in sub_tech: sub_extra = "[4K]"
-                        elif "1080P" in sub_tech: sub_extra = "[1080P]"
-                        
-                    caption += f"{i+2}. {sub.get('Name')} {sub_year} {sub_extra}\n"
+                    # 简单区分
+                    suffix = "[剧集]" if sub.get("Type") == "Series" else "[电影]"
+                    caption += f"{i+2}. {sub.get('Name')} {sub_year} {suffix}\n"
 
+            # 按钮
             base_url = cfg.get("emby_public_host") or host
             if base_url.endswith('/'): base_url = base_url[:-1]
             play_url = f"{base_url}/web/index.html#!/item?id={top.get('Id')}&serverId={top.get('ServerId')}"
-            
-            buttons = [[{"text": "▶️ 立即播放", "url": play_url}]]
-            keyboard = {"inline_keyboard": buttons}
+            keyboard = {"inline_keyboard": [[{"text": "▶️ 立即播放", "url": play_url}]]}
 
+            # 发送
             img_io = self._download_emby_image(top.get("Id"), 'Primary')
-            if img_io:
-                self.send_photo(chat_id, img_io, caption, reply_markup=keyboard)
-            else:
-                self.send_photo(chat_id, REPORT_COVER_URL, caption, reply_markup=keyboard)
+            if img_io: self.send_photo(chat_id, img_io, caption, reply_markup=keyboard)
+            else: self.send_photo(chat_id, REPORT_COVER_URL, caption, reply_markup=keyboard)
 
         except Exception as e:
             logger.error(f"Search Error: {e}")
