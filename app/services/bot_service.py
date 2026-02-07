@@ -30,7 +30,7 @@ class TelegramBot:
         self.poll_thread.start()
         self.schedule_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
         self.schedule_thread.start()
-        print("🤖 Bot Service Started (Tech Specs Search)")
+        print("🤖 Bot Service Started (Full Media Info)")
 
     def stop(self): self.running = False
 
@@ -259,7 +259,48 @@ class TelegramBot:
         elif text.startswith("/check"): self._cmd_check(cid)
         elif text.startswith("/help"): self._cmd_help(cid)
 
-    # 🔥 核心升级：包含库统计和媒体信息的搜索
+    # 🔥 核心升级：通用媒体信息解析 (支持 Series 和 Movie)
+    def _parse_media_info(self, item):
+        info_parts = []
+        
+        # 1. 尝试获取分辨率和码率
+        # 无论 Movie 还是 Series，都尝试从 MediaSources 获取
+        # Series 这一层通常没有 MediaSources，如果有则直接用
+        sources = item.get("MediaSources", [])
+        
+        # 如果是剧集且没有源，尝试获取第一集的源（模拟探测）
+        # 这里为了响应速度，我们只解析当前 Item 携带的 Sources
+        # 如果 Emby 没返回 Series 的 Source，我们就不显示，避免二次请求拖慢速度
+        
+        if sources:
+            video = next((s for s in sources[0].get("MediaStreams", []) if s.get("Type") == "Video"), None)
+            if video:
+                # 分辨率
+                w = video.get("Width", 0)
+                if w >= 3800: res = "4K"
+                elif w >= 1900: res = "1080P"
+                elif w >= 1200: res = "720P"
+                else: res = "SD"
+                
+                # 特效
+                extra = []
+                v_range = video.get("VideoRange", "")
+                title = video.get("DisplayTitle", "").upper()
+                if "HDR" in v_range or "HDR" in title: extra.append("HDR")
+                if "DOVI" in title or "DOLBY VISION" in title: extra.append("DoVi")
+                
+                res_str = f"{res}"
+                if extra: res_str += f" {' '.join(extra)}"
+                info_parts.append(res_str)
+
+                # 码率
+                bitrate = sources[0].get("Bitrate", 0)
+                if bitrate > 0:
+                    mbps = int(bitrate / 1000000)
+                    info_parts.append(f"{mbps}Mbps")
+        
+        return " | ".join(info_parts)
+
     def _cmd_search(self, chat_id, text):
         parts = text.split(' ', 1)
         if len(parts) < 2:
@@ -269,8 +310,8 @@ class TelegramBot:
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         
         try:
-            # 1. 增加字段：MediaSources (媒体信息), RecursiveItemCount (集数), OfficialRating (分级)
             encoded_key = urllib.parse.quote(keyword)
+            # 请求字段
             fields = "CommunityRating,ProductionYear,Genres,Overview,OfficialRating,ProviderIds,MediaSources,RecursiveItemCount"
             url = f"{host}/emby/Items?SearchTerm={encoded_key}&IncludeItemTypes=Movie,Series&Recursive=true&Fields={fields}&Limit=5&api_key={key}"
             
@@ -289,44 +330,29 @@ class TelegramBot:
             overview = top.get("Overview", "暂无简介")
             if len(overview) > 100: overview = overview[:100] + "..."
             
-            # 🔥 媒体信息解析
-            media_info_str = ""
             type_raw = top.get("Type")
+            type_icon = "🎬" if type_raw == "Movie" else "📺"
             
-            if type_raw == "Movie":
-                type_icon = "🎬"
-                sources = top.get("MediaSources", [])
-                if sources:
-                    video = next((s for s in sources[0].get("MediaStreams", []) if s.get("Type") == "Video"), None)
-                    if video:
-                        # 分辨率判断
-                        width = video.get("Width", 0)
-                        if width >= 3800: res_str = "4K"
-                        elif width >= 1900: res_str = "1080P"
-                        elif width >= 1200: res_str = "720P"
-                        else: res_str = "SD"
-                        
-                        # 特效 (HDR/DoVi)
-                        video_range = video.get("VideoRange", "")
-                        if "HDR" in video_range: res_str += " HDR"
-                        if "DOVI" in video.get("DisplayTitle", "").upper() or "DOLBY VISION" in video.get("DisplayTitle", "").upper(): res_str += " DoVi"
-                        
-                        # 码率
-                        bitrate = int(sources[0].get("Bitrate", 0) / 1000000)
-                        
-                        media_info_str = f"📼 {res_str} | ⚡️ {bitrate}Mbps"
-            else:
-                # 剧集逻辑
-                type_icon = "📺"
-                # 集数统计
+            # 🔥 构建信息行
+            info_line = ""
+            
+            # 1. 媒体画质信息 (分辨率/HDR/码率)
+            tech_info = self._parse_media_info(top)
+            
+            if type_raw == "Series":
+                # 剧集：显示集数 + 画质
                 ep_count = top.get("RecursiveItemCount", 0)
-                media_info_str = f"📊 库内: {ep_count} 集"
+                info_line = f"📊 库内: {ep_count} 集"
+                if tech_info: info_line += f" | {tech_info}"
+            else:
+                # 电影：显示画质
+                if tech_info: info_line = f"📼 {tech_info}"
+                else: info_line = "📼 未知画质"
 
-            # 2. 构建文案
             caption = (
                 f"{type_icon} <b>{name}</b> {year_str}\n"
                 f"⭐️ {rating}  |  🎭 {genres}\n"
-                f"{media_info_str}\n"
+                f"{info_line}\n"
                 f"───────────────\n"
                 f"📝 <b>简介</b>: {overview}\n"
             )
@@ -335,21 +361,20 @@ class TelegramBot:
                 caption += "\n🔎 <b>其他结果:</b>\n"
                 for i, sub in enumerate(items[1:]):
                     sub_year = f"({sub.get('ProductionYear')})" if sub.get('ProductionYear') else ""
-                    # 简单显示分辨率或集数
+                    
+                    # 子项简略信息
                     sub_extra = ""
+                    sub_tech = self._parse_media_info(sub)
+                    
                     if sub.get("Type") == "Series":
                         sub_extra = f"[{sub.get('RecursiveItemCount', 0)}集]"
-                    elif sub.get("Type") == "Movie":
-                        # 简单的分辨率检查
-                        try:
-                            w = sub.get("MediaSources", [{}])[0].get("MediaStreams", [{}])[0].get("Width", 0)
-                            if w > 3000: sub_extra = "[4K]"
-                            elif w > 1800: sub_extra = "[1080P]"
-                        except: pass
+                    elif sub_tech:
+                        # 电影如果能解析出4K就显示4K
+                        if "4K" in sub_tech: sub_extra = "[4K]"
+                        elif "1080P" in sub_tech: sub_extra = "[1080P]"
                         
                     caption += f"{i+2}. {sub.get('Name')} {sub_year} {sub_extra}\n"
 
-            # 3. 按钮
             base_url = cfg.get("emby_public_host") or host
             if base_url.endswith('/'): base_url = base_url[:-1]
             play_url = f"{base_url}/web/index.html#!/item?id={top.get('Id')}&serverId={top.get('ServerId')}"
@@ -357,7 +382,6 @@ class TelegramBot:
             buttons = [[{"text": "▶️ 立即播放", "url": play_url}]]
             keyboard = {"inline_keyboard": buttons}
 
-            # 4. 发送
             img_io = self._download_emby_image(top.get("Id"), 'Primary')
             if img_io:
                 self.send_photo(chat_id, img_io, caption, reply_markup=keyboard)
