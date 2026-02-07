@@ -106,3 +106,9 @@ async def system_page(request: Request):
 async def insight_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("insight.html", {"request": request})
+
+# 🔥 10. 任务中心 (新增)
+@router.get("/tasks", response_class=HTMLResponse)
+async def tasks_page(request: Request):
+    if not check_login(request): return RedirectResponse("/login")
+    return templates.TemplateResponse("tasks.html", {"request": request})
