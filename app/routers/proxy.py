@@ -1,7 +1,11 @@
 from fastapi import APIRouter, Response
-from app.core.config import cfg, FALLBACK_IMAGE_URL
+from app.core.config import cfg
 import requests
+import logging
 from functools import lru_cache
+
+# 设置日志，方便在 Docker 控制台看到报错
+logger = logging.getLogger("uvicorn")
 
 router = APIRouter()
 
@@ -15,27 +19,38 @@ def get_real_image_id(item_id: str):
     """
     key = cfg.get("emby_api_key")
     host = cfg.get("emby_host")
-    if not key or not host: return item_id
+    
+    # 基础检查
+    if not key or not host: 
+        print(f"⚠️ [Proxy] Missing Config: key={bool(key)}, host={bool(host)}")
+        return item_id
 
     try:
         # 查询 Item 详情
+        # ⚠️ 注意：超时时间延长到 5 秒，防止 NAS 响应慢
         url = f"{host}/emby/Items/{item_id}?api_key={key}"
-        res = requests.get(url, timeout=3) # 3秒超时，防止阻塞
+        res = requests.get(url, timeout=5) 
         
         if res.status_code == 200:
             data = res.json()
             type_raw = data.get("Type", "")
+            series_id = data.get("SeriesId")
             
+            # 调试日志 (第一次访问某个 ID 时会打印)
+            # print(f"🔍 [Proxy] Checking {item_id}: Type={type_raw}, SeriesId={series_id}")
+
             # 如果是单集(Episode) 或 季(Season)，优先返回 SeriesId
-            if type_raw in ["Episode", "Season"] and data.get("SeriesId"):
-                return data.get("SeriesId")
+            if type_raw in ["Episode", "Season"] and series_id:
+                return series_id
             
             # 如果是剧集(Series)或电影(Movie)，直接返回原 ID
             return item_id
+        else:
+            print(f"❌ [Proxy] Emby API Error: {res.status_code} for {item_id}")
             
     except Exception as e:
-        # 查询失败时(如网络超时)，静默降级回原 ID
-        print(f"Smart Image Resolve Error for {item_id}: {e}")
+        # 查询失败时(如网络超时)，打印具体的错误原因！
+        print(f"❌ [Proxy] Smart Resolve Failed for {item_id}: {str(e)}")
         pass
     
     # 默认返回原 ID
@@ -71,11 +86,13 @@ def proxy_image(item_id: str, img_type: str):
             return Response(
                 content=resp.content, 
                 media_type=resp.headers.get("Content-Type", "image/jpeg"),
-                # 设置 1 天的浏览器缓存，避免重复请求
-                headers={"Cache-Control": "public, max-age=86400"} 
+                # 🔥 调试模式：暂时禁用缓存 (no-cache)
+                # 这样您刷新网页时，一定会强制向服务器请求新图，解决浏览器缓存问题
+                # 等一切正常后，您可以改回 "public, max-age=86400"
+                headers={"Cache-Control": "no-cache"} 
             )
     except Exception as e:
-        print(f"Proxy Image Error: {e}")
+        print(f"❌ [Proxy] Image Download Error: {e}")
         pass
         
     # 失败则返回 404，前端会显示默认图
