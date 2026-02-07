@@ -47,7 +47,7 @@ async def logout(response: Response):
     return res
 
 # -------------------------------------------------------------------------
-# 页面路由 (严格匹配侧边栏链接)
+# 页面路由 (已修正与 layout.html 的对应关系)
 # -------------------------------------------------------------------------
 
 # 1. 仪表盘
@@ -68,39 +68,40 @@ async def content_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("content.html", {"request": request})
 
-# 4. 数据洞察 (Details)
+# 4. 数据洞察
 @router.get("/details", response_class=HTMLResponse)
 async def details_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("details.html", {"request": request})
 
-# 5. 映迹工坊 (Report)
+# 5. 映迹工坊
 @router.get("/report", response_class=HTMLResponse)
 async def report_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("report.html", {"request": request})
 
-# 6. 机器人助手 (Bot)
+# 6. 机器人助手
 @router.get("/bot", response_class=HTMLResponse)
 async def bot_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("bot.html", {"request": request})
 
-# 7. 用户管理 (Users) - 对应 users.html
-@router.get("/users", response_class=HTMLResponse)
+# 7. 用户管理 (🔥 修复：匹配 /users_manage 链接)
+@router.get("/users_manage", response_class=HTMLResponse)
+@router.get("/users", response_class=HTMLResponse) # 保留别名
 async def users_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("users.html", {"request": request})
 
-# 8. 系统设置 (Settings) - 对应 system.html
-# 🔥 修正：同时支持 /settings 和 /system，指向 system.html
+# 8. 系统设置 (🔥 修复：匹配 /settings 链接，并指向正确的 settings.html)
 @router.get("/settings", response_class=HTMLResponse)
-@router.get("/system", response_class=HTMLResponse)
+@router.get("/system", response_class=HTMLResponse) # 保留别名
 async def system_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
-    return templates.TemplateResponse("system.html", {"request": request})
+    # 注意：文件名是 settings.html，不是 system.html
+    return templates.TemplateResponse("settings.html", {"request": request})
 
-# 9. 质量盘点 (Insight)
+# 9. 质量盘点
 @router.get("/insight", response_class=HTMLResponse)
 async def insight_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
