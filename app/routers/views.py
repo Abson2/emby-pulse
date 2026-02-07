@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, HTTPException, Response
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -25,7 +25,7 @@ def check_login(request: Request):
     token = request.cookies.get("access_token")
     correct_password = cfg.get("web_password")
     
-    # 如果配置文件里没设密码，默认允许通过（或者你需要强制设置密码）
+    # 如果配置文件里没设密码，默认允许通过
     if not correct_password:
         return True
         
@@ -34,7 +34,7 @@ def check_login(request: Request):
     return True
 
 # -------------------------------------------------------------------------
-# 登录 API (之前可能缺了这个，导致登录点不动)
+# API 接口 (登录/登出)
 # -------------------------------------------------------------------------
 @router.post("/api/login")
 async def login_api(data: LoginData, response: Response):
@@ -44,58 +44,74 @@ async def login_api(data: LoginData, response: Response):
     correct_password = cfg.get("web_password")
     
     if not correct_password:
-        return JSONResponse(content={"status": "error", "msg": "系统未设置 web_password，请检查配置文件"})
+        return JSONResponse(content={"status": "error", "msg": "系统未设置 web_password"})
 
     if data.password == correct_password:
-        # 登录成功
         res = JSONResponse(content={"status": "success"})
-        # 写入 Cookie，有效期 30 天
         res.set_cookie(key="access_token", value=data.password, max_age=86400*30, httponly=True)
         return res
     else:
-        # 登录失败
         return JSONResponse(content={"status": "error", "msg": "密码错误"})
 
 @router.get("/logout")
 async def logout(response: Response):
-    """
-    退出登录
-    """
     res = RedirectResponse("/login")
     res.delete_cookie("access_token")
     return res
 
 # -------------------------------------------------------------------------
-# 页面路由
+# 页面路由 (修复所有侧边栏链接)
 # -------------------------------------------------------------------------
 
+# 1. 仪表盘 (首页)
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("index.html", {"request": request})
 
+# 2. 登录页
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    # 如果已经登录，直接跳到首页
     if check_login(request): return RedirectResponse("/")
     return templates.TemplateResponse("login.html", {"request": request})
 
+# 3. 内容排行
 @router.get("/content", response_class=HTMLResponse)
 async def content_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("content.html", {"request": request})
 
+# 4. 数据洞察 (修复: 对应 /details)
+@router.get("/details", response_class=HTMLResponse)
+async def details_page(request: Request):
+    if not check_login(request): return RedirectResponse("/login")
+    return templates.TemplateResponse("details.html", {"request": request})
+
+# 5. 映迹工坊 (报表)
 @router.get("/report", response_class=HTMLResponse)
 async def report_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("report.html", {"request": request})
 
+# 6. 机器人助手
+@router.get("/bot", response_class=HTMLResponse)
+async def bot_page(request: Request):
+    if not check_login(request): return RedirectResponse("/login")
+    return templates.TemplateResponse("bot.html", {"request": request})
+
+# 7. 用户管理
 @router.get("/users", response_class=HTMLResponse)
 async def users_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("users.html", {"request": request})
 
-# 质量盘点页面
+# 8. 系统设置
+@router.get("/system", response_class=HTMLResponse)
+async def system_page(request: Request):
+    if not check_login(request): return RedirectResponse("/login")
+    return templates.TemplateResponse("system.html", {"request": request})
+
+# 9. 质量盘点 (新增功能)
 @router.get("/insight", response_class=HTMLResponse)
 async def insight_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
