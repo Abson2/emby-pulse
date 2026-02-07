@@ -17,8 +17,6 @@ class TelegramBot:
         self.schedule_thread = None 
         self.offset = 0
         self.last_check_min = -1
-        # 简单的用户 ID 缓存
-        self.user_cache = {}
         
     def start(self):
         if self.running: return
@@ -29,29 +27,13 @@ class TelegramBot:
         self.poll_thread.start()
         self.schedule_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
         self.schedule_thread.start()
-        print("🤖 Bot Service Started (Fixed Schema Mode)")
+        print("🤖 Bot Service Started (Poster Optimization Mode)")
 
     def stop(self): self.running = False
 
     def _get_proxies(self):
         proxy = cfg.get("proxy_url")
         return {"http": proxy, "https": proxy} if proxy else None
-
-    # 🔥 新增：ID 转 用户名
-    def _get_username(self, user_id):
-        if user_id in self.user_cache: return self.user_cache[user_id]
-        
-        # 没缓存，去 API 查
-        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
-        if not key or not host: return user_id
-        try:
-            # 查所有用户刷新缓存
-            res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=2)
-            if res.status_code == 200:
-                for u in res.json():
-                    self.user_cache[u['Id']] = u['Name']
-        except: pass
-        return self.user_cache.get(user_id, "Unknown User")
 
     def _get_location(self, ip):
         if not ip or ip in ['127.0.0.1', '::1', '0.0.0.0']: return "本地连接"
@@ -72,6 +54,7 @@ class TelegramBot:
                 url = f"{host}/emby/Items/{item_id}/Images/{img_type}?maxHeight=800&maxWidth=1200&quality=90&tag={image_tag}"
             else:
                 url = f"{host}/emby/Items/{item_id}/Images/{img_type}?maxHeight=800&maxWidth=1200&quality=90&api_key={key}"
+            
             res = requests.get(url, timeout=15)
             if res.status_code == 200: return io.BytesIO(res.content)
         except: pass
@@ -104,7 +87,7 @@ class TelegramBot:
 
     # ================= 业务逻辑 =================
 
-    # 只读模式，不需要写入
+    # 纯读取模式：不写入数据库
     def save_playback_activity(self, data):
         pass 
 
@@ -143,8 +126,20 @@ class TelegramBot:
                 f"📱 设备：{session.get('Client')} on {session.get('DeviceName')}\n"
                 f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
-            img = self._download_emby_image(item.get("Id"), 'Backdrop') or self._download_emby_image(item.get("Id"), 'Primary')
-            if img: self.send_photo(chat_id, img, msg)
+            
+            # 🔥 优化：如果是剧集，优先使用 SeriesId 获取海报
+            target_id = item.get("Id")
+            if item.get("Type") == "Episode" and item.get("SeriesId"):
+                target_id = item.get("SeriesId")
+            
+            # 这里的 Primary 就是海报了
+            img_io = self._download_emby_image(target_id, 'Primary') 
+            
+            # 如果没拿到海报，尝试用单集的背景图兜底
+            if not img_io: 
+                img_io = self._download_emby_image(item.get("Id"), 'Backdrop')
+
+            if img_io: self.send_photo(chat_id, img_io, msg)
             else: self.send_message(cid, msg)
         except: pass
 
@@ -156,7 +151,8 @@ class TelegramBot:
         if fallback_item:
             direct_tag = fallback_item.get("ImageTags", {}).get("Primary")
 
-        if direct_tag: item = fallback_item
+        if direct_tag:
+            item = fallback_item
         else:
             item = None
             for i in range(3):
@@ -172,17 +168,43 @@ class TelegramBot:
         if not final: return
 
         try:
-            name = final.get("Name", "")
-            if final.get("Type") == "Episode":
-                name = f"{final.get('SeriesName','')} S{str(final.get('ParentIndexNumber',1)).zfill(2)}E{str(final.get('IndexNumber',1)).zfill(2)}"
+            name = final.get("Name", "未知")
+            type_raw = final.get("Type", "Movie")
+            overview = final.get("Overview", "暂无简介...")
+            rating = final.get("CommunityRating", "N/A")
+            year = final.get("ProductionYear", "")
             
+            if len(overview) > 150: overview = overview[:140] + "..."
+            
+            type_cn = "电影"
+            display_title = name
+            if type_raw == "Episode":
+                type_cn = "剧集"
+                s_name = final.get("SeriesName", "")
+                s_idx = final.get("ParentIndexNumber", 1)
+                e_idx = final.get("IndexNumber", 1)
+                display_title = f"{s_name} S{str(s_idx).zfill(2)}E{str(e_idx).zfill(2)}"
+                if name and "Episode" not in name: display_title += f" {name}"
+            elif type_raw == "Series": type_cn = "剧集"
+
             caption = (
-                f"📺 <b>新入库 {final.get('Type','影视')}</b>\n{name} ({final.get('ProductionYear','')})\n\n"
-                f"⭐ 评分：{final.get('CommunityRating','N/A')}/10\n"
-                f"📝 剧情：{final.get('Overview','暂无简介...')[:140]}..."
+                f"📺 <b>新入库 {type_cn}</b>\n{display_title} ({year})\n\n"
+                f"⭐ 评分：{rating}/10\n"
+                f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+                f"📝 剧情：{overview}"
             )
-            img_tag = final.get("ImageTags", {}).get("Primary")
-            img_io = self._download_emby_image(item_id, 'Primary', image_tag=img_tag)
+
+            # 🔥 优化：如果是剧集，尝试获取 SeriesId 并下载其海报
+            # 注意：如果此时使用了 SeriesId，fallback_item 里的 ImageTag (单集的) 可能就不适用了
+            # 所以如果换 ID，就不传 tag，让 _download_emby_image 自己去查最新的
+            target_id = item_id
+            use_tag = final.get("ImageTags", {}).get("Primary")
+            
+            if type_raw == "Episode" and final.get("SeriesId"):
+                target_id = final.get("SeriesId")
+                use_tag = None # 换了ID，tag失效，需要重新查询
+
+            img_io = self._download_emby_image(target_id, 'Primary', image_tag=use_tag)
             
             if img_io: self.send_photo(cid, img_io, caption)
             else: self.send_photo(cid, REPORT_COVER_URL, caption)
@@ -231,11 +253,10 @@ class TelegramBot:
         elif text.startswith("/check"): self._cmd_check(cid)
         elif text.startswith("/help"): self._cmd_help(cid)
 
-    # 🔥 修复：使用 UserId 聚合，然后查名字
+    # 统计逻辑 (保持插件适配)
     def _cmd_stats(self, chat_id, period='day'):
         where, params = get_base_filter('all') 
         
-        # 1. 确定时间
         if period == 'week': time_filter = "date('now', '-7 days')"
         elif period == 'month': time_filter = "date('now', 'start of month')"
         elif period == 'year': time_filter = "date('now', 'start of year')"
@@ -244,24 +265,13 @@ class TelegramBot:
         where += f" AND DateCreated > {time_filter}"
         
         try:
-            # 2. 查数据 (用 UserId)
             plays = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}", params)[0]['c']
             dur = query_db(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}", params)[0]['c'] or 0
             hours = round(dur / 3600, 1)
-            
-            # 活跃人数 (DISTINCT UserId)
-            users = query_db(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where}", params)[0]['c']
+            users = query_db(f"SELECT COUNT(DISTINCT UserName) as c FROM PlaybackActivity {where}", params)[0]['c']
+            top = query_db(f"SELECT UserName, SUM(PlayDuration) as t FROM PlaybackActivity {where} GROUP BY UserName ORDER BY t DESC LIMIT 1", params)
+            top_str = f"{top[0]['UserName']} ({round(top[0]['t']/3600, 1)}h)" if top else "暂无"
 
-            # 榜首 (UserId)
-            top = query_db(f"SELECT UserId, SUM(PlayDuration) as t FROM PlaybackActivity {where} GROUP BY UserId ORDER BY t DESC LIMIT 1", params)
-            
-            top_str = "暂无"
-            if top:
-                name = self._get_username(top[0]['UserId']) # ID -> Name
-                u_h = round(top[0]['t'] / 3600, 1)
-                top_str = f"{name} ({u_h}h)"
-
-            # 热门内容
             tops = query_db(f"SELECT ItemName, COUNT(*) as c FROM PlaybackActivity {where} GROUP BY ItemName ORDER BY c DESC LIMIT 3", params)
             top_content = ""
             for i, item in enumerate(tops):
@@ -313,15 +323,13 @@ class TelegramBot:
         except: self.send_message(cid, "❌ 查询失败")
 
     def _cmd_recent(self, cid):
-        # 修正：查 UserId, ItemName
         try:
-            rows = query_db("SELECT UserId, ItemName, DateCreated FROM PlaybackActivity ORDER BY DateCreated DESC LIMIT 10")
+            rows = query_db("SELECT UserName, ItemName, DateCreated FROM PlaybackActivity ORDER BY DateCreated DESC LIMIT 10")
             if not rows: return self.send_message(cid, "📭 无记录")
             msg = "📜 <b>最近播放</b>\n"
             for r in rows:
                 date = r['DateCreated'][:16].replace('T', ' ')
-                name = self._get_username(r['UserId'])
-                msg += f"\n⏰ {date} | {name}\n🎬 {r['ItemName']}\n"
+                msg += f"\n⏰ {date} | {r['UserName']}\n🎬 {r['ItemName']}\n"
             self.send_message(cid, msg)
         except Exception as e: self.send_message(cid, f"❌ 查询失败")
 
