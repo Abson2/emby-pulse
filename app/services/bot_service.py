@@ -17,7 +17,7 @@ class TelegramBot:
         self.schedule_thread = None 
         self.offset = 0
         self.last_check_min = -1
-        # 缓存用户ID到用户名的映射，避免频繁查API
+        # 缓存用户ID到用户名的映射
         self.user_cache = {}
         
     def start(self):
@@ -29,7 +29,7 @@ class TelegramBot:
         self.poll_thread.start()
         self.schedule_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
         self.schedule_thread.start()
-        print("🤖 Bot Service Started (Stable + Poster Fix)")
+        print("🤖 Bot Service Started (Top 5 Users + Top 10 Content)")
 
     def stop(self): self.running = False
 
@@ -37,7 +37,6 @@ class TelegramBot:
         proxy = cfg.get("proxy_url")
         return {"http": proxy, "https": proxy} if proxy else None
 
-    # 🔥 核心修复：通过 API 将 UserId 转为 UserName
     def _get_username(self, user_id):
         if user_id in self.user_cache: return self.user_cache[user_id]
         
@@ -45,7 +44,6 @@ class TelegramBot:
         if not key or not host: return user_id
         
         try:
-            # 查所有用户刷新缓存
             res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=2)
             if res.status_code == 200:
                 for u in res.json():
@@ -68,7 +66,6 @@ class TelegramBot:
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         if not key or not host: return None
         try:
-            # 增加 quality=90 优化图片质量
             if image_tag:
                 url = f"{host}/emby/Items/{item_id}/Images/{img_type}?maxHeight=800&maxWidth=600&quality=90&tag={image_tag}"
             else:
@@ -107,7 +104,7 @@ class TelegramBot:
     # ================= 业务逻辑 =================
 
     def save_playback_activity(self, data):
-        pass # 只读模式，不写入
+        pass 
 
     def push_playback_event(self, data, action="start"):
         if not cfg.get("enable_notify") or not cfg.get("tg_chat_id"): return
@@ -145,7 +142,6 @@ class TelegramBot:
                 f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
             
-            # 🔥 海报优化：优先使用 SeriesId 获取竖屏海报
             target_id = item.get("Id")
             if item.get("Type") == "Episode" and item.get("SeriesId"):
                 target_id = item.get("SeriesId")
@@ -201,7 +197,6 @@ class TelegramBot:
                 f"📝 剧情：{overview}"
             )
 
-            # 🔥 海报优化：剧集使用 SeriesId
             target_id = item_id
             use_tag = final.get("ImageTags", {}).get("Primary")
             
@@ -258,12 +253,11 @@ class TelegramBot:
         elif text.startswith("/check"): self._cmd_check(cid)
         elif text.startswith("/help"): self._cmd_help(cid)
 
-    # 🔥 核心修复：统计逻辑
-    # 1. 增加数据库返回值的 None 检查
-    # 2. 将 UserName 改回 UserId (因为插件数据库没 UserName)
+    # 🔥 核心修改：Top 5 用户 + Top 10 内容
     def _cmd_stats(self, chat_id, period='day'):
         where, params = get_base_filter('all') 
         
+        # 1. 时间过滤
         if period == 'week': time_filter = "date('now', '-7 days')"
         elif period == 'month': time_filter = "date('now', 'start of month')"
         elif period == 'year': time_filter = "date('now', 'start of year')"
@@ -272,41 +266,53 @@ class TelegramBot:
         where += f" AND DateCreated > {time_filter}"
         
         try:
-            # 1. 查询总数
+            # 2. 基础统计
             plays_res = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}", params)
-            if not plays_res: 
-                raise Exception("数据库查询返回空 (Table missing or DB locked)")
+            if not plays_res: raise Exception("DB Error")
             plays = plays_res[0]['c']
             
-            # 2. 查询时长
             dur_res = query_db(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}", params)
             dur = dur_res[0]['c'] if dur_res and dur_res[0]['c'] else 0
             hours = round(dur / 3600, 1)
             
-            # 3. 活跃用户 (查 UserId)
             users_res = query_db(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where}", params)
             users = users_res[0]['c'] if users_res else 0
 
-            # 4. 榜首 (查 UserId -> 转 Name)
-            top = query_db(f"SELECT UserId, SUM(PlayDuration) as t FROM PlaybackActivity {where} GROUP BY UserId ORDER BY t DESC LIMIT 1", params)
-            top_str = "暂无"
-            if top:
-                name = self._get_username(top[0]['UserId']) # ID转名
-                u_h = round(top[0]['t'] / 3600, 1)
-                top_str = f"{name} ({u_h}h)"
+            # 3. 活跃用户榜 (Top 5)
+            top_users = query_db(f"SELECT UserId, SUM(PlayDuration) as t FROM PlaybackActivity {where} GROUP BY UserId ORDER BY t DESC LIMIT 5", params)
+            user_str = ""
+            if top_users:
+                for i, u in enumerate(top_users):
+                    name = self._get_username(u['UserId'])
+                    h = round(u['t'] / 3600, 1)
+                    # 前3名用奖牌，后面用数字
+                    prefix = ['🥇','🥈','🥉'][i] if i < 3 else f"{i+1}."
+                    user_str += f"{prefix} {name} ({h}h)\n"
+            else:
+                user_str = "暂无数据"
 
-            # 5. 热门内容
-            tops = query_db(f"SELECT ItemName, COUNT(*) as c FROM PlaybackActivity {where} GROUP BY ItemName ORDER BY c DESC LIMIT 3", params)
+            # 4. 热门内容榜 (Top 10)
+            tops = query_db(f"SELECT ItemName, COUNT(*) as c FROM PlaybackActivity {where} GROUP BY ItemName ORDER BY c DESC LIMIT 10", params)
             top_content = ""
             if tops:
                 for i, item in enumerate(tops):
-                    top_content += f"{['🥇','🥈','🥉'][i]} {item['ItemName']} ({item['c']}次)\n"
+                    prefix = ['🥇','🥈','🥉'][i] if i < 3 else f"{i+1}."
+                    top_content += f"{prefix} {item['ItemName']} ({item['c']}次)\n"
+            else:
+                top_content = "暂无数据"
 
+            # 5. 构建文案
             caption = (
-                f"📊 <b>EmbyPulse {period}报告</b>\n───────────────\n"
-                f"📈 <b>数据大盘</b>\n▶️ 总播放量: {plays} 次\n⏱️ 活跃时长: {hours} 小时\n"
-                f"👥 活跃人数: {users} 人\n👑 榜首之星: {top_str}\n"
-                f"───────────────\n🔥 <b>热门内容 Top 3</b>\n{top_content or '暂无数据'}"
+                f"📊 <b>EmbyPulse {period}报告</b>\n"
+                f"───────────────\n"
+                f"📈 <b>数据大盘</b>\n"
+                f"▶️ 总播放量: {plays} 次\n"
+                f"⏱️ 活跃时长: {hours} 小时\n"
+                f"👥 活跃人数: {users} 人\n"
+                f"───────────────\n"
+                f"🏆 <b>活跃用户 Top 5</b>\n{user_str}"
+                f"───────────────\n"
+                f"🔥 <b>热门内容 Top 10</b>\n{top_content}"
             )
 
             if HAS_PIL:
@@ -347,7 +353,6 @@ class TelegramBot:
             self.send_message(cid, msg)
         except: self.send_message(cid, "❌ 查询失败")
 
-    # 🔥 核心修复：最近播放 (查 UserId -> 转 Name)
     def _cmd_recent(self, cid):
         try:
             rows = query_db("SELECT UserId, ItemName, DateCreated FROM PlaybackActivity ORDER BY DateCreated DESC LIMIT 10")
@@ -390,7 +395,6 @@ class TelegramBot:
             except: time.sleep(60)
 
     def _check_user_expiration(self):
-        # 简单检查逻辑，保持不变
         try:
             users = query_db("SELECT user_id, expire_date FROM users_meta WHERE expire_date IS NOT NULL AND expire_date != ''")
             if not users: return
