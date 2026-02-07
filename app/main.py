@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from contextlib import asynccontextmanager
 import os
+from app.routers import insight
 
 from app.core.config import PORT, SECRET_KEY, CONFIG_DIR, FONT_DIR
 from app.core.database import init_db
@@ -44,6 +45,7 @@ app.include_router(bot_router.router)
 app.include_router(system.router)
 app.include_router(proxy.router)
 app.include_router(report.router)
+app.include_router(insight.router)
 # 🔥 注册 webhook 路由
 app.include_router(webhook.router)
 

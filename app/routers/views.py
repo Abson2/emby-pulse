@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from app.core.config import templates, cfg
+from fastapi import Request
+from fastapi.responses import HTMLResponse
 
 router = APIRouter()
 
@@ -40,3 +42,7 @@ async def page_users_manage(request: Request):
 async def page_settings(request: Request):
     if not request.session.get("user"): return RedirectResponse("/login")
     return templates.TemplateResponse("settings.html", {"request": request, "active_page": "settings", "user": request.session.get("user")})
+
+@app.get("/insight", response_class=HTMLResponse)
+async def insight_page(request: Request):
+    return templates.TemplateResponse("insight.html", {"request": request})

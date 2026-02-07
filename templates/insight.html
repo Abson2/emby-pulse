@@ -1,0 +1,165 @@
+{% extends "layout.html" %}
+{% block title %}媒体库质量盘点 - EmbyPulse{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto w-full px-4 py-6 pb-24">
+    
+    <div class="mb-8">
+        <h1 class="text-2xl font-black text-gray-800 dark:text-white flex items-center gap-2">
+            <i class="fa-solid fa-medal text-yellow-500"></i> 媒体库质量盘点
+        </h1>
+        <p class="text-xs text-gray-500 mt-1">深度扫描电影库，分析画质与编码分布</p>
+    </div>
+
+    <div id="loading" class="text-center py-32">
+        <i class="fa-solid fa-circle-notch fa-spin text-4xl text-blue-500 mb-4"></i>
+        <p class="text-gray-500">正在分析媒体指纹，可能需要几十秒...</p>
+    </div>
+
+    <div id="stats-panel" class="hidden animate-fade-in space-y-6">
+        
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <div class="text-xs text-gray-400 mb-1">电影总数</div>
+                <div class="text-2xl font-black text-gray-800 dark:text-white" id="val-total">-</div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <div class="text-xs text-gray-400 mb-1">4K 原盘/Remux</div>
+                <div class="text-2xl font-black text-purple-600" id="val-4k">-</div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <div class="text-xs text-gray-400 mb-1">杜比/HDR</div>
+                <div class="text-2xl font-black text-amber-500" id="val-hdr">-</div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <div class="text-xs text-gray-400 mb-1">HEVC 编码率</div>
+                <div class="text-2xl font-black text-green-500" id="val-hevc">-</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <h3 class="font-bold text-gray-700 dark:text-gray-200 mb-4">📺 分辨率分布</h3>
+                <div id="chart-res" style="height: 300px;"></div>
+            </div>
+            
+            <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <h3 class="font-bold text-gray-700 dark:text-gray-200 mb-4">🌈 动态范围 (HDR)</h3>
+                <div id="chart-hdr" style="height: 300px;"></div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 bg-red-50 dark:bg-red-900/20 flex justify-between items-center">
+                <h3 class="font-bold text-red-600 dark:text-red-400 text-sm">
+                    <i class="fa-solid fa-trash-can mr-2"></i> 低画质清洗建议 (SD/480P)
+                </h3>
+                <span class="text-xs text-red-400">建议洗版</span>
+            </div>
+            <div id="low-quality-list" class="divide-y divide-gray-50 dark:divide-gray-700/50">
+                </div>
+        </div>
+
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', loadData);
+
+    async function loadData() {
+        try {
+            const res = await fetch('/api/insight/quality');
+            const json = await res.json();
+            
+            if (json.status === 'success') {
+                renderDashboard(json.data);
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('stats-panel').classList.remove('hidden');
+            } else {
+                alert("加载失败: " + json.msg);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("请求异常");
+        }
+    }
+
+    function renderDashboard(data) {
+        // 1. 填充数字
+        document.getElementById('val-total').innerText = data.total;
+        document.getElementById('val-4k').innerText = data.resolution['4K'];
+        document.getElementById('val-hdr').innerText = data.hdr['Dolby Vision'] + data.hdr['HDR10'];
+        
+        const hevcRate = ((data.codec['HEVC (H.265)'] / data.total) * 100).toFixed(0);
+        document.getElementById('val-hevc').innerText = isNaN(hevcRate) ? '0%' : hevcRate + '%';
+
+        // 2. 绘制分辨率饼图
+        const chartRes = echarts.init(document.getElementById('chart-res'));
+        chartRes.setOption({
+            tooltip: { trigger: 'item' },
+            legend: { bottom: '0%', left: 'center' },
+            series: [{
+                name: '分辨率',
+                type: 'pie',
+                radius: ['40%', '70%'],
+                itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+                data: [
+                    { value: data.resolution['4K'], name: '4K', itemStyle: { color: '#8b5cf6' } },
+                    { value: data.resolution['1080P'], name: '1080P', itemStyle: { color: '#3b82f6' } },
+                    { value: data.resolution['720P'], name: '720P', itemStyle: { color: '#10b981' } },
+                    { value: data.resolution['SD'], name: 'SD (低画质)', itemStyle: { color: '#ef4444' } }
+                ]
+            }]
+        });
+
+        // 3. 绘制 HDR 环形图
+        const chartHdr = echarts.init(document.getElementById('chart-hdr'));
+        chartHdr.setOption({
+            tooltip: { trigger: 'item' },
+            legend: { bottom: '0%', left: 'center' },
+            series: [{
+                name: 'HDR',
+                type: 'pie',
+                radius: ['40%', '70%'],
+                itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+                data: [
+                    { value: data.hdr['Dolby Vision'], name: 'Dolby Vision', itemStyle: { color: '#f59e0b' } },
+                    { value: data.hdr['HDR10'], name: 'HDR10', itemStyle: { color: '#ec4899' } },
+                    { value: data.hdr['SDR'], name: 'SDR', itemStyle: { color: '#94a3b8' } }
+                ]
+            }]
+        });
+
+        // 4. 填充低画质列表
+        const listContainer = document.getElementById('low-quality-list');
+        if (data.low_quality_list.length === 0) {
+            listContainer.innerHTML = '<div class="p-6 text-center text-gray-400 text-sm">🎉 完美！没有发现低画质影片</div>';
+        } else {
+            let html = '';
+            data.low_quality_list.forEach(item => {
+                html += `
+                <div class="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded bg-gray-200 flex items-center justify-center text-xl">🎬</div>
+                        <div>
+                            <div class="font-bold text-gray-800 dark:text-gray-200 text-sm">${item.Name}</div>
+                            <div class="text-xs text-gray-500">${item.Year}</div>
+                        </div>
+                    </div>
+                    <div class="text-xs font-mono bg-red-100 text-red-600 px-2 py-1 rounded">
+                        ${item.Res}
+                    </div>
+                </div>`;
+            });
+            listContainer.innerHTML = html;
+        }
+        
+        // 窗口缩放自适应
+        window.addEventListener('resize', () => {
+            chartRes.resize();
+            chartHdr.resize();
+        });
+    }
+</script>
+{% endblock %}
