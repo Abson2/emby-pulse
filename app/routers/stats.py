@@ -3,10 +3,32 @@ from typing import Optional
 from app.core.config import cfg
 from app.core.database import query_db, get_base_filter
 import requests
+import datetime
 
 router = APIRouter()
 
-# --- 内部工具函数：获取用户映射 ---
+# --- 内部工具函数：获取第一个有效用户的ID ---
+def get_admin_user_id():
+    key = cfg.get("emby_api_key")
+    host = cfg.get("emby_host")
+    if key and host:
+        try:
+            # 获取用户列表
+            res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=5)
+            if res.status_code == 200:
+                users = res.json()
+                # 优先找管理员
+                for u in users:
+                    if u.get("Policy", {}).get("IsAdministrator"):
+                        return u['Id']
+                # 没有管理员则返回第一个用户
+                if users:
+                    return users[0]['Id']
+        except: 
+            pass
+    return None
+
+# --- 内部工具：获取用户映射 ---
 def get_user_map_local():
     user_map = {}
     key = cfg.get("emby_api_key")
@@ -56,7 +78,6 @@ def api_dashboard(user_id: Optional[str] = None):
 def api_recent_activity(user_id: Optional[str] = None):
     try:
         where, params = get_base_filter(user_id)
-        # 获取最近 50 条，前端只显示前 10 条
         results = query_db(f"SELECT DateCreated, UserId, ItemId, ItemName, ItemType FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 50", params)
         
         if not results: 
@@ -75,44 +96,85 @@ def api_recent_activity(user_id: Optional[str] = None):
         print(f"⚠️ Recent Activity Error: {e}")
         return {"status": "error", "data": []}
 
-# 🔥 核心修复：获取最近入库
+# 🔥 核心修复：双路查询合并 (Movies + Series)
 @router.get("/api/stats/latest")
 def api_latest_media(limit: int = 10):
     key = cfg.get("emby_api_key")
     host = cfg.get("emby_host")
     if not key or not host: return {"status": "error", "data": []}
     
+    # 1. 获取执行查询的用户身份 (解决权限/视图问题)
+    user_id = get_admin_user_id()
+    
+    # 基础 URL 构造
+    # 如果获取不到 user_id，回退到 /Items (虽然可能为空)
+    base_url = f"{host}/emby/Users/{user_id}/Items" if user_id else f"{host}/emby/Items"
+    
     try:
-        # ✅ 修复方案：
-        # 1. 移除 'Fields' 参数，防止 Emby 4.10+ 计算过载
-        # 2. 增加 EnableTotalRecordCount=false 减少 DB 压力
-        # 3. 限制只查询 Movie 和 Series (剧集层面)，避免展示单集刷屏
-        query = f"SortBy=DateCreated&SortOrder=Descending&IncludeItemTypes=Movie,Series&Limit={limit}&Recursive=true&EnableTotalRecordCount=false&api_key={key}"
-        url = f"{host}/emby/Items?{query}"
+        # 2. 查询一：最新电影 (按 DateCreated 排序)
+        movies = []
+        try:
+            # 这里的 Recursive=true 很重要，配合 UserId 才能查到底层
+            q_movie = f"IncludeItemTypes=Movie&SortBy=DateCreated&SortOrder=Descending&Limit={limit}&Recursive=true&Fields=ProductionYear,CommunityRating&EnableTotalRecordCount=false&api_key={key}"
+            res_m = requests.get(f"{base_url}?{q_movie}", timeout=10)
+            if res_m.status_code == 200:
+                movies = res_m.json().get("Items", [])
+        except: pass
+
+        # 3. 查询二：最近更新的剧集 (按 DateLastMediaAdded 排序)
+        # 💡 这是 MP 能获取到数据的关键！剧集要看最后添加媒体的时间
+        series = []
+        try:
+            q_series = f"IncludeItemTypes=Series&SortBy=DateLastMediaAdded&SortOrder=Descending&Limit={limit}&Recursive=true&Fields=ProductionYear,CommunityRating&EnableTotalRecordCount=false&api_key={key}"
+            res_s = requests.get(f"{base_url}?{q_series}", timeout=10)
+            if res_s.status_code == 200:
+                series = res_s.json().get("Items", [])
+        except: pass
+
+        # 4. 数据合并与清洗
+        combined = []
         
-        res = requests.get(url, timeout=15)
-        
-        if res.status_code == 200:
-            items = res.json().get("Items", [])
-            data = []
-            for item in items:
-                data.append({
-                    "Id": item.get("Id"),
-                    "Name": item.get("Name"),
-                    "SeriesName": item.get("SeriesName", ""),
-                    "Year": item.get("ProductionYear"),
-                    "Rating": item.get("CommunityRating"),
-                    "Type": item.get("Type"),
-                    "DateCreated": item.get("DateCreated")
-                })
-            return {"status": "success", "data": data}
-        else:
-            print(f"Latest API HTTP Error: {res.status_code} - {res.text}")
+        # 处理电影
+        for m in movies:
+            combined.append({
+                "Id": m.get("Id"),
+                "Name": m.get("Name"),
+                "SeriesName": "",
+                "Year": m.get("ProductionYear"),
+                "Rating": m.get("CommunityRating"),
+                "Type": "Movie",
+                # 电影用创建时间
+                "SortDate": m.get("DateCreated"), 
+                "DisplayDate": m.get("DateCreated")
+            })
             
+        # 处理剧集
+        for s in series:
+            # 剧集优先用 DateLastMediaAdded，没有则回退到 DateCreated
+            sort_date = s.get("DateLastMediaAdded") or s.get("DateCreated")
+            combined.append({
+                "Id": s.get("Id"),
+                "Name": s.get("Name"),
+                "SeriesName": s.get("Name"), # 剧集本身就是系列名
+                "Year": s.get("ProductionYear"),
+                "Rating": s.get("CommunityRating"),
+                "Type": "Series",
+                "SortDate": sort_date,
+                "DisplayDate": sort_date
+            })
+
+        # 5. 最终排序：按 SortDate 倒序
+        # 确保新加剧集和新加电影混排时顺序正确
+        combined.sort(key=lambda x: x.get("SortDate", ""), reverse=True)
+        
+        # 截取前 Limit 个
+        final_data = combined[:limit]
+        
+        return {"status": "success", "data": final_data}
+
     except Exception as e:
         print(f"Latest API Error: {e}")
-        
-    return {"status": "error", "data": []}
+        return {"status": "error", "data": []}
 
 @router.get("/api/live")
 def api_live_sessions():
