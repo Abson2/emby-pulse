@@ -3,11 +3,15 @@ from app.core.config import cfg
 import requests
 import time
 import logging
+import math
 
 # 配置日志
 logger = logging.getLogger("uvicorn")
 
 router = APIRouter()
+
+# 🔥 核心配置：每页只查 200 条，防止 Emby 内存溢出
+BATCH_SIZE = 200
 
 def get_emby_auth():
     """获取 Emby 配置信息"""
@@ -19,12 +23,12 @@ def fetch_with_retry(url, headers, retries=3):
     """
     for i in range(retries):
         try:
-            # 超时时间设为 60 秒
+            # 60秒超时
             response = requests.get(url, headers=headers, timeout=60)
             if response.status_code == 200:
                 return response.json()
             elif response.status_code == 500:
-                logger.warning(f"Emby 服务端报错 500，可能是查询数据量过大 (尝试 {i+1}/{retries})")
+                logger.warning(f"Emby 服务端报错 500 (尝试 {i+1}/{retries})")
             else:
                 logger.warning(f"Emby API 返回错误: {response.status_code} (尝试 {i+1}/{retries})")
         except requests.exceptions.Timeout:
@@ -39,7 +43,7 @@ def fetch_with_retry(url, headers, retries=3):
 @router.get("/api/insight/quality")
 def scan_library_quality(request: Request):
     """
-    质量盘点核心接口 - 分批查询版
+    质量盘点核心接口 - 分页版
     """
     # 1. 鉴权
     user = request.session.get("user")
@@ -52,32 +56,64 @@ def scan_library_quality(request: Request):
 
     headers = {"X-Emby-Token": key, "Accept": "application/json"}
 
-    # 2. 定义分批查询函数
-    def fetch_items_by_type(item_type):
-        """
-        拆分查询：单独查 Movie 或 Episode，减轻 Emby 压力
-        减少 Fields 字段，只查必要的 MediaSources 和 Path
-        """
-        # 注意：不再请求 ProviderIds 和 MediaStreams(通常包含在MediaSources里)，减少数据量
-        query = f"Recursive=true&IncludeItemTypes={item_type}&Fields=MediaSources,Path"
-        url = f"{host}/emby/Items?{query}"
-        logger.info(f"正在扫描 {item_type}: {url}")
+    # 2. 定义分页获取函数
+    def fetch_all_items_paged(item_type):
+        all_items = []
         
-        data = fetch_with_retry(url, headers)
-        if data and "Items" in data:
-            return data["Items"]
-        return []
+        # A. 先只查总数 (Limit=0)
+        count_url = f"{host}/emby/Items?Recursive=true&IncludeItemTypes={item_type}&Limit=0"
+        count_data = fetch_with_retry(count_url, headers)
+        
+        if not count_data:
+            logger.error(f"无法获取 {item_type} 总数，跳过扫描")
+            return []
+            
+        total_count = count_data.get("TotalRecordCount", 0)
+        logger.info(f"[{item_type}] 发现总数: {total_count}，准备分批拉取...")
+        
+        if total_count == 0:
+            return []
+
+        # B. 循环分页拉取
+        # 计算总页数
+        total_pages = math.ceil(total_count / BATCH_SIZE)
+        
+        for page in range(total_pages):
+            start_index = page * BATCH_SIZE
+            # 构造分页请求
+            query = (
+                f"Recursive=true&IncludeItemTypes={item_type}"
+                f"&Fields=MediaSources,Path"  # 只查必须字段
+                f"&StartIndex={start_index}&Limit={BATCH_SIZE}" # 🔥 关键：分页参数
+            )
+            url = f"{host}/emby/Items?{query}"
+            
+            # 打印进度日志
+            logger.info(f"正在扫描 {item_type}: 第 {page+1}/{total_pages} 页 (Index {start_index})")
+            
+            data = fetch_with_retry(url, headers)
+            if data and "Items" in data:
+                all_items.extend(data["Items"])
+            else:
+                logger.warning(f"第 {page+1} 页获取失败，跳过该页")
+                
+            # 每页拉取完稍微停顿 0.1s，给 Emby 喘息时间
+            time.sleep(0.1)
+            
+        return all_items
 
     try:
-        # 3. 分别获取电影和剧集 (避免一次性请求导致 500 错误)
-        movies = fetch_items_by_type("Movie")
-        episodes = fetch_items_by_type("Episode")
+        # 3. 分别拉取电影和剧集
+        movies = fetch_all_items_paged("Movie")
+        episodes = fetch_all_items_paged("Episode")
         
         # 合并结果
         items = movies + episodes
         
         if not items:
-            return {"status": "error", "message": "未获取到任何媒体数据，请检查 Emby 是否有媒体库或 API 是否正常"}
+            return {"status": "error", "message": "未扫描到有效媒体数据，请检查 Emby 状态"}
+
+        logger.info(f"扫描完成，共获取 {len(items)} 条数据，开始统计分析...")
 
         # 4. 初始化统计
         stats = {
@@ -88,24 +124,19 @@ def scan_library_quality(request: Request):
             "bad_quality_list": []
         }
 
-        # 5. 遍历统计
+        # 5. 遍历统计 (逻辑不变)
         for item in items:
-            # 兼容性判断
             media_sources = item.get("MediaSources")
-            if not media_sources or not isinstance(media_sources, list):
-                continue
+            if not media_sources or not isinstance(media_sources, list): continue
             
             source = media_sources[0]
             media_streams = source.get("MediaStreams")
-            if not media_streams:
-                continue
+            if not media_streams: continue
             
-            # 找到视频流
             video_stream = next((s for s in media_streams if s.get("Type") == "Video"), None)
-            if not video_stream:
-                continue
+            if not video_stream: continue
 
-            # --- 分辨率 ---
+            # 分辨率
             width = video_stream.get("Width", 0)
             if width >= 3800: stats["resolution"]["4k"] += 1
             elif width >= 1900: stats["resolution"]["1080p"] += 1
@@ -121,17 +152,16 @@ def scan_library_quality(request: Request):
                         "Path": item.get("Path", "未知路径")
                     })
 
-            # --- 编码 ---
+            # 编码
             codec = video_stream.get("Codec", "").lower()
             if "hevc" in codec or "h265" in codec: stats["video_codec"]["hevc"] += 1
             elif "h264" in codec or "avc" in codec: stats["video_codec"]["h264"] += 1
             elif "av1" in codec: stats["video_codec"]["av1"] += 1
             else: stats["video_codec"]["other"] += 1
 
-            # --- HDR ---
+            # HDR
             video_range = video_stream.get("VideoRange", "").lower()
             display_title = video_stream.get("DisplayTitle", "").lower()
-            
             if "dolby" in display_title or "dv" in display_title or "dolby" in video_range:
                 stats["hdr_type"]["dolby_vision"] += 1
             elif "hdr" in video_range or "hdr" in display_title or "pq" in video_range:
@@ -142,5 +172,5 @@ def scan_library_quality(request: Request):
         return {"status": "success", "data": stats}
 
     except Exception as e:
-        logger.error(f"质量盘点处理错误: {str(e)}")
+        logger.error(f"质量盘点严重错误: {str(e)}")
         return {"status": "error", "message": f"处理失败: {str(e)}"}
