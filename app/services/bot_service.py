@@ -216,11 +216,12 @@ class TelegramBot:
         elif text.startswith("/check"): self._cmd_check(cid)
         elif text.startswith("/help"): self._cmd_help(cid)
 
-    # 🔥 核心修复：使用官方 /Users/{id}/Items/Latest 接口，彻底解决 500 错误
+    # 🔥 核心修复：最近入库改为官方接口 /Users/{id}/Items/Latest
+    # 这能避免 500 错误和性能问题
     def _cmd_latest(self, cid):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         try:
-            # 1. 查找管理员ID (接口必须参数)
+            # 1. 查找管理员ID
             user_id = None
             try:
                 u_res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=5)
@@ -235,12 +236,11 @@ class TelegramBot:
             if not user_id: return self.send_message(cid, "❌ 错误: 无法获取 Emby 用户身份")
 
             # 2. 调用官方推荐接口
-            # 注意: 这里字段保持精简，避免数据库查询压力
             fields = "DateCreated,Name,SeriesName,ProductionYear,Type,CommunityRating"
             url = f"{host}/emby/Users/{user_id}/Items/Latest"
             params = {
                 "Limit": 8,
-                "MediaTypes": "Video", # 只查视频
+                "MediaTypes": "Video", 
                 "Fields": fields,
                 "api_key": key
             }
@@ -249,23 +249,18 @@ class TelegramBot:
             if res.status_code != 200:
                 return self.send_message(cid, f"❌ 查询失败: Emby 返回 HTTP {res.status_code}")
 
-            # 3. 处理数据 (官方接口直接返回数组，不是字典)
             items = res.json()
             if not items: return self.send_message(cid, "📭 最近没有新入库的资源")
 
             msg = "🆕 <b>最近入库</b>\n"
             count = 0
             for i in items:
-                if count >= 5: break
-                # 过滤逻辑与首页保持一致
+                if count >= 8: break
                 if i.get("Type") not in ["Movie", "Series", "Episode"]: continue
-                
                 name = i.get("Name")
                 if i.get("SeriesName"): name = f"{i.get('SeriesName')} - {name}"
-                
                 date_str = i.get("DateCreated", "")[:10]
                 type_icon = "🎬" if i.get("Type") == "Movie" else "📺"
-                
                 msg += f"\n{type_icon} {date_str} | {name}"
                 count += 1
             
@@ -299,6 +294,7 @@ class TelegramBot:
                 info_parts.append(f"{mbps}Mbps")
         return " | ".join(info_parts) if info_parts else None
 
+    # 🔥 修复：搜索功能增加状态码检查和异常捕获
     def _cmd_search(self, chat_id, text):
         parts = text.split(' ', 1)
         if len(parts) < 2: return self.send_message(chat_id, "🔍 <b>搜索格式错误</b>\n请使用: <code>/search 关键词</code>")
@@ -306,15 +302,25 @@ class TelegramBot:
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         try:
             encoded_key = urllib.parse.quote(keyword)
+            # 减少请求字段以降低 Emby 压力
             fields = "CommunityRating,ProductionYear,Genres,Overview,OfficialRating,ProviderIds,MediaSources"
             url = f"{host}/emby/Items?SearchTerm={encoded_key}&IncludeItemTypes=Movie,Series&Recursive=true&Fields={fields}&Limit=5&api_key={key}"
+            
             res = requests.get(url, timeout=10)
+            
+            # 🔥 增加 HTTP 状态码检查
+            if res.status_code != 200:
+                logger.error(f"Search API Error: HTTP {res.status_code} - {res.text[:100]}")
+                return self.send_message(chat_id, f"❌ 搜索失败 (HTTP {res.status_code})")
+            
             items = res.json().get("Items", [])
             if not items: return self.send_message(chat_id, f"📭 未找到与 <b>{keyword}</b> 相关的资源")
+            
             top = items[0]
             type_raw = top.get("Type")
             tech_info_str = "📼 未知画质"
             ep_count_str = ""
+            
             if type_raw == "Series":
                 try:
                     sub_url = f"{host}/emby/Items?ParentId={top['Id']}&Recursive=true&IncludeItemTypes=Episode&Fields=MediaSources&Limit=1&api_key={key}"
@@ -331,6 +337,7 @@ class TelegramBot:
             else:
                 parsed_tech = self._extract_tech_info(top)
                 if parsed_tech: tech_info_str = f"📼 {parsed_tech}"
+            
             name = top.get("Name")
             year_str = f"({top.get('ProductionYear')})" if top.get('ProductionYear') else ""
             rating = top.get("CommunityRating", "N/A")
@@ -340,23 +347,28 @@ class TelegramBot:
             type_icon = "🎬" if type_raw == "Movie" else "📺"
             info_line = tech_info_str
             if type_raw == "Series": info_line = f"{ep_count_str} | {tech_info_str}"
+            
             caption = (f"{type_icon} <b>{name}</b> {year_str}\n⭐️ {rating}  |  🎭 {genres}\n{info_line}\n───────────────\n📝 <b>简介</b>: {overview}\n")
+            
             if len(items) > 1:
                 caption += "\n🔎 <b>其他结果:</b>\n"
                 for i, sub in enumerate(items[1:]):
                     sub_year = f"({sub.get('ProductionYear')})" if sub.get('ProductionYear') else ""
                     suffix = "[剧集]" if sub.get("Type") == "Series" else "[电影]"
                     caption += f"{i+2}. {sub.get('Name')} {sub_year} {suffix}\n"
+            
             base_url = cfg.get("emby_public_host") or host
             if base_url.endswith('/'): base_url = base_url[:-1]
             play_url = f"{base_url}/web/index.html#!/item?id={top.get('Id')}&serverId={top.get('ServerId')}"
             keyboard = {"inline_keyboard": [[{"text": "▶️ 立即播放", "url": play_url}]]}
+            
             img_io = self._download_emby_image(top.get("Id"), 'Primary')
             if img_io: self.send_photo(chat_id, img_io, caption, reply_markup=keyboard)
             else: self.send_photo(chat_id, REPORT_COVER_URL, caption, reply_markup=keyboard)
+            
         except Exception as e:
             logger.error(f"Search Error: {e}")
-            self.send_message(chat_id, "❌ 搜索时发生错误")
+            self.send_message(chat_id, "❌ 搜索时发生错误，请稍后重试")
 
     def _cmd_stats(self, chat_id, period='day'):
         where, params = get_base_filter('all') 
