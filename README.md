@@ -85,7 +85,7 @@ services:
       # [必填] 映射 Emby 数据目录 (用于读取 playback_reporting.db)
       # 请将左侧路径修改为您 NAS/服务器上 Emby 的实际数据路径
       # 群晖示例: /volume1/docker/emby/data
-      - /path/to/your/emby/data:/emby-data:ro
+      - /path/to/your/emby/data:/emby-data
       
       # 映射配置目录，持久化保存设置
       - ./config:/app/config
@@ -99,8 +99,7 @@ services:
       - DB_PATH=/emby-data/playback_reporting.db
       # Emby 地址 (Host模式下可用 127.0.0.1)
       - EMBY_HOST=[http://127.0.0.1:8096](http://127.0.0.1:8096)
-      # 自定义 Session 加密密钥
-      - SECRET_KEY=your_secret_key_2026
+
 ```
 
 ### 3. 启动服务

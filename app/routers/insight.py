@@ -37,7 +37,8 @@ def fetch_with_retry(url, headers, retries=3):
         time.sleep(1)
     return None
 
-@router.get("/api/insight/scan")
+# 🔥 修正点：路由地址改为 /api/insight/quality 以匹配前端请求
+@router.get("/api/insight/quality")
 def scan_library_quality(request: Request):
     """
     质量盘点核心接口
