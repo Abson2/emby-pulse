@@ -1,89 +1,111 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from app.core.config import cfg
 import requests
+import time
 
 router = APIRouter()
 
-@router.get("/api/insight/quality")
-def get_quality_stats():
-    key = cfg.get("emby_api_key")
-    host = cfg.get("emby_host")
+def get_emby_auth():
+    return cfg.get("emby_host"), cfg.get("emby_api_key")
+
+def fetch_with_retry(url, headers, retries=3):
+    """带重试机制的请求函数"""
+    for i in range(retries):
+        try:
+            # 🔥 重点：将超时时间延长到 60 秒
+            response = requests.get(url, headers=headers, timeout=60)
+            if response.status_code == 200:
+                return response.json()
+        except requests.exceptions.RequestException:
+            if i == retries - 1: raise
+            time.sleep(1)
+    return None
+
+@router.get("/api/insight/scan")
+def scan_library_quality(request: Request):
+    """
+    质量盘点核心逻辑
+    """
+    if not request.session.get("user"): 
+        return {"status": "error", "message": "Unauthorized"}
     
-    if not key or not host:
-        return {"status": "error", "msg": "未配置 Emby"}
+    host, key = get_emby_auth()
+    if not host or not key: 
+        return {"status": "error", "message": "Emby 未配置，请先去系统设置填写 API Key"}
 
     try:
-        # 查询所有电影，包含媒体流信息
-        # Limit=5000 防止库太大超时，如有需要可加大
-        fields = "MediaSources,MediaStreams,ProductionYear"
-        url = f"{host}/emby/Items?IncludeItemTypes=Movie&Recursive=true&Fields={fields}&Limit=5000&api_key={key}"
+        headers = {"X-Emby-Token": key}
         
-        res = requests.get(url, timeout=30) # 扫描可能较慢，给30秒
-        if res.status_code != 200:
-            return {"status": "error", "msg": "连接 Emby 失败"}
-            
-        items = res.json().get("Items", [])
+        # 1. 获取所有电影和剧集 (增加 Fields 参数确保获取详细元数据)
+        # Emby 4.10 可能需要显式指定 Fields 才能获取 MediaSources
+        query = "Recursive=true&IncludeItemTypes=Movie,Episode&Fields=MediaSources,ProviderIds,Path"
+        url = f"{host}/emby/Items?{query}"
         
-        # 初始化统计容器
+        data = fetch_with_retry(url, headers)
+        items = data.get("Items", [])
+        
         stats = {
-            "total": len(items),
-            "resolution": {"4K": 0, "1080P": 0, "720P": 0, "SD": 0},
-            "hdr": {"SDR": 0, "HDR10": 0, "Dolby Vision": 0},
-            "codec": {"HEVC (H.265)": 0, "AVC (H.264)": 0, "Other": 0},
-            "low_quality_list": [] # 低画质名单
+            "total_count": len(items),
+            "resolution": {"4k": 0, "1080p": 0, "720p": 0, "sd": 0},
+            "video_codec": {"hevc": 0, "h264": 0, "av1": 0, "other": 0},
+            "hdr_type": {"sdr": 0, "hdr10": 0, "dolby_vision": 0},
+            "bad_quality_list": [] # 低画质洗版建议
         }
 
         for item in items:
-            # 提取视频流
-            sources = item.get("MediaSources", [])
-            if not sources: continue
+            # 兼容性处理：防止某些条目没有 MediaSources
+            if not item.get("MediaSources"): continue
             
-            # 通常取第一个源的第一个视频流
-            video = next((s for s in sources[0].get("MediaStreams", []) if s.get("Type") == "Video"), None)
-            if not video: continue
+            source = item["MediaSources"][0]
+            if not source.get("MediaStreams"): continue
+            
+            video_stream = next((s for s in source["MediaStreams"] if s.get("Type") == "Video"), None)
+            if not video_stream: continue
 
-            # 1. 分辨率统计
-            w = video.get("Width", 0)
-            if w >= 3800: 
-                stats["resolution"]["4K"] += 1
-            elif w >= 1900: 
-                stats["resolution"]["1080P"] += 1
-            elif w >= 1200: 
-                stats["resolution"]["720P"] += 1
+            # --- 分辨率统计 ---
+            width = video_stream.get("Width", 0)
+            if width >= 3800: stats["resolution"]["4k"] += 1
+            elif width >= 1900: stats["resolution"]["1080p"] += 1
+            elif width >= 1200: stats["resolution"]["720p"] += 1
             else: 
-                stats["resolution"]["SD"] += 1
-                # 将 SD (低于720P) 加入清洗名单
-                stats["low_quality_list"].append({
-                    "Id": item.get("Id"),
-                    "Name": item.get("Name"),
-                    "Year": item.get("ProductionYear"),
-                    "Res": f"{w}x{video.get('Height')}"
-                })
+                stats["resolution"]["sd"] += 1
+                # 记录低画质用于洗版建议 (仅记录前 50 个)
+                if len(stats["bad_quality_list"]) < 50:
+                    stats["bad_quality_list"].append({
+                        "Name": item.get("Name"),
+                        "SeriesName": item.get("SeriesName", ""),
+                        "Year": item.get("ProductionYear"),
+                        "Resolution": f"{width}x{video_stream.get('Height')}",
+                        "Path": item.get("Path")
+                    })
 
-            # 2. HDR 统计
-            v_range = video.get("VideoRange", "").upper()
-            title = video.get("DisplayTitle", "").upper()
+            # --- 编码统计 ---
+            codec = video_stream.get("Codec", "").lower()
+            if "hevc" in codec or "h265" in codec: stats["video_codec"]["hevc"] += 1
+            elif "h264" in codec or "avc" in codec: stats["video_codec"]["h264"] += 1
+            elif "av1" in codec: stats["video_codec"]["av1"] += 1
+            else: stats["video_codec"]["other"] += 1
+
+            # --- HDR 统计 ---
+            # Emby 4.10 可能改变了 VideoRange 的返回方式，增加容错
+            video_range = video_stream.get("VideoRange", "").lower()
+            display_title = video_stream.get("DisplayTitle", "").lower()
             
-            if "DOVI" in title or "DOLBY VISION" in title:
-                stats["hdr"]["Dolby Vision"] += 1
-            elif "HDR" in v_range or "HDR" in title:
-                stats["hdr"]["HDR10"] += 1
+            if "dolby" in display_title or "dv" in display_title:
+                stats["hdr_type"]["dolby_vision"] += 1
+            elif "hdr" in video_range or "hdr" in display_title:
+                stats["hdr_type"]["hdr10"] += 1
             else:
-                stats["hdr"]["SDR"] += 1
-
-            # 3. 编码统计
-            codec = video.get("Codec", "").lower()
-            if "hevc" in codec or "h265" in codec:
-                stats["codec"]["HEVC (H.265)"] += 1
-            elif "avc" in codec or "h264" in codec:
-                stats["codec"]["AVC (H.264)"] += 1
-            else:
-                stats["codec"]["Other"] += 1
-
-        # 清洗名单只取前 20 个，避免页面过长
-        stats["low_quality_list"] = stats["low_quality_list"][:20]
+                stats["hdr_type"]["sdr"] += 1
 
         return {"status": "success", "data": stats}
 
+    except requests.exceptions.Timeout:
+        return {"status": "error", "message": "连接 Emby 超时 (60s)，请检查 Emby 是否正在高负载运行"}
+    except requests.exceptions.ConnectionError:
+        return {"status": "error", "message": "连接 Emby 失败，请检查 IP/端口是否正确"}
     except Exception as e:
-        return {"status": "error", "msg": str(e)}
+        return {"status": "error", "message": f"扫描失败: {str(e)}"}
+EOF
+
+echo "✅ 修复完成！请重启容器生效: docker-compose restart"
