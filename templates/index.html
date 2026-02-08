@@ -6,29 +6,26 @@
     .hide-scrollbar::-webkit-scrollbar { display: none; }
     .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-    /* === 卡片核心样式 (全端统一) === */
-    .glass-card { 
-        background: #ffffff; 
-        border: 1px solid #e5e7eb; 
-        border-radius: 16px; 
-        padding: 20px; 
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-        transition: all 0.2s ease;
-        overflow: hidden; /* 确保圆角不破 */
-    }
-    html.dark .glass-card {
-        background: #1f2937; 
-        border-color: #374151; 
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-    }
-    /* 鼠标悬停仅在桌面端生效 */
+    /* 🖥️ 电脑端卡片：保持白底方框 */
     @media (min-width: 768px) {
+        .glass-card { 
+            background: #ffffff; 
+            border: 1px solid #e5e7eb; 
+            border-radius: 16px; 
+            padding: 24px; 
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            transition: all 0.2s ease;
+        }
+        html.dark .glass-card {
+            background: #1f2937; 
+            border-color: #374151; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
         .glass-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
     }
 
-    /* === 手机端特化样式 === */
+    /* 📱 手机端特化样式 */
     @media (max-width: 767px) {
-        /* 针对最近入库/播放：去框、去内边距 */
         .mobile-borderless {
             background: transparent !important;
             border: none !important;
@@ -37,7 +34,6 @@
             border-radius: 0 !important;
         }
         
-        /* 手机端统计卡片微调 */
         .stat-card-mobile {
             padding: 16px !important;
             margin-bottom: 0 !important;
@@ -204,7 +200,7 @@
 
     async function fetchLive() {
         try {
-            const res = await fetch('/api/live');
+            const res = await fetch('/api/stats/live');
             const json = await res.json();
             const container = document.getElementById('live-container');
             const section = document.getElementById('live-section');
@@ -283,7 +279,7 @@
         } catch (error) { console.error(error); }
     }
 
-    // 媒体库：手机端 w-[80vw] 横向大图
+    // 媒体库：📱 修改点：w-[60vw]，显示1.5张
     async function fetchLibraries() {
         const container = document.getElementById('library-container');
         try {
@@ -294,7 +290,7 @@
                 json.data.forEach(lib => {
                     const imgUrl = `/api/proxy/image/${lib.Id}/primary`; 
                     html += `
-                    <div class="relative w-[85vw] md:w-full aspect-video flex-shrink-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
+                    <div class="relative w-[60vw] md:w-full aspect-video flex-shrink-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
                         <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-105 transition duration-700" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
                         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-5">
                             <h4 class="text-white font-bold text-lg md:text-xl drop-shadow-md truncate w-full tracking-wide">${lib.Name}</h4>
@@ -306,7 +302,7 @@
         } catch (e) { console.error(e); }
     }
     
-    // 最近入库：w-28
+    // 最近入库：📱 修改点：w-24 (96px)，显示3.5张
     async function fetchLatest() {
         const container = document.getElementById('latest-container');
         try {
@@ -320,7 +316,7 @@
                     const metaInfo = [item.Year, item.Rating ? `⭐${item.Rating}` : ''].filter(Boolean).join(' • '); 
                     
                     html += `
-                    <div class="group relative w-28 md:w-full flex-shrink-0 cursor-default snap-center">
+                    <div class="group relative w-24 md:w-full flex-shrink-0 cursor-default snap-center">
                         <div class="aspect-[2/3] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative shadow-sm transition-all border border-gray-100 dark:border-gray-700/50">
                             <img src="${imgUrl}" class="w-full h-full object-cover" loading="lazy" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
                         </div>
@@ -335,7 +331,7 @@
         } catch (e) { console.error(e); }
     }
 
-    // 最近播放：w-28
+    // 最近播放：📱 修改点：w-24
     async function fetchRecentActivity(userId) {
         const container = document.getElementById('recent-container');
         try {
@@ -351,7 +347,7 @@
                     let timeStr = dateObj.toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'});
                     
                     html += `
-                    <div class="group relative w-28 md:w-full flex-shrink-0 cursor-default snap-center">
+                    <div class="group relative w-24 md:w-full flex-shrink-0 cursor-default snap-center">
                         <div class="aspect-[2/3] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative shadow-sm transition-all border border-gray-100 dark:border-gray-700/50">
                             <img src="${imgUrl}" class="w-full h-full object-cover" loading="lazy" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
                             <div class="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/80 to-transparent">
