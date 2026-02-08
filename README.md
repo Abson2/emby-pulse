@@ -74,31 +74,23 @@ version: '3.8'
 
 services:
   emby-pulse:
-    image: zeyu8023/emby-stats:latest  # 请使用最新版本镜像
+    # 1. 使用远程镜像 (确保您GitHub Actions已经构建完成并推送了新镜像)
+    image: zeyu8023/emby-stats:latest
     container_name: emby-pulse
     restart: unless-stopped
-    
-    # 推荐使用 Host 模式，方便连接本地 Emby
     network_mode: host
     
     volumes:
-      # [必填] 映射 Emby 数据目录 (用于读取 playback_reporting.db)
-      # 请将左侧路径修改为您 NAS/服务器上 Emby 的实际数据路径
-      # 群晖示例: /volume1/docker/emby/data
-      - /path/to/your/emby/data:/emby-data
-      
-      # 映射配置目录，持久化保存设置
-      - ./config:/app/config
-      
-      # 映射自定义图片目录 (Logo/Favicon)
-      - ./static/img:/app/static/img
+      # --- 数据与配置 ---
+      - /volume1/docker/emby/data:/emby-data
+      - ./config:/app/config  
     
     environment:
       - TZ=Asia/Shanghai
-      # 指向容器内映射的数据库路径
       - DB_PATH=/emby-data/playback_reporting.db
-      # Emby 地址 (Host模式下可用 127.0.0.1)
-      - EMBY_HOST=[http://127.0.0.1:8096](http://127.0.0.1:8096)
+      # 下面这两个如果 config.json 里存了，这里其实可以删掉，保留也没事作为兜底
+      - EMBY_HOST=http://192.168.31.2:8096
+      - EMBY_API_KEY=xxxxxxxxxxxxxxxxx
 
 ```
 
