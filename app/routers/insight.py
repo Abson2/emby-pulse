@@ -1,45 +1,48 @@
 from fastapi import APIRouter, Request
 from app.core.config import cfg
-import requests
-import time
+import sqlite3
+import os
 import logging
+import shutil
+import tempfile
 
 # 配置日志
 logger = logging.getLogger("uvicorn")
 
 router = APIRouter()
 
-def get_emby_auth():
-    return cfg.get("emby_host"), cfg.get("emby_api_key")
-
-def fetch_with_retry(url, headers, retries=2):
-    """基础重试请求"""
-    for i in range(retries):
-        try:
-            # 30秒超时
-            response = requests.get(url, headers=headers, timeout=30)
-            if response.status_code == 200:
-                return response.json()
-        except Exception as e:
-            pass # 忽略网络错误，重试
-        time.sleep(0.5)
+def find_library_db():
+    """
+    寻找 Emby 的核心数据库 library.db
+    通常在 /emby-data/data/library.db 或 /emby-data/library.db
+    """
+    # 容器内的挂载点，根据 docker-compose.yml 应该是 /emby-data
+    base_paths = [
+        "/emby-data/data/library.db",
+        "/emby-data/library.db",
+        "/config/data/library.db", # 兼容某些通过 config 挂载的情况
+        "/config/library.db"
+    ]
+    
+    for path in base_paths:
+        if os.path.exists(path):
+            logger.info(f"✅ 发现数据库文件: {path}")
+            return path
+            
+    # 如果找不到，尝试搜索
+    if os.path.exists("/emby-data"):
+        for root, dirs, files in os.walk("/emby-data"):
+            if "library.db" in files:
+                path = os.path.join(root, "library.db")
+                logger.info(f"✅ 搜索到数据库文件: {path}")
+                return path
+    
     return None
 
-@router.get("/api/insight/quality")
-def scan_library_quality(request: Request):
+def get_stats_from_db(db_path):
     """
-    质量盘点 - ID-First 策略 (专治 Emby 4.10+)
+    直接查询 SQLite 数据库，绕过 API
     """
-    # 1. 鉴权
-    user = request.session.get("user")
-    if not user: return {"status": "error", "message": "Unauthorized"}
-    
-    host, key = get_emby_auth()
-    if not host or not key: return {"status": "error", "message": "Emby 未配置"}
-
-    headers = {"X-Emby-Token": key, "Accept": "application/json"}
-    
-    # 2. 初始化统计
     stats = {
         "total_count": 0,
         "resolution": {"4k": 0, "1080p": 0, "720p": 0, "sd": 0},
@@ -47,95 +50,120 @@ def scan_library_quality(request: Request):
         "hdr_type": {"sdr": 0, "hdr10": 0, "dolby_vision": 0},
         "bad_quality_list": []
     }
+
+    # 为了防止锁库，先复制一份到临时目录读取，读完即删
+    temp_dir = tempfile.gettempdir()
+    temp_db = os.path.join(temp_dir, "emby_pulse_library_temp.db")
     
     try:
-        # 3. 第一步：只获取所有 ID (轻量级，不会崩)
-        # 不请求 Fields，只请求 Id，速度极快
-        logger.info("正在获取全量媒体 ID 索引...")
-        id_url = f"{host}/emby/Items?Recursive=true&IncludeItemTypes=Movie,Episode&Fields=Id"
+        shutil.copy2(db_path, temp_db)
+    except Exception as e:
+        logger.error(f"复制数据库失败: {e}")
+        return None, f"无法读取数据库文件: {str(e)}"
+
+    conn = None
+    try:
+        conn = sqlite3.connect(temp_db)
+        cursor = conn.cursor()
         
-        id_data = fetch_with_retry(id_url, headers)
-        if not id_data or "Items" not in id_data:
-            return {"status": "error", "message": "无法获取媒体索引，Emby 可能未就绪"}
+        # SQL 查询：关联 MediaItems 和 MediaStreams
+        # Type 'Movie' 和 'Episode' 在 DB 中通常直接存储为字符串
+        sql = """
+        SELECT 
+            I.Name, 
+            I.SeriesName, 
+            I.ProductionYear, 
+            I.Path,
+            S.Width, 
+            S.Height, 
+            S.Codec, 
+            S.VideoRange, 
+            S.DisplayTitle
+        FROM MediaItems I
+        JOIN MediaStreams S ON I.Id = S.ItemId
+        WHERE I.Type IN ('Movie', 'Episode') 
+          AND S.StreamType = 'Video'
+        """
+        
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        
+        stats["total_count"] = len(rows)
+        logger.info(f"数据库查询成功，获取到 {len(rows)} 条视频流数据")
+
+        for row in rows:
+            name, series_name, year, path, width, height, codec, video_range, display_title = row
             
-        all_ids = [item["Id"] for item in id_data["Items"]]
-        total_items = len(all_ids)
-        logger.info(f"获取索引成功，共 {total_items} 个条目，准备分批拉取详情...")
+            # 数据清洗（防止 None）
+            width = width if width else 0
+            height = height if height else 0
+            codec = codec.lower() if codec else ""
+            video_range = video_range.lower() if video_range else ""
+            display_title = display_title.lower() if display_title else ""
+            path = path if path else ""
 
-        if total_items == 0:
-             return {"status": "success", "data": stats}
+            # 1. 分辨率统计
+            if width >= 3800: stats["resolution"]["4k"] += 1
+            elif width >= 1900: stats["resolution"]["1080p"] += 1
+            elif width >= 1200: stats["resolution"]["720p"] += 1
+            else: 
+                stats["resolution"]["sd"] += 1
+                if len(stats["bad_quality_list"]) < 100:
+                    stats["bad_quality_list"].append({
+                        "Name": name,
+                        "SeriesName": series_name,
+                        "Year": year,
+                        "Resolution": f"{width}x{height}",
+                        "Path": path
+                    })
 
-        # 4. 第二步：分批次精确查询详情 (Batch Size = 50)
-        # 使用 Ids=1,2,3 参数，避开数据库递归 Bug
-        BATCH_SIZE = 50
-        processed_count = 0
+            # 2. 编码统计
+            if "hevc" in codec or "h265" in codec: stats["video_codec"]["hevc"] += 1
+            elif "h264" in codec or "avc" in codec: stats["video_codec"]["h264"] += 1
+            elif "av1" in codec: stats["video_codec"]["av1"] += 1
+            else: stats["video_codec"]["other"] += 1
 
-        for i in range(0, total_items, BATCH_SIZE):
-            batch_ids = all_ids[i : i + BATCH_SIZE]
-            ids_string = ",".join(batch_ids)
-            
-            # 精确查询这 50 个 ID 的详情
-            detail_url = f"{host}/emby/Items?Ids={ids_string}&Fields=MediaSources,Path,MediaStreams"
-            
-            batch_data = fetch_with_retry(detail_url, headers)
-            
-            if batch_data and "Items" in batch_data:
-                items = batch_data["Items"]
-                processed_count += len(items)
-                
-                # --- 统计逻辑 (保持不变) ---
-                for item in items:
-                    media_sources = item.get("MediaSources")
-                    if not media_sources or not isinstance(media_sources, list): continue
-                    
-                    # 取第一个源
-                    source = media_sources[0]
-                    media_streams = source.get("MediaStreams")
-                    if not media_streams: continue
-                    
-                    # 取视频流
-                    video_stream = next((s for s in media_streams if s.get("Type") == "Video"), None)
-                    if not video_stream: continue
-
-                    # 分辨率
-                    width = video_stream.get("Width", 0)
-                    if width >= 3800: stats["resolution"]["4k"] += 1
-                    elif width >= 1900: stats["resolution"]["1080p"] += 1
-                    elif width >= 1200: stats["resolution"]["720p"] += 1
-                    else: 
-                        stats["resolution"]["sd"] += 1
-                        if len(stats["bad_quality_list"]) < 50:
-                            stats["bad_quality_list"].append({
-                                "Name": item.get("Name"),
-                                "SeriesName": item.get("SeriesName", ""),
-                                "Year": item.get("ProductionYear"),
-                                "Resolution": f"{width}x{video_stream.get('Height')}",
-                                "Path": item.get("Path", "")
-                            })
-
-                    # 编码
-                    codec = video_stream.get("Codec", "").lower()
-                    if "hevc" in codec or "h265" in codec: stats["video_codec"]["hevc"] += 1
-                    elif "h264" in codec or "avc" in codec: stats["video_codec"]["h264"] += 1
-                    elif "av1" in codec: stats["video_codec"]["av1"] += 1
-                    else: stats["video_codec"]["other"] += 1
-
-                    # HDR
-                    video_range = video_stream.get("VideoRange", "").lower()
-                    display_title = video_stream.get("DisplayTitle", "").lower()
-                    if "dolby" in display_title or "dv" in display_title: stats["hdr_type"]["dolby_vision"] += 1
-                    elif "hdr" in video_range or "hdr" in display_title: stats["hdr_type"]["hdr10"] += 1
-                    else: stats["hdr_type"]["sdr"] += 1
-
-            # 打印进度日志，方便排查
-            if i % 500 == 0:
-                logger.info(f"进度: {processed_count}/{total_items}...")
-
-        stats["total_count"] = processed_count
-        logger.info(f"扫描完成，有效数据: {processed_count}")
-        return {"status": "success", "data": stats}
+            # 3. HDR 统计
+            if "dolby" in display_title or "dv" in display_title or "dolby" in video_range:
+                stats["hdr_type"]["dolby_vision"] += 1
+            elif "hdr" in video_range or "hdr" in display_title or "pq" in video_range:
+                stats["hdr_type"]["hdr10"] += 1
+            else:
+                stats["hdr_type"]["sdr"] += 1
+        
+        return stats, None
 
     except Exception as e:
-        logger.error(f"严重错误: {str(e)}")
-        # 即使报错，也尝试返回已统计的数据，避免前端 undefined
-        return {"status": "success", "data": stats}
+        logger.error(f"SQL 查询错误: {e}")
+        return None, f"数据库结构不兼容: {str(e)}"
+    finally:
+        if conn: conn.close()
+        # 清理临时文件
+        if os.path.exists(temp_db):
+            os.remove(temp_db)
+
+
+@router.get("/api/insight/quality")
+def scan_library_quality(request: Request):
+    """
+    质量盘点 - 数据库直连版
+    """
+    # 1. 鉴权
+    user = request.session.get("user")
+    if not user: return {"status": "error", "message": "Unauthorized"}
+    
+    # 2. 寻找数据库
+    db_path = find_library_db()
+    if not db_path:
+        return {
+            "status": "error", 
+            "message": "未找到 library.db 文件。请检查 docker-compose.yml 是否正确映射了 /emby-data 目录。"
+        }
+
+    # 3. 执行查询
+    data, err = get_stats_from_db(db_path)
+    
+    if err:
+        return {"status": "error", "message": err}
+    
+    return {"status": "success", "data": data}
