@@ -180,17 +180,24 @@ def api_latest_media(limit: int = 10):
         
     return {"status": "error", "data": []}
 
-@router.get("/api/live")
+# 🔥 核心修复：路径改为 /api/stats/live 以匹配前端请求
+@router.get("/api/stats/live")
 def api_live_sessions():
     key = cfg.get("emby_api_key")
     host = cfg.get("emby_host")
     if not key: return {"status": "error"}
     try:
-        res = requests.get(f"{host}/emby/Sessions?api_key={key}", timeout=3)
+        res = requests.get(f"{host}/emby/Sessions?api_key={key}", timeout=5)
         if res.status_code == 200: 
             return {"status": "success", "data": [s for s in res.json() if s.get("NowPlayingItem")]}
-    except: pass
+    except Exception as e:
+        print(f"❌ Live Sessions Error: {e}") # 增加报错打印，方便调试
     return {"status": "success", "data": []}
+
+# 保留旧接口做兼容
+@router.get("/api/live")
+def api_live_sessions_legacy():
+    return api_live_sessions()
 
 @router.get("/api/stats/top_movies")
 def api_top_movies(user_id: Optional[str] = None, category: str = 'all', sort_by: str = 'count'):
