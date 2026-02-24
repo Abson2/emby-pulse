@@ -41,7 +41,7 @@
                         <th class="px-6 py-3">内容</th>
                         <th class="px-6 py-3">时长</th>
                         <th class="px-6 py-3">客户端</th>
-                        <th class="px-6 py-3 text-right">设备/IP</th>
+                        <th class="px-6 py-3 text-right">设备</th>
                     </tr>
                 </thead>
                 <tbody id="history-table-body">
@@ -121,7 +121,7 @@
                     return;
                 }
 
-                // 渲染表格 (电脑端)
+                // 渲染表格 (电脑端) - 🔥 已移除 IP 显示
                 tbody.innerHTML = data.map(item => `
                     <tr class="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
                         <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-mono">${item.DateStr}</td>
@@ -136,8 +136,7 @@
                         <td class="px-6 py-4 text-xs font-mono text-gray-600 dark:text-gray-300">${item.DurationStr}</td>
                         <td class="px-6 py-4 text-xs text-gray-500">${item.ClientName || '未知'}</td>
                         <td class="px-6 py-4 text-right text-xs text-gray-400">
-                            <div>${item.DeviceName || ''}</div>
-                            <div class="font-mono opacity-50">${item.IpAddress || ''}</div>
+                            <div>${item.DeviceName || '未知设备'}</div>
                         </td>
                     </tr>
                 `).join('');
@@ -162,6 +161,11 @@
                         </div>
                     </div>
                 `).join('');
+            } 
+            // 🔥 新增错误处理分支
+            else {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-12 text-red-500 text-xs">❌ 加载失败: ${json.message}</td></tr>`;
+                mobileList.innerHTML = `<div class="text-center py-12 text-red-500 text-xs">❌ 加载失败: ${json.message}</div>`;
             }
         } catch(e) {
             console.error(e);

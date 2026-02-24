@@ -7,7 +7,7 @@ import math
 
 router = APIRouter()
 
-# --- 内部工具：获取用户映射 (与 stats.py 保持一致) ---
+# --- 内部工具：获取用户映射 ---
 def get_user_map_local():
     user_map = {}
     key = cfg.get("emby_api_key")
@@ -59,8 +59,10 @@ def api_get_history(
 
         # 3. 获取分页数据
         offset = (page - 1) * limit
+        
+        # 🔥 核心修复：移除了 IpAddress 字段，防止报错
         data_sql = f"""
-            SELECT DateCreated, UserId, ItemId, ItemName, ItemType, PlayDuration, DeviceName, ClientName, IpAddress 
+            SELECT DateCreated, UserId, ItemId, ItemName, ItemType, PlayDuration, DeviceName, ClientName
             FROM PlaybackActivity
             {where_sql}
             ORDER BY DateCreated DESC 
@@ -75,6 +77,7 @@ def api_get_history(
         for row in rows:
             item = dict(row)
             item['UserName'] = user_map.get(item['UserId'], "未知用户")
+            
             # 格式化时长
             seconds = item.get('PlayDuration') or 0
             if seconds < 60:
@@ -84,7 +87,7 @@ def api_get_history(
             else:
                 item['DurationStr'] = f"{round(seconds/3600, 1)}小时"
             
-            # 简单的日期格式化 (YYYY-MM-DD HH:MM)
+            # 简单的日期格式化
             try:
                 item['DateStr'] = item['DateCreated'].replace('T', ' ')[:16]
             except:
