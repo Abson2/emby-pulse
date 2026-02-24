@@ -18,7 +18,7 @@ class TelegramBot:
         self.running = False
         self.poll_thread = None
         self.schedule_thread = None 
-        # 🔥 新增：入库通知的缓冲队列
+        # 入库通知缓冲队列
         self.library_queue = []
         self.library_lock = threading.Lock()
         self.library_thread = None
@@ -33,7 +33,6 @@ class TelegramBot:
         self.running = True
         self._set_commands()
         
-        # 启动三个后台线程：消息轮询、定时任务、入库聚合
         self.poll_thread = threading.Thread(target=self._polling_loop, daemon=True)
         self.poll_thread.start()
         
@@ -51,7 +50,7 @@ class TelegramBot:
         proxy = cfg.get("proxy_url")
         return {"http": proxy, "https": proxy} if proxy else None
 
-    # 获取管理员ID (用于查详情)
+    # 获取管理员ID
     def _get_admin_id(self):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         if not key or not host: return None
@@ -127,20 +126,17 @@ class TelegramBot:
             requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode}, proxies=self._get_proxies(), timeout=10)
         except Exception as e: logger.error(f"Send Message Error: {e}")
 
-    # ================= 🚀 核心新功能：入库聚合与处理 =================
+    # ================= 🚀 修复后的入库逻辑 =================
     
     def add_library_task(self, item):
-        """WebHook 调用此方法添加任务"""
         with self.library_lock:
             # 简单的去重
             if not any(x['Id'] == item['Id'] for x in self.library_queue):
                 self.library_queue.append(item)
 
     def _library_notify_loop(self):
-        """消费者线程：处理缓冲队列"""
         while self.running:
             try:
-                # 1. 检查队列是否有货
                 has_data = False
                 with self.library_lock:
                     has_data = len(self.library_queue) > 0
@@ -149,14 +145,13 @@ class TelegramBot:
                     time.sleep(2)
                     continue
 
-                # 2. 如果有货，进入缓冲期 (例如等待 15 秒，让后续的剧集都进来)
+                # 缓冲 15 秒
                 time.sleep(15)
 
-                # 3. 取出所有数据进行处理
                 items_to_process = []
                 with self.library_lock:
                     items_to_process = self.library_queue[:]
-                    self.library_queue = [] # 清空队列
+                    self.library_queue = [] 
                 
                 if items_to_process:
                     self._process_library_group(items_to_process)
@@ -166,47 +161,44 @@ class TelegramBot:
                 time.sleep(5)
 
     def _process_library_group(self, items):
-        """核心聚合逻辑 - 🔥 修复：强制检测 Episode"""
         if not cfg.get("enable_library_notify") or not cfg.get("tg_chat_id"): return
         
-        # 1. 分组: 剧集按 SeriesId 分组，Series本身按Id分组(其实也是SeriesId)
+        # 🔥 修复 1: 强制 ID 转字符串，防止 int/str 导致分组失败
         groups = defaultdict(list)
         for item in items:
             itype = item.get('Type')
-            if itype == 'Episode' and item.get('SeriesId'):
-                groups[item.get('SeriesId')].append(item)
+            # 无论是单集还是季，只要有 SeriesId，就归到 Series 组
+            if itype in ['Episode', 'Season'] and item.get('SeriesId'):
+                sid = str(item.get('SeriesId'))
+                groups[sid].append(item)
             elif itype == 'Series':
-                groups[item.get('Id')].append(item)
+                sid = str(item.get('Id'))
+                groups[sid].append(item)
             else:
                 # 电影
-                groups[item.get('Id')].append(item)
+                mid = str(item.get('Id'))
+                groups[mid].append(item)
 
-        # 2. 遍历分组发送
         for group_id, group_items in groups.items():
             try:
-                # 🔥 核心修复：不看排头兵，看全队有没有 Episode
-                # 只要这个组里有 Episode，就说明是剧集更新，不管有没有 Series 对象混在里面
+                # 🔥 修复 2: 只要组内有 Episode，就强制走剧集聚合模式
                 episodes_only = [x for x in group_items if x.get('Type') == 'Episode']
                 
                 if len(episodes_only) > 0:
-                    # 有单集，走单集聚合逻辑 (Series对象会被自动忽略，只用来查简介)
                     self._push_episode_group(group_id, episodes_only)
                 else:
-                    # 没有单集，说明是纯电影，或者是刚建了一个空剧集壳子
+                    # 纯Series或纯电影
                     self._push_single_item(group_items[0])
                 
-                # 发送间隔
                 time.sleep(2) 
             except Exception as e:
                 logger.error(f"Group Process Error: {e}")
 
     def _push_episode_group(self, series_id, episodes):
-        """处理剧集聚合推送 (解决刷屏 + 简介问题)"""
         cid = str(cfg.get("tg_chat_id"))
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         admin_id = self._get_admin_id()
         
-        # 1. 获取剧集(Series)的详细信息 (用来拿封面和简介)
         series_info = {}
         try:
             url = f"{host}/emby/Users/{admin_id}/Items/{series_id}?api_key={key}"
@@ -214,10 +206,8 @@ class TelegramBot:
             if res.status_code == 200: series_info = res.json()
         except: pass
         
-        # 兜底
         if not series_info: series_info = episodes[0]
 
-        # 2. 整理集数文案 (S01E01 - E05)
         episodes.sort(key=lambda x: (x.get('ParentIndexNumber', 1), x.get('IndexNumber', 1)))
         
         season_idx = episodes[0].get('ParentIndexNumber', 1)
@@ -228,16 +218,14 @@ class TelegramBot:
             title_suffix = f"新增 {len(ep_indices)} 集 ({ep_range})"
         else:
             title_suffix = f"E{str(ep_indices[0]).zfill(2)}"
-            # 如果单集有标题，加上
             if episodes[0].get('Name') and "Episode" not in episodes[0].get('Name'):
                 title_suffix += f" {episodes[0].get('Name')}"
 
         display_title = f"{series_info.get('Name')} S{str(season_idx).zfill(2)} {title_suffix}"
         
-        # 3. 准备内容
         year = series_info.get("ProductionYear", "")
         rating = series_info.get("CommunityRating", "N/A")
-        overview = series_info.get("Overview", "暂无简介...") # 🔥 核心修复：用 Series 简介
+        overview = series_info.get("Overview", "暂无简介...") 
         if len(overview) > 150: overview = overview[:140] + "..."
         
         caption = (f"📺 <b>新入库 剧集</b>\n{display_title} ({year})\n\n"
@@ -245,7 +233,6 @@ class TelegramBot:
                    f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
                    f"📝 剧情：{overview}")
 
-        # 4. 发送 (优先用剧集封面)
         img_io = self._download_emby_image(series_id, 'Primary')
         if not img_io: img_io = self._download_emby_image(series_id, 'Backdrop') 
         
@@ -253,7 +240,6 @@ class TelegramBot:
         else: self.send_photo(cid, REPORT_COVER_URL, caption)
 
     def _push_single_item(self, item):
-        """处理单部电影或 Series 本身"""
         cid = str(cfg.get("tg_chat_id"))
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         
@@ -269,9 +255,19 @@ class TelegramBot:
         overview = item.get("Overview", "暂无简介...")
         if len(overview) > 150: overview = overview[:140] + "..."
         
-        type_cn = "电影" if item.get("Type") == "Movie" else "剧集"
+        # 🔥 修复 3: 动态图标，之前这里写死了 🎬
+        type_raw = item.get("Type")
+        type_cn = "电影"
+        type_icon = "🎬"
         
-        caption = (f"🎬 <b>新入库 {type_cn}</b>\n{name} ({year})\n\n"
+        if type_raw == "Series":
+            type_cn = "剧集"
+            type_icon = "📺"
+        elif type_raw == "Episode":
+            type_cn = "剧集"
+            type_icon = "📺"
+        
+        caption = (f"{type_icon} <b>新入库 {type_cn}</b>\n{name} ({year})\n\n"
                    f"⭐ 评分：{rating}/10\n"
                    f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
                    f"📝 剧情：{overview}")
@@ -280,7 +276,7 @@ class TelegramBot:
         if img_io: self.send_photo(cid, img_io, caption)
         else: self.send_photo(cid, REPORT_COVER_URL, caption)
 
-    # ================= 业务逻辑 (播放通知保持不变) =================
+    # ================= 业务逻辑 (保持不变) =================
 
     def push_playback_event(self, data, action="start"):
         if not cfg.get("enable_notify") or not cfg.get("tg_chat_id"): return
