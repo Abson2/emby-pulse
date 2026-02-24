@@ -4,11 +4,21 @@
 {% block content %}
 <div class="max-w-7xl mx-auto w-full px-4 py-6 pb-24">
     
-    <div class="mb-8">
-        <h1 class="text-2xl font-black text-gray-800 dark:text-white flex items-center gap-2">
-            <i class="fa-solid fa-medal text-yellow-500"></i> 媒体库质量盘点
-        </h1>
-        <p class="text-xs text-gray-500 mt-1">深度扫描电影库，分析画质与编码分布</p>
+    <div class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-black text-gray-800 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-medal text-yellow-500"></i> 媒体库质量盘点
+            </h1>
+            <p class="text-xs text-gray-500 mt-1">深度扫描电影库，分析画质与编码分布（仅统计 Movie 类型）</p>
+        </div>
+        
+        <div class="flex items-center gap-3">
+            <span class="text-[10px] text-gray-400" id="update-time-label">等待数据...</span>
+            <button onclick="loadData(true)" id="refresh-btn" class="group flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm hover:shadow-md transition active:scale-95">
+                <i class="fa-solid fa-rotate-right text-blue-500 transition-transform duration-700 group-hover:rotate-180" id="refresh-icon"></i>
+                <span class="text-xs font-bold text-gray-700 dark:text-gray-200">刷新数据</span>
+            </button>
+        </div>
     </div>
 
     <div id="loading" class="text-center py-32">
@@ -65,43 +75,65 @@
 
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', loadData);
+    document.addEventListener('DOMContentLoaded', () => loadData(false));
 
-    async function loadData() {
+    async function loadData(forceRefresh = false) {
+        const loading = document.getElementById('loading');
+        const panel = document.getElementById('stats-panel');
+        const icon = document.getElementById('refresh-icon');
+        const btn = document.getElementById('refresh-btn');
+
+        // 刷新时的 UI 状态
+        if (forceRefresh) {
+            panel.classList.add('hidden');
+            loading.classList.remove('hidden');
+            icon.classList.add('fa-spin');
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+        }
+
         try {
-            const res = await fetch('/api/insight/quality');
+            // 🔥 根据是否强制刷新，决定 URL
+            const url = forceRefresh ? '/api/insight/quality?force_refresh=true' : '/api/insight/quality';
+            const res = await fetch(url);
             const json = await res.json();
             
             if (json.status === 'success') {
-                document.getElementById('loading').classList.add('hidden');
-                document.getElementById('stats-panel').classList.remove('hidden');
+                loading.classList.add('hidden');
+                panel.classList.remove('hidden');
                 
-                // 稍微延迟以确保容器已显示，从而正确计算图表尺寸
-                setTimeout(() => {
-                    renderDashboard(json.data);
-                }, 50);
+                // 渲染数据
+                renderDashboard(json.data);
+                
+                // 更新时间提示
+                if(json.data.scan_time_str) {
+                    document.getElementById('update-time-label').innerHTML = `数据更新于: ${json.data.scan_time_str}`;
+                }
             } else {
                 alert("加载失败: " + (json.message || "未知错误"));
-                document.getElementById('loading').innerHTML = `<p class="text-red-500">❌ ${json.message}</p>`;
+                loading.innerHTML = `<p class="text-red-500">❌ ${json.message}</p>`;
             }
         } catch (e) {
             console.error(e);
-            document.getElementById('loading').innerHTML = `<p class="text-red-500">❌ 请求异常，请检查控制台</p>`;
+            loading.innerHTML = `<p class="text-red-500">❌ 请求异常，请检查控制台</p>`;
+        } finally {
+            // 恢复按钮状态
+            icon.classList.remove('fa-spin');
+            btn.disabled = false;
+            btn.classList.remove('opacity-50');
         }
     }
 
     function renderDashboard(data) {
-        // 🔥 修复 1: 字段名对齐后端 (total_count, 4k, hdr_type, video_codec)
-        
         // 1. 填充核心数字
         const total = data.total_count || 0;
         document.getElementById('val-total').innerText = total;
         
-        // 分辨率：后端返回的是小写 key
+        // 分辨率
         const resData = data.resolution || {};
         document.getElementById('val-4k').innerText = resData['4k'] || 0;
         
-        // HDR：后端返回的是 snake_case
+        // HDR
         const hdrData = data.hdr_type || {};
         const hdrCount = (hdrData['dolby_vision'] || 0) + (hdrData['hdr10'] || 0);
         document.getElementById('val-hdr').innerText = hdrCount;
@@ -151,7 +183,7 @@
             }]
         });
 
-        // 4. 填充低画质列表 (修复字段名: bad_quality_list, Resolution)
+        // 4. 填充低画质列表
         const listContainer = document.getElementById('low-quality-list');
         const badList = data.bad_quality_list || [];
         
