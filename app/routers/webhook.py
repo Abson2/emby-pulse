@@ -28,7 +28,7 @@ async def emby_webhook(request: Request, background_tasks: BackgroundTasks):
         event = data.get("Event", "").lower().strip()
         if event: logger.info(f"🔔 Webhook: {event}")
 
-        # 🔥 改动 1: 入库通知 - 不再直接推送，而是丢入缓冲队列进行聚合
+        # 🔥 核心修改：入库通知不再直接推送，而是丢入缓冲队列进行聚合
         if event in ["library.new", "item.added"]:
             item = data.get("Item", {})
             if item.get("Id") and item.get("Type") in ["Movie", "Episode", "Series"]:

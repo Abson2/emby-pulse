@@ -132,7 +132,7 @@ class TelegramBot:
     def add_library_task(self, item):
         """WebHook 调用此方法添加任务"""
         with self.library_lock:
-            # 简单的去重，防止瞬间收到两个完全一样的包
+            # 简单的去重
             if not any(x['Id'] == item['Id'] for x in self.library_queue):
                 self.library_queue.append(item)
 
@@ -166,32 +166,36 @@ class TelegramBot:
                 time.sleep(5)
 
     def _process_library_group(self, items):
-        """核心聚合逻辑"""
+        """核心聚合逻辑 - 🔥 修复：强制检测 Episode"""
         if not cfg.get("enable_library_notify") or not cfg.get("tg_chat_id"): return
         
-        # 1. 分组: 剧集按 SeriesId 分组，电影按 Id 分组
+        # 1. 分组: 剧集按 SeriesId 分组，Series本身按Id分组(其实也是SeriesId)
         groups = defaultdict(list)
         for item in items:
             itype = item.get('Type')
             if itype == 'Episode' and item.get('SeriesId'):
                 groups[item.get('SeriesId')].append(item)
+            elif itype == 'Series':
+                groups[item.get('Id')].append(item)
             else:
-                # 电影或 Series 本身，单独一组
+                # 电影
                 groups[item.get('Id')].append(item)
 
         # 2. 遍历分组发送
         for group_id, group_items in groups.items():
             try:
-                # 确定该组的主类型
-                first_item = group_items[0]
-                itype = first_item.get('Type')
-
-                if itype == 'Episode':
-                    self._push_episode_group(group_id, group_items)
-                else:
-                    self._push_single_item(first_item)
+                # 🔥 核心修复：不看排头兵，看全队有没有 Episode
+                # 只要这个组里有 Episode，就说明是剧集更新，不管有没有 Series 对象混在里面
+                episodes_only = [x for x in group_items if x.get('Type') == 'Episode']
                 
-                # 发送间隔，防止 TG 429
+                if len(episodes_only) > 0:
+                    # 有单集，走单集聚合逻辑 (Series对象会被自动忽略，只用来查简介)
+                    self._push_episode_group(group_id, episodes_only)
+                else:
+                    # 没有单集，说明是纯电影，或者是刚建了一个空剧集壳子
+                    self._push_single_item(group_items[0])
+                
+                # 发送间隔
                 time.sleep(2) 
             except Exception as e:
                 logger.error(f"Group Process Error: {e}")
@@ -210,7 +214,7 @@ class TelegramBot:
             if res.status_code == 200: series_info = res.json()
         except: pass
         
-        # 兜底：如果API挂了，就用第一集的信息（虽然简介可能为空）
+        # 兜底
         if not series_info: series_info = episodes[0]
 
         # 2. 整理集数文案 (S01E01 - E05)
@@ -233,7 +237,7 @@ class TelegramBot:
         # 3. 准备内容
         year = series_info.get("ProductionYear", "")
         rating = series_info.get("CommunityRating", "N/A")
-        overview = series_info.get("Overview", "暂无简介...") # 🔥 核心修复：这里用的是 Series 的简介
+        overview = series_info.get("Overview", "暂无简介...") # 🔥 核心修复：用 Series 简介
         if len(overview) > 150: overview = overview[:140] + "..."
         
         caption = (f"📺 <b>新入库 剧集</b>\n{display_title} ({year})\n\n"
@@ -243,7 +247,7 @@ class TelegramBot:
 
         # 4. 发送 (优先用剧集封面)
         img_io = self._download_emby_image(series_id, 'Primary')
-        if not img_io: img_io = self._download_emby_image(series_id, 'Backdrop') # 没封面用背景
+        if not img_io: img_io = self._download_emby_image(series_id, 'Backdrop') 
         
         if img_io: self.send_photo(cid, img_io, caption)
         else: self.send_photo(cid, REPORT_COVER_URL, caption)
@@ -253,7 +257,6 @@ class TelegramBot:
         cid = str(cfg.get("tg_chat_id"))
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         
-        # 这里为了稳妥，还是单独查一次详情（防止 Webhook 数据缺字段）
         try:
             url = f"{host}/emby/Items/{item['Id']}?api_key={key}"
             res = requests.get(url, timeout=10)
@@ -428,7 +431,7 @@ class TelegramBot:
         
         try:
             user_id = self._get_admin_id()
-            if not user_id: return self.send_message(chat_id, "❌ 错误: 无法获取 Emby 用户身份")
+            if not user_id: return self.send_message(cid, "❌ 错误: 无法获取 Emby 用户身份")
 
             # 1️⃣ 第一步：只搜基础信息
             fields = "ProductionYear,Type,Id" 
