@@ -28,18 +28,18 @@ async def emby_webhook(request: Request, background_tasks: BackgroundTasks):
         event = data.get("Event", "").lower().strip()
         if event: logger.info(f"🔔 Webhook: {event}")
 
-        # 1. 入库通知 (传递原始 item 用于兜底)
+        # 🔥 改动 1: 入库通知 - 不再直接推送，而是丢入缓冲队列进行聚合
         if event in ["library.new", "item.added"]:
             item = data.get("Item", {})
             if item.get("Id") and item.get("Type") in ["Movie", "Episode", "Series"]:
-                background_tasks.add_task(bot.push_new_media, item.get("Id"), item)
+                # 这一步非常快，不会阻塞 Webhook
+                bot.add_library_task(item)
 
-        # 2. 播放状态
+        # 2. 播放状态 (保持不变)
         elif event == "playback.start":
             background_tasks.add_task(bot.push_playback_event, data, "start")
         elif event == "playback.stop":
             background_tasks.add_task(bot.push_playback_event, data, "stop")
-            # 🔥 移除 save_playback_activity
 
         return {"status": "success"}
     except Exception as e:

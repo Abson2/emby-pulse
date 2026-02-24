@@ -6,6 +6,7 @@ import io
 import logging
 import urllib.parse
 import json 
+from collections import defaultdict
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter
 from app.services.report_service import report_gen, HAS_PIL
@@ -17,6 +18,11 @@ class TelegramBot:
         self.running = False
         self.poll_thread = None
         self.schedule_thread = None 
+        # 🔥 新增：入库通知的缓冲队列
+        self.library_queue = []
+        self.library_lock = threading.Lock()
+        self.library_thread = None
+        
         self.offset = 0
         self.last_check_min = -1
         self.user_cache = {}
@@ -26,11 +32,18 @@ class TelegramBot:
         if not cfg.get("tg_bot_token"): return
         self.running = True
         self._set_commands()
+        
+        # 启动三个后台线程：消息轮询、定时任务、入库聚合
         self.poll_thread = threading.Thread(target=self._polling_loop, daemon=True)
         self.poll_thread.start()
+        
         self.schedule_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
         self.schedule_thread.start()
-        print("🤖 Bot Service Started (Lite Mode)")
+        
+        self.library_thread = threading.Thread(target=self._library_notify_loop, daemon=True)
+        self.library_thread.start()
+        
+        print("🤖 Bot Service Started (Full Mode)")
 
     def stop(self): self.running = False
 
@@ -38,7 +51,7 @@ class TelegramBot:
         proxy = cfg.get("proxy_url")
         return {"http": proxy, "https": proxy} if proxy else None
 
-    # 获取管理员ID (通用工具)
+    # 获取管理员ID (用于查详情)
     def _get_admin_id(self):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         if not key or not host: return None
@@ -114,7 +127,157 @@ class TelegramBot:
             requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode}, proxies=self._get_proxies(), timeout=10)
         except Exception as e: logger.error(f"Send Message Error: {e}")
 
-    # ================= 业务逻辑 =================
+    # ================= 🚀 核心新功能：入库聚合与处理 =================
+    
+    def add_library_task(self, item):
+        """WebHook 调用此方法添加任务"""
+        with self.library_lock:
+            # 简单的去重，防止瞬间收到两个完全一样的包
+            if not any(x['Id'] == item['Id'] for x in self.library_queue):
+                self.library_queue.append(item)
+
+    def _library_notify_loop(self):
+        """消费者线程：处理缓冲队列"""
+        while self.running:
+            try:
+                # 1. 检查队列是否有货
+                has_data = False
+                with self.library_lock:
+                    has_data = len(self.library_queue) > 0
+                
+                if not has_data:
+                    time.sleep(2)
+                    continue
+
+                # 2. 如果有货，进入缓冲期 (例如等待 15 秒，让后续的剧集都进来)
+                time.sleep(15)
+
+                # 3. 取出所有数据进行处理
+                items_to_process = []
+                with self.library_lock:
+                    items_to_process = self.library_queue[:]
+                    self.library_queue = [] # 清空队列
+                
+                if items_to_process:
+                    self._process_library_group(items_to_process)
+                    
+            except Exception as e:
+                logger.error(f"Library Loop Error: {e}")
+                time.sleep(5)
+
+    def _process_library_group(self, items):
+        """核心聚合逻辑"""
+        if not cfg.get("enable_library_notify") or not cfg.get("tg_chat_id"): return
+        
+        # 1. 分组: 剧集按 SeriesId 分组，电影按 Id 分组
+        groups = defaultdict(list)
+        for item in items:
+            itype = item.get('Type')
+            if itype == 'Episode' and item.get('SeriesId'):
+                groups[item.get('SeriesId')].append(item)
+            else:
+                # 电影或 Series 本身，单独一组
+                groups[item.get('Id')].append(item)
+
+        # 2. 遍历分组发送
+        for group_id, group_items in groups.items():
+            try:
+                # 确定该组的主类型
+                first_item = group_items[0]
+                itype = first_item.get('Type')
+
+                if itype == 'Episode':
+                    self._push_episode_group(group_id, group_items)
+                else:
+                    self._push_single_item(first_item)
+                
+                # 发送间隔，防止 TG 429
+                time.sleep(2) 
+            except Exception as e:
+                logger.error(f"Group Process Error: {e}")
+
+    def _push_episode_group(self, series_id, episodes):
+        """处理剧集聚合推送 (解决刷屏 + 简介问题)"""
+        cid = str(cfg.get("tg_chat_id"))
+        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
+        admin_id = self._get_admin_id()
+        
+        # 1. 获取剧集(Series)的详细信息 (用来拿封面和简介)
+        series_info = {}
+        try:
+            url = f"{host}/emby/Users/{admin_id}/Items/{series_id}?api_key={key}"
+            res = requests.get(url, timeout=10)
+            if res.status_code == 200: series_info = res.json()
+        except: pass
+        
+        # 兜底：如果API挂了，就用第一集的信息（虽然简介可能为空）
+        if not series_info: series_info = episodes[0]
+
+        # 2. 整理集数文案 (S01E01 - E05)
+        episodes.sort(key=lambda x: (x.get('ParentIndexNumber', 1), x.get('IndexNumber', 1)))
+        
+        season_idx = episodes[0].get('ParentIndexNumber', 1)
+        ep_indices = [e.get('IndexNumber', 0) for e in episodes]
+        
+        if len(ep_indices) > 1:
+            ep_range = f"E{min(ep_indices)} - E{max(ep_indices)}"
+            title_suffix = f"新增 {len(ep_indices)} 集 ({ep_range})"
+        else:
+            title_suffix = f"E{str(ep_indices[0]).zfill(2)}"
+            # 如果单集有标题，加上
+            if episodes[0].get('Name') and "Episode" not in episodes[0].get('Name'):
+                title_suffix += f" {episodes[0].get('Name')}"
+
+        display_title = f"{series_info.get('Name')} S{str(season_idx).zfill(2)} {title_suffix}"
+        
+        # 3. 准备内容
+        year = series_info.get("ProductionYear", "")
+        rating = series_info.get("CommunityRating", "N/A")
+        overview = series_info.get("Overview", "暂无简介...") # 🔥 核心修复：这里用的是 Series 的简介
+        if len(overview) > 150: overview = overview[:140] + "..."
+        
+        caption = (f"📺 <b>新入库 剧集</b>\n{display_title} ({year})\n\n"
+                   f"⭐ 评分：{rating}/10\n"
+                   f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+                   f"📝 剧情：{overview}")
+
+        # 4. 发送 (优先用剧集封面)
+        img_io = self._download_emby_image(series_id, 'Primary')
+        if not img_io: img_io = self._download_emby_image(series_id, 'Backdrop') # 没封面用背景
+        
+        if img_io: self.send_photo(cid, img_io, caption)
+        else: self.send_photo(cid, REPORT_COVER_URL, caption)
+
+    def _push_single_item(self, item):
+        """处理单部电影或 Series 本身"""
+        cid = str(cfg.get("tg_chat_id"))
+        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
+        
+        # 这里为了稳妥，还是单独查一次详情（防止 Webhook 数据缺字段）
+        try:
+            url = f"{host}/emby/Items/{item['Id']}?api_key={key}"
+            res = requests.get(url, timeout=10)
+            if res.status_code == 200: item = res.json()
+        except: pass
+
+        name = item.get("Name", "未知")
+        year = item.get("ProductionYear", "")
+        rating = item.get("CommunityRating", "N/A")
+        overview = item.get("Overview", "暂无简介...")
+        if len(overview) > 150: overview = overview[:140] + "..."
+        
+        type_cn = "电影" if item.get("Type") == "Movie" else "剧集"
+        
+        caption = (f"🎬 <b>新入库 {type_cn}</b>\n{name} ({year})\n\n"
+                   f"⭐ 评分：{rating}/10\n"
+                   f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+                   f"📝 剧情：{overview}")
+        
+        img_io = self._download_emby_image(item['Id'], 'Primary')
+        if img_io: self.send_photo(cid, img_io, caption)
+        else: self.send_photo(cid, REPORT_COVER_URL, caption)
+
+    # ================= 业务逻辑 (播放通知保持不变) =================
 
     def push_playback_event(self, data, action="start"):
         if not cfg.get("enable_notify") or not cfg.get("tg_chat_id"): return
@@ -151,41 +314,7 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Playback Push Error: {e}")
 
-    def push_new_media(self, item_id, fallback_item=None):
-        if not cfg.get("enable_library_notify") or not cfg.get("tg_chat_id"): return
-        cid = str(cfg.get("tg_chat_id")); host = cfg.get("emby_host"); key = cfg.get("emby_api_key")
-        item = None
-        for i in range(3):
-            time.sleep(10 + i*15)
-            try:
-                res = requests.get(f"{host}/emby/Items/{item_id}?api_key={key}", timeout=10)
-                if res.status_code == 200:
-                    item = res.json()
-                    if item.get("ImageTags", {}).get("Primary"): break
-            except: pass
-        final = item if item else fallback_item
-        if not final: return
-        try:
-            name = final.get("Name", "未知"); type_raw = final.get("Type", "Movie")
-            overview = final.get("Overview", "暂无简介..."); rating = final.get("CommunityRating", "N/A")
-            year = final.get("ProductionYear", "")
-            if len(overview) > 150: overview = overview[:140] + "..."
-            type_cn = "电影"; display_title = name
-            if type_raw == "Episode":
-                type_cn = "剧集"
-                s_name = final.get("SeriesName", ""); s_idx = final.get("ParentIndexNumber", 1); e_idx = final.get("IndexNumber", 1)
-                display_title = f"{s_name} S{str(s_idx).zfill(2)}E{str(e_idx).zfill(2)}"
-                if name and "Episode" not in name: display_title += f" {name}"
-            elif type_raw == "Series": type_cn = "剧集"
-            caption = (f"📺 <b>新入库 {type_cn}</b>\n{display_title} ({year})\n\n⭐ 评分：{rating}/10\n🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n📝 剧情：{overview}")
-            target_id = item_id; use_tag = final.get("ImageTags", {}).get("Primary")
-            if type_raw == "Episode" and final.get("SeriesId"): target_id = final.get("SeriesId"); use_tag = None 
-            img_io = self._download_emby_image(target_id, 'Primary', image_tag=use_tag)
-            if img_io: self.send_photo(cid, img_io, caption)
-            else: self.send_photo(cid, REPORT_COVER_URL, caption)
-        except: pass
-
-    # ================= 指令系统 =================
+    # ================= 指令系统 (保持不变) =================
 
     def _set_commands(self):
         token = cfg.get("tg_bot_token")
@@ -261,23 +390,19 @@ class TelegramBot:
         except Exception as e:
             self.send_message(cid, f"❌ 查询异常: {str(e)}")
 
-    # 🔥 核心增强：解析详细技术信息（分辨率/HDR/码率）
     def _extract_tech_info(self, item):
         sources = item.get("MediaSources", [])
         if not sources: return "📼 未知信息"
         
         info_parts = []
-        # 1. 视频流信息
         video = next((s for s in sources[0].get("MediaStreams", []) if s.get("Type") == "Video"), None)
         if video:
             w = video.get("Width", 0)
-            # 分辨率判断
             if w >= 3800: res = "4K"
             elif w >= 1900: res = "1080P"
             elif w >= 1200: res = "720P"
             else: res = "SD"
             
-            # 特效判断 (HDR/DoVi)
             extra = []
             v_range = video.get("VideoRange", "")
             title = video.get("DisplayTitle", "").upper()
@@ -288,7 +413,6 @@ class TelegramBot:
             if extra: res_str += f" {' '.join(extra)}"
             info_parts.append(res_str)
             
-            # 码率判断
             bitrate = sources[0].get("Bitrate", 0)
             if bitrate > 0:
                 mbps = round(bitrate / 1000000, 1)
@@ -296,7 +420,6 @@ class TelegramBot:
                 
         return " | ".join(info_parts) if info_parts else "📼 未知信息"
 
-    # 🔥 核心修复：搜索功能 (两步走策略)
     def _cmd_search(self, chat_id, text):
         parts = text.split(' ', 1)
         if len(parts) < 2: return self.send_message(chat_id, "🔍 <b>搜索格式错误</b>\n请使用: <code>/search 关键词</code>")
@@ -305,12 +428,10 @@ class TelegramBot:
         
         try:
             user_id = self._get_admin_id()
-            if not user_id: return self.send_message(cid, "❌ 错误: 无法获取 Emby 用户身份")
+            if not user_id: return self.send_message(chat_id, "❌ 错误: 无法获取 Emby 用户身份")
 
-            encoded_key = urllib.parse.quote(keyword)
-            
-            # 1️⃣ 第一步：只搜基础信息，确保不崩
-            fields = "ProductionYear,Type,Id" # 极简字段
+            # 1️⃣ 第一步：只搜基础信息
+            fields = "ProductionYear,Type,Id" 
             url = f"{host}/emby/Users/{user_id}/Items"
             params = {
                 "SearchTerm": keyword,
@@ -320,39 +441,30 @@ class TelegramBot:
                 "Limit": 5,
                 "api_key": key
             }
-            
             res = requests.get(url, params=params, timeout=10)
             if res.status_code != 200: return self.send_message(chat_id, f"❌ 搜索失败 (HTTP {res.status_code})")
             
             items = res.json().get("Items", [])
             if not items: return self.send_message(chat_id, f"📭 未找到与 <b>{keyword}</b> 相关的资源")
             
-            # 2️⃣ 第二步：拿到第一个结果，单独查询详细信息 (查一个不会崩)
+            # 2️⃣ 第二步：查询详细信息
             top = items[0]
             type_raw = top.get("Type")
-            
-            # 这里的默认值先填上
-            tech_info_str = "查询中..." 
-            ep_count_str = ""
-            details = {}
+            tech_info_str = "查询中..."; ep_count_str = ""; details = {}
 
             try:
                 if type_raw == "Series":
-                    # 电视剧：单独查剧集信息 + 查第一集看画质
-                    # A. 查元数据
                     meta_url = f"{host}/emby/Users/{user_id}/Items/{top['Id']}?Fields=Overview,CommunityRating,Genres,RecursiveItemCount&api_key={key}"
                     details = requests.get(meta_url, timeout=5).json()
                     ep_count = details.get("RecursiveItemCount", 0)
                     ep_count_str = f"📊 共 {ep_count} 集"
                     
-                    # B. 查第一集样本看画质
                     sample_url = f"{host}/emby/Users/{user_id}/Items?ParentId={top['Id']}&Recursive=true&IncludeItemTypes=Episode&Limit=1&Fields=MediaSources&api_key={key}"
                     sample_res = requests.get(sample_url, timeout=5)
                     if sample_res.status_code == 200 and sample_res.json().get("Items"):
                         sample_ep = sample_res.json().get("Items")[0]
                         tech_info_str = self._extract_tech_info(sample_ep)
                 else:
-                    # 电影：直接查详情带MediaSources
                     detail_url = f"{host}/emby/Users/{user_id}/Items/{top['Id']}?Fields=Overview,CommunityRating,Genres,MediaSources&api_key={key}"
                     details = requests.get(detail_url, timeout=8).json()
                     tech_info_str = self._extract_tech_info(details)
@@ -379,7 +491,6 @@ class TelegramBot:
                        f"───────────────\n"
                        f"📝 <b>简介</b>: {overview}\n")
             
-            # 其他结果列表
             if len(items) > 1:
                 caption += "\n🔎 <b>其他结果:</b>\n"
                 for i, sub in enumerate(items[1:]):
