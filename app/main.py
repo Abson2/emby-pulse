@@ -10,7 +10,7 @@ from app.core.config import PORT, SECRET_KEY, CONFIG_DIR, FONT_DIR
 from app.core.database import init_db
 from app.services.bot_service import bot
 # 🔥 引入新路由 webhook
-from app.routers import views, auth, users, stats, bot as bot_router, system, proxy, report, webhook,insight, tasks
+from app.routers import views, auth, users, stats, bot as bot_router, system, proxy, report, webhook,insight, tasks,history
 
 # 初始化目录和数据库
 if not os.path.exists("static"): os.makedirs("static")
@@ -50,6 +50,7 @@ app.include_router(insight.router)
 app.include_router(webhook.router)
 # 🔥 注册 tasks 路由
 app.include_router(tasks.router)
+app.include_router(history.router)
 
 if __name__ == "__main__":
     import uvicorn

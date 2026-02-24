@@ -1,0 +1,185 @@
+{% extends "layout.html" %}
+{% block title %}播放历史 - EmbyPulse{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto w-full px-4 md:px-8 py-8 pb-24">
+    
+    <div class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+        <div>
+            <h1 class="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-clock-rotate-left text-blue-500"></i> 播放历史
+            </h1>
+            <p class="text-xs text-gray-500 mt-1">查看所有用户的详细观影记录</p>
+        </div>
+        
+        <div class="glass-card bg-white dark:bg-gray-800 p-2 rounded-xl flex flex-col md:flex-row gap-2 w-full md:w-auto">
+            <select id="filter-user" onchange="loadHistory(1)" class="bg-gray-50 dark:bg-gray-700 border-none text-sm rounded-lg px-3 py-2 w-full md:w-40 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-gray-700 dark:text-gray-200">
+                <option value="all">👥 所有用户</option>
+            </select>
+            
+            <div class="relative w-full md:w-64">
+                <input type="text" id="filter-keyword" placeholder="搜索电影/剧集名称..." 
+                       onkeydown="if(event.key==='Enter') loadHistory(1)"
+                       class="w-full bg-gray-50 dark:bg-gray-700 pl-9 pr-3 py-2 rounded-lg text-sm border-none focus:ring-2 focus:ring-blue-500 outline-none text-gray-700 dark:text-gray-200">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+            </div>
+            
+            <button onclick="loadHistory(1)" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold text-sm transition shadow-sm whitespace-nowrap">
+                查询
+            </button>
+        </div>
+    </div>
+
+    <div class="glass-card bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden min-h-[500px] flex flex-col">
+        
+        <div class="hidden md:block overflow-x-auto">
+            <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                <thead class="text-xs text-gray-700 dark:text-gray-300 uppercase bg-gray-50 dark:bg-gray-700/50">
+                    <tr>
+                        <th class="px-6 py-3">时间</th>
+                        <th class="px-6 py-3">用户</th>
+                        <th class="px-6 py-3">内容</th>
+                        <th class="px-6 py-3">时长</th>
+                        <th class="px-6 py-3">客户端</th>
+                        <th class="px-6 py-3 text-right">设备/IP</th>
+                    </tr>
+                </thead>
+                <tbody id="history-table-body">
+                    </tbody>
+            </table>
+        </div>
+
+        <div class="md:hidden p-4 space-y-3" id="history-mobile-list">
+            </div>
+
+        <div class="mt-auto border-t border-gray-100 dark:border-gray-700 p-4 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50">
+            <span class="text-xs text-gray-500 font-medium" id="page-info">第 1 页</span>
+            <div class="flex gap-2">
+                <button onclick="changePage(-1)" id="btn-prev" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50">上一页</button>
+                <button onclick="changePage(1)" id="btn-next" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50">下一页</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentPage = 1;
+    let totalPages = 1;
+
+    document.addEventListener('DOMContentLoaded', init);
+
+    async function init() {
+        await loadUsers();
+        loadHistory(1);
+    }
+
+    async function loadUsers() {
+        try {
+            const res = await fetch('/api/users');
+            const json = await res.json();
+            const select = document.getElementById('filter-user');
+            if(json.status === 'success') {
+                json.data.forEach(u => {
+                    const opt = document.createElement('option');
+                    opt.value = u.UserId;
+                    opt.innerText = u.UserName;
+                    select.appendChild(opt);
+                });
+            }
+        } catch(e) {}
+    }
+
+    async function loadHistory(page) {
+        const userId = document.getElementById('filter-user').value;
+        const keyword = document.getElementById('filter-keyword').value;
+        const tbody = document.getElementById('history-table-body');
+        const mobileList = document.getElementById('history-mobile-list');
+        
+        // Loading 状态
+        const loadingHTML = '<tr><td colspan="6" class="text-center py-12"><i class="fa-solid fa-circle-notch fa-spin text-2xl text-blue-500"></i></td></tr>';
+        const mobileLoading = '<div class="text-center py-12"><i class="fa-solid fa-circle-notch fa-spin text-2xl text-blue-500"></i></div>';
+        
+        tbody.innerHTML = loadingHTML;
+        mobileList.innerHTML = mobileLoading;
+
+        try {
+            const res = await fetch(`/api/history/list?page=${page}&limit=15&user_id=${userId}&keyword=${encodeURIComponent(keyword)}`);
+            const json = await res.json();
+            
+            if(json.status === 'success') {
+                const data = json.data;
+                const pagination = json.pagination;
+                
+                currentPage = pagination.page;
+                totalPages = pagination.total_pages;
+                updatePagination();
+
+                if(data.length === 0) {
+                    const emptyHTML = '<tr><td colspan="6" class="text-center py-12 text-gray-400 text-xs">暂无记录</td></tr>';
+                    tbody.innerHTML = emptyHTML;
+                    mobileList.innerHTML = '<div class="text-center py-12 text-gray-400 text-xs">暂无记录</div>';
+                    return;
+                }
+
+                // 渲染表格 (电脑端)
+                tbody.innerHTML = data.map(item => `
+                    <tr class="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-mono">${item.DateStr}</td>
+                        <td class="px-6 py-4 font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px]">${item.UserName[0]}</div>
+                            ${item.UserName}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="font-medium text-gray-800 dark:text-gray-200">${item.ItemName}</div>
+                            <div class="text-[10px] text-gray-400">${item.ItemType || '未知类型'}</div>
+                        </td>
+                        <td class="px-6 py-4 text-xs font-mono text-gray-600 dark:text-gray-300">${item.DurationStr}</td>
+                        <td class="px-6 py-4 text-xs text-gray-500">${item.ClientName || '未知'}</td>
+                        <td class="px-6 py-4 text-right text-xs text-gray-400">
+                            <div>${item.DeviceName || ''}</div>
+                            <div class="font-mono opacity-50">${item.IpAddress || ''}</div>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // 渲染卡片 (手机端)
+                mobileList.innerHTML = data.map(item => `
+                    <div class="bg-gray-50 dark:bg-gray-700/30 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="flex items-center gap-2">
+                                <div class="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-bold">${item.UserName[0]}</div>
+                                <span class="text-xs font-bold text-gray-700 dark:text-gray-200">${item.UserName}</span>
+                            </div>
+                            <span class="text-[10px] text-gray-400 font-mono">${item.DateStr.split(' ')[0]}</span>
+                        </div>
+                        <div class="font-bold text-gray-900 dark:text-white text-sm mb-1 line-clamp-1">${item.ItemName}</div>
+                        <div class="flex items-center justify-between mt-3">
+                            <div class="flex gap-2">
+                                <span class="px-2 py-0.5 bg-gray-200 dark:bg-gray-600 rounded text-[10px] text-gray-600 dark:text-gray-300">${item.DurationStr}</span>
+                                <span class="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded text-[10px]">${item.ClientName}</span>
+                            </div>
+                            <span class="text-[10px] text-gray-400">${item.DateStr.split(' ')[1]}</span>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        } catch(e) {
+            console.error(e);
+            alert("加载失败，请检查网络");
+        }
+    }
+
+    function changePage(delta) {
+        const newPage = currentPage + delta;
+        if(newPage >= 1 && newPage <= totalPages) {
+            loadHistory(newPage);
+        }
+    }
+
+    function updatePagination() {
+        document.getElementById('page-info').innerText = `第 ${currentPage} / ${totalPages} 页`;
+        document.getElementById('btn-prev').disabled = currentPage <= 1;
+        document.getElementById('btn-next').disabled = currentPage >= totalPages;
+    }
+</script>
+{% endblock %}

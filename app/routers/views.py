@@ -88,3 +88,11 @@ async def insight_page(request: Request):
 async def tasks_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("tasks.html", {"request": request})
+
+# 11.历史记录
+@router.get("/history", response_class=HTMLResponse)
+async def history_page(request: Request):
+    user = request.session.get("user")
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    return templates.TemplateResponse("history.html", {"request": request, "user": user, "active_page": "history"})
