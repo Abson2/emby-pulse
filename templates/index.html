@@ -2,14 +2,12 @@
 {% block title %}仪表盘 - EmbyPulse{% endblock %}
 {% block head %}
 <style>
-    /* 🔥 修复 1: 仅对 body 应用字体，绝不触碰 .sidebar，防止图标消失 */
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important; }
+    /* 🔥 已删除导致字体不一致的 body 样式，现在将统一使用 layout.html 定义的 Noto Sans SC */
     
     .hide-scrollbar::-webkit-scrollbar { display: none; }
     .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
     /* === 卡片核心样式 === */
-    /* 🔥 修复 2: 移除 position: relative 和 overflow: hidden，防止干扰侧边栏布局 */
     .glass-card { 
         background-color: #ffffff; 
         border: 1px solid #e5e7eb; 
