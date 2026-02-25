@@ -7,6 +7,7 @@ import logging
 import urllib.parse
 import json 
 from collections import defaultdict
+from dateutil import parser  # 引入强大的时间解析库，防止格式解析错误
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter
 from app.services.report_service import report_gen, HAS_PIL
@@ -41,7 +42,7 @@ class TelegramBot:
         self.library_thread = threading.Thread(target=self._library_notify_loop, daemon=True)
         self.library_thread.start()
         
-        print("🤖 Bot Service Started (Active Pull Mode)")
+        print("🤖 Bot Service Started (Cluster Mode)")
 
     def stop(self): self.running = False
 
@@ -125,7 +126,7 @@ class TelegramBot:
             requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode}, proxies=self._get_proxies(), timeout=10)
         except Exception as e: logger.error(f"Send Message Error: {e}")
 
-    # ================= 🚀 修复后的入库逻辑 (主动回查版) =================
+    # ================= 🚀 修复后的入库逻辑 (时间聚类算法) =================
     
     def add_library_task(self, item):
         with self.library_lock:
@@ -143,7 +144,7 @@ class TelegramBot:
                     time.sleep(2)
                     continue
 
-                # 缓冲 15 秒
+                # 缓冲 15 秒，等待 Emby 扫完这一批
                 time.sleep(15)
 
                 items_to_process = []
@@ -184,18 +185,17 @@ class TelegramBot:
                 if len(episodes_only) > 0:
                     self._push_episode_group(group_id, episodes_only)
                     
-                # 情况 B: 组内只有 Series (Webhook 延迟或丢失了 Episode)
+                # 情况 B: 组内只有 Series (说明是 Webhook 漏了或者聚合了)
                 elif len(group_items) == 1 and group_items[0].get('Type') == 'Series':
                     series_item = group_items[0]
-                    # 🔥 主动回查：去 Emby 查一下这个 Series 下面有没有刚入库的 Episode
+                    # 🔥 主动回查：利用时间聚类算法找回“这一批”
                     fresh_episodes = self._check_fresh_episodes(group_id)
                     
                     if fresh_episodes:
                         logger.info(f"🔄 捕获到 Series {group_id} 的 {len(fresh_episodes)} 个新集数 (主动回查)")
-                        # 如果查到了新集，强行转为剧集更新推送
                         self._push_episode_group(group_id, fresh_episodes)
                     else:
-                        # 真的只有剧集信息，没有新集
+                        # 真的只有剧集信息 (比如只改了剧集封面)
                         self._push_single_item(series_item)
                         
                 # 情况 C: 电影或其他
@@ -206,20 +206,20 @@ class TelegramBot:
             except Exception as e:
                 logger.error(f"Group Process Error: {e}")
 
-    # 🔥 新增：主动查询最近入库的集数
+    # 🔥 核心：基于“时间密度”的聚类算法
     def _check_fresh_episodes(self, series_id):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         admin_id = self._get_admin_id()
         if not admin_id: return []
         
         try:
-            # 查该剧集下最近添加的 Episode (按入库时间倒序)
+            # 1. 取回最近 20 集，按时间倒序
             url = f"{host}/emby/Users/{admin_id}/Items"
             params = {
                 "ParentId": series_id,
                 "Recursive": "true",
                 "IncludeItemTypes": "Episode",
-                "Limit": 10,
+                "Limit": 20, 
                 "SortBy": "DateCreated",
                 "SortOrder": "Descending",
                 "Fields": "DateCreated,Name,ParentIndexNumber,IndexNumber",
@@ -231,25 +231,37 @@ class TelegramBot:
             items = res.json().get("Items", [])
             if not items: return []
 
-            # 过滤：只保留“最近1小时内”创建的集数
-            # 这样可以防止推送那些只是因为元数据变动而被查出来的旧集
+            # 2. 聚类算法：找“时间断层”
             fresh_list = []
-            now = datetime.datetime.now()
-            for item in items:
-                date_str = item.get("DateCreated", "") # e.g., 2026-02-24T18:36:00.0000000Z
-                if not date_str: continue
+            last_time = None
+
+            for i, item in enumerate(items):
                 try:
-                    # 简化解析，截取前19位
-                    item_time = datetime.datetime.strptime(date_str[:19], "%Y-%m-%dT%H:%M:%S")
-                    # 如果是UTC时间，这里简单处理，认为差距在1小时内都算新
-                    # (由于时区复杂，这里采用相对宽松的判断：入库时间 > 现在 - 1小时)
-                    # 为了兼容性，我们只判断是否足够“新”
-                    # 考虑到系统时间和Emby时间的可能差异，我们放宽到 2 小时
-                    if (now - item_time).total_seconds() < 7200: 
-                         fresh_list.append(item)
+                    # 使用 dateutil 解析 ISO 时间，自动处理时区
+                    curr_time = parser.parse(item.get("DateCreated"))
                 except:
-                    # 解析失败就默认算新的，宁可多推不可漏推
+                    # 如果时间解析不了，为了保险起见，只返回第一个
+                    if i == 0: fresh_list.append(item)
+                    break
+
+                if i == 0:
+                    # 第一个必定是新的
                     fresh_list.append(item)
+                    last_time = curr_time
+                else:
+                    # 计算和“上一条”的时间差
+                    # 注意：items 是倒序的，i=0 是最新，i=1 是次新
+                    delta = abs((last_time - curr_time).total_seconds())
+                    
+                    # 🔥 阈值设定为 60 秒
+                    # 如果两集入库时间差在 60 秒内，认为是同一批扫描进来的
+                    if delta <= 60:
+                        fresh_list.append(item)
+                        last_time = curr_time # 更新标尺
+                    else:
+                        # 发现断层！(比如差了 3600 秒)
+                        # 说明后面的都是老黄历了，停止扫描
+                        break
             
             return fresh_list
         except Exception as e:
@@ -275,7 +287,7 @@ class TelegramBot:
         season_idx = episodes[0].get('ParentIndexNumber', 1)
         ep_indices = [e.get('IndexNumber', 0) for e in episodes]
         
-        # 去重集数 (防止回查时查到重复的)
+        # 去重
         ep_indices = sorted(list(set(ep_indices)))
 
         if len(ep_indices) > 1:
