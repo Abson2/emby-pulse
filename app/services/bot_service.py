@@ -7,7 +7,7 @@ import logging
 import urllib.parse
 import json 
 from collections import defaultdict
-from dateutil import parser  # 引入强大的时间解析库，防止格式解析错误
+# from dateutil import parser # ❌ 移除这个库
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter
 from app.services.report_service import report_gen, HAS_PIL
@@ -42,7 +42,7 @@ class TelegramBot:
         self.library_thread = threading.Thread(target=self._library_notify_loop, daemon=True)
         self.library_thread.start()
         
-        print("🤖 Bot Service Started (Cluster Mode)")
+        print("🤖 Bot Service Started (Cluster Mode - Native)")
 
     def stop(self): self.running = False
 
@@ -126,7 +126,7 @@ class TelegramBot:
             requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode}, proxies=self._get_proxies(), timeout=10)
         except Exception as e: logger.error(f"Send Message Error: {e}")
 
-    # ================= 🚀 修复后的入库逻辑 (时间聚类算法) =================
+    # ================= 🚀 修复后的入库逻辑 (时间聚类算法 - 原生版) =================
     
     def add_library_task(self, item):
         with self.library_lock:
@@ -144,7 +144,6 @@ class TelegramBot:
                     time.sleep(2)
                     continue
 
-                # 缓冲 15 秒，等待 Emby 扫完这一批
                 time.sleep(15)
 
                 items_to_process = []
@@ -162,7 +161,6 @@ class TelegramBot:
     def _process_library_group(self, items):
         if not cfg.get("enable_library_notify") or not cfg.get("tg_chat_id"): return
         
-        # 1. 基础分组
         groups = defaultdict(list)
         for item in items:
             itype = item.get('Type')
@@ -176,29 +174,22 @@ class TelegramBot:
                 mid = str(item.get('Id'))
                 groups[mid].append(item)
 
-        # 2. 处理每个组
         for group_id, group_items in groups.items():
             try:
                 episodes_only = [x for x in group_items if x.get('Type') == 'Episode']
                 
-                # 情况 A: 组内本身就有 Episode (完美情况)
                 if len(episodes_only) > 0:
                     self._push_episode_group(group_id, episodes_only)
                     
-                # 情况 B: 组内只有 Series (说明是 Webhook 漏了或者聚合了)
                 elif len(group_items) == 1 and group_items[0].get('Type') == 'Series':
                     series_item = group_items[0]
-                    # 🔥 主动回查：利用时间聚类算法找回“这一批”
                     fresh_episodes = self._check_fresh_episodes(group_id)
                     
                     if fresh_episodes:
                         logger.info(f"🔄 捕获到 Series {group_id} 的 {len(fresh_episodes)} 个新集数 (主动回查)")
                         self._push_episode_group(group_id, fresh_episodes)
                     else:
-                        # 真的只有剧集信息 (比如只改了剧集封面)
                         self._push_single_item(series_item)
-                        
-                # 情况 C: 电影或其他
                 else:
                     self._push_single_item(group_items[0])
                 
@@ -206,14 +197,27 @@ class TelegramBot:
             except Exception as e:
                 logger.error(f"Group Process Error: {e}")
 
-    # 🔥 核心：基于“时间密度”的聚类算法
+    # 🔥 新增：原生时间解析函数
+    def _parse_emby_time(self, date_str):
+        if not date_str: return None
+        try:
+            # 去掉可能的 Z 后缀，截取前26位 (微秒部分)
+            # Emby 格式: 2024-02-24T18:00:00.1234567Z
+            clean_str = date_str.replace('Z', '')[:26]
+            if '.' in clean_str:
+                return datetime.datetime.strptime(clean_str, "%Y-%m-%dT%H:%M:%S.%f")
+            else:
+                return datetime.datetime.strptime(clean_str, "%Y-%m-%dT%H:%M:%S")
+        except:
+            return None
+
+    # 🔥 修复：使用原生解析
     def _check_fresh_episodes(self, series_id):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         admin_id = self._get_admin_id()
         if not admin_id: return []
         
         try:
-            # 1. 取回最近 20 集，按时间倒序
             url = f"{host}/emby/Users/{admin_id}/Items"
             params = {
                 "ParentId": series_id,
@@ -231,37 +235,28 @@ class TelegramBot:
             items = res.json().get("Items", [])
             if not items: return []
 
-            # 2. 聚类算法：找“时间断层”
             fresh_list = []
             last_time = None
 
             for i, item in enumerate(items):
-                try:
-                    # 使用 dateutil 解析 ISO 时间，自动处理时区
-                    curr_time = parser.parse(item.get("DateCreated"))
-                except:
-                    # 如果时间解析不了，为了保险起见，只返回第一个
+                curr_time = self._parse_emby_time(item.get("DateCreated"))
+                
+                if not curr_time: # 解析失败
                     if i == 0: fresh_list.append(item)
                     break
 
                 if i == 0:
-                    # 第一个必定是新的
                     fresh_list.append(item)
                     last_time = curr_time
                 else:
-                    # 计算和“上一条”的时间差
-                    # 注意：items 是倒序的，i=0 是最新，i=1 是次新
+                    # 计算间隔 (秒)
                     delta = abs((last_time - curr_time).total_seconds())
                     
-                    # 🔥 阈值设定为 60 秒
-                    # 如果两集入库时间差在 60 秒内，认为是同一批扫描进来的
                     if delta <= 60:
                         fresh_list.append(item)
-                        last_time = curr_time # 更新标尺
+                        last_time = curr_time 
                     else:
-                        # 发现断层！(比如差了 3600 秒)
-                        # 说明后面的都是老黄历了，停止扫描
-                        break
+                        break # 断层
             
             return fresh_list
         except Exception as e:
@@ -287,7 +282,6 @@ class TelegramBot:
         season_idx = episodes[0].get('ParentIndexNumber', 1)
         ep_indices = [e.get('IndexNumber', 0) for e in episodes]
         
-        # 去重
         ep_indices = sorted(list(set(ep_indices)))
 
         if len(ep_indices) > 1:
