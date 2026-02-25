@@ -2,9 +2,9 @@ import requests
 import datetime
 import logging
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.core.config import cfg
-from app.core.database import query_db
 
 logger = logging.getLogger("uvicorn")
 
@@ -14,6 +14,13 @@ class CalendarService:
         self._cache_time = 0
         self._cache_lock = threading.Lock()
         self.CACHE_TTL = 3600  # 缓存 1 小时
+
+    def _get_proxies(self):
+        """获取全局代理配置"""
+        proxy = cfg.get("proxy_url")
+        if proxy:
+            return {"http": proxy, "https": proxy}
+        return None
 
     def get_weekly_calendar(self):
         """
@@ -29,7 +36,7 @@ class CalendarService:
         if not api_key:
             return {"error": "未配置 TMDB API Key"}
 
-        # 2. 获取本周时间范围 (周一到周日)
+        # 2. 获取本周时间范围
         today = datetime.date.today()
         start_of_week = today - datetime.timedelta(days=today.weekday())
         end_of_week = start_of_week + datetime.timedelta(days=6)
@@ -39,27 +46,29 @@ class CalendarService:
         if not continuing_series:
             return {"days": []}
 
-        # 4. 并发查询 TMDB (提速)
-        # 用 Dict 存储每一天的剧集： {0: [], 1: [], ... 6: []} 0=周一
+        # 4. 并发查询 TMDB (带代理!)
         week_data = {i: [] for i in range(7)}
+        proxies = self._get_proxies() # 获取代理
         
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        # 增加线程数到 20 以加速 I/O
+        with ThreadPoolExecutor(max_workers=20) as executor:
             future_to_series = {
-                executor.submit(self._fetch_series_status, s, api_key, start_of_week, end_of_week): s 
+                executor.submit(self._fetch_series_status, s, api_key, start_of_week, end_of_week, proxies): s 
                 for s in continuing_series
             }
             
             for future in as_completed(future_to_series):
-                result = future.result()
-                if result:
-                    # result 结构: {'day_index': 0~6, 'data': {...}}
-                    idx = result['day_index']
-                    if 0 <= idx <= 6:
-                        week_data[idx].append(result['data'])
+                try:
+                    result = future.result()
+                    if result:
+                        idx = result['day_index']
+                        if 0 <= idx <= 6:
+                            week_data[idx].append(result['data'])
+                except Exception as e:
+                    logger.error(f"Calendar Task Error: {e}")
 
-        # 5. 排序每一天的数据 (按时间)
+        # 5. 排序与格式化
         final_days = []
-        # 生成前端友好的结构
         week_dates = [start_of_week + datetime.timedelta(days=i) for i in range(7)]
         
         for i in range(7):
@@ -81,7 +90,6 @@ class CalendarService:
         return result
 
     def _get_emby_continuing_series(self):
-        """从 Emby 获取连载中的剧集"""
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         user_id = self._get_admin_id()
         if not key or not host or not user_id: return []
@@ -90,7 +98,7 @@ class CalendarService:
         params = {
             "IncludeItemTypes": "Series",
             "Recursive": "true",
-            "Fields": "ProviderIds,Status,AirDays", # 获取状态和TMDB ID
+            "Fields": "ProviderIds,Status,AirDays",
             "IsVirtual": "false",
             "api_key": key
         }
@@ -106,59 +114,55 @@ class CalendarService:
             return []
         return []
 
-    def _fetch_series_status(self, series, api_key, start_date, end_date):
+    def _fetch_series_status(self, series, api_key, start_date, end_date, proxies):
         """查询 TMDB 并比对本地库存"""
         tmdb_id = series.get("ProviderIds", {}).get("Tmdb")
         if not tmdb_id: return None
 
         try:
-            # 查询 TMDB 剧集详情 (包含 next_episode_to_air)
+            # 🔥 修复：这里加上 proxies 参数
             url = f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={api_key}&language=zh-CN"
-            res = requests.get(url, timeout=5)
+            res = requests.get(url, timeout=5, proxies=proxies) 
+            
             if res.status_code != 200: return None
             
             data = res.json()
-            
-            # 我们关注两个字段：last_episode_to_air (刚播的) 和 next_episode_to_air (将播的)
             candidates = []
             if data.get("last_episode_to_air"): candidates.append(data["last_episode_to_air"])
             if data.get("next_episode_to_air"): candidates.append(data["next_episode_to_air"])
 
             target_ep = None
-            
-            # 筛选：也就是本周内播出的那一集
             for ep in candidates:
                 air_date_str = ep.get("air_date")
                 if not air_date_str: continue
+                # 简单解析 YYYY-MM-DD
                 air_date = datetime.datetime.strptime(air_date_str, "%Y-%m-%d").date()
                 
                 if start_date <= air_date <= end_date:
                     target_ep = ep
-                    break # 找到一个就行 (通常一周只播一集)
+                    break 
             
             if not target_ep: return None
 
-            # 找到了本周播出的集！
             air_date = datetime.datetime.strptime(target_ep["air_date"], "%Y-%m-%d").date()
             season_num = target_ep.get("season_number")
             ep_num = target_ep.get("episode_number")
             
-            # 🔥 核心逻辑：检查 Emby 里有没有这一集
+            # 检查 Emby 库存
             has_file = self._check_emby_has_episode(series["Id"], season_num, ep_num)
             
-            # 计算状态
-            status = "upcoming" # 默认：即将播出
+            status = "upcoming"
             today = datetime.date.today()
             
             if has_file:
-                status = "ready" # 🟢 已入库
+                status = "ready"
             elif air_date < today:
-                status = "missing" # 🔴 已播出但未入库
+                status = "missing"
             elif air_date == today:
-                status = "today" # 🔵 今天播出
+                status = "today"
 
             return {
-                "day_index": (air_date - start_date).days, # 0=周一
+                "day_index": (air_date - start_date).days,
                 "data": {
                     "series_name": series.get("Name"),
                     "series_id": series.get("Id"),
@@ -166,47 +170,51 @@ class CalendarService:
                     "season": season_num,
                     "episode": ep_num,
                     "air_date": target_ep.get("air_date"),
-                    "poster_path": data.get("poster_path"), # TMDB 海报
+                    "poster_path": data.get("poster_path"),
                     "status": status,
                     "overview": target_ep.get("overview")
                 }
             }
-
         except Exception as e:
+            # 某个剧查不到就算了，不要卡住
             return None
 
     def _check_emby_has_episode(self, series_id, season, episode):
-        """检查 Emby 库里是否存在某集"""
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         user_id = self._get_admin_id()
         if not key or not host or not user_id: return False
         
+        # 优化：只查Id，减少数据量
         url = f"{host}/emby/Users/{user_id}/Items"
         params = {
             "ParentId": series_id,
             "Recursive": "true",
             "IncludeItemTypes": "Episode",
-            "ParentIndexNumber": season, # 季
-            "IndexNumber": episode,      # 集
+            "ParentIndexNumber": season,
+            "IndexNumber": episode,
             "Limit": 1,
+            "Fields": "Id", # 只拿ID，快一点
             "api_key": key
         }
         try:
-            res = requests.get(url, params=params, timeout=3)
+            res = requests.get(url, params=params, timeout=2) # 超时设短一点
             if res.status_code == 200:
                 return res.json().get("TotalRecordCount", 0) > 0
         except: pass
         return False
 
     def _get_admin_id(self):
-        # 简单复用 bot 里的逻辑，或者直接从 DB 拿，这里为了独立性重写一个简单的
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         try:
-            res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=5)
+            res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=3)
             if res.status_code == 200:
-                return res.json()[0]['Id'] # 简单取第一个用户
+                users = res.json()
+                # 优先找管理员
+                for u in users:
+                    if u.get("Policy", {}).get("IsAdministrator"):
+                        return u['Id']
+                return users[0]['Id']
         except: pass
         return None
 
-import time
 calendar_service = CalendarService()
