@@ -10,10 +10,10 @@ logger = logging.getLogger("uvicorn")
 
 class CalendarService:
     def __init__(self):
-        self._cache = {}
-        self._cache_time = 0
+        # 缓存结构改为字典: { offset: {'data': ..., 'time': timestamp} }
+        self._cache = {} 
         self._cache_lock = threading.Lock()
-        self.CACHE_TTL = 3600  # 默认缓存 1 小时
+        self.CACHE_TTL = 3600  # 缓存 1 小时
 
     def _get_proxies(self):
         """获取全局代理配置"""
@@ -22,25 +22,30 @@ class CalendarService:
             return {"http": proxy, "https": proxy}
         return None
 
-    def get_weekly_calendar(self, force_refresh=False):
+    def get_weekly_calendar(self, force_refresh=False, week_offset=0):
         """
-        获取本周的剧集更新日历
-        :param force_refresh: 是否强制刷新（跳过缓存）
+        获取周历
+        :param force_refresh: 强制刷新
+        :param week_offset: 周偏移量 (0=本周, 1=下周, -1=上周)
         """
-        # 1. 检查缓存 (如果 force_refresh 为 True，则跳过)
         now = time.time()
+        
+        # 1. 检查对应周的缓存
         if not force_refresh:
             with self._cache_lock:
-                if self._cache and (now - self._cache_time < self.CACHE_TTL):
-                    return self._cache
+                cached_item = self._cache.get(week_offset)
+                if cached_item and (now - cached_item['time'] < self.CACHE_TTL):
+                    return cached_item['data']
 
         api_key = cfg.get("tmdb_api_key")
         if not api_key:
             return {"error": "未配置 TMDB API Key"}
 
-        # 2. 获取本周时间范围
-        today = datetime.date.today()
-        start_of_week = today - datetime.timedelta(days=today.weekday())
+        # 2. 计算目标周的时间范围
+        # 基准日期 = 今天 + 偏移周数
+        target_date = datetime.date.today() + datetime.timedelta(weeks=week_offset)
+        # 计算该周的周一
+        start_of_week = target_date - datetime.timedelta(days=target_date.weekday())
         end_of_week = start_of_week + datetime.timedelta(days=6)
         
         # 3. 从 Emby 获取所有“连载中”的剧集
@@ -48,11 +53,10 @@ class CalendarService:
         if not continuing_series:
             return {"days": []}
 
-        # 4. 并发查询 TMDB (带代理)
+        # 4. 并发查询 TMDB
         week_data = {i: [] for i in range(7)}
         proxies = self._get_proxies()
         
-        # 这里的 max_workers 可以根据您的机器性能调整，20 比较稳妥
         with ThreadPoolExecutor(max_workers=20) as executor:
             future_to_series = {
                 executor.submit(self._fetch_series_status, s, api_key, start_of_week, end_of_week, proxies): s 
@@ -72,31 +76,34 @@ class CalendarService:
         # 5. 排序与格式化
         final_days = []
         week_dates = [start_of_week + datetime.timedelta(days=i) for i in range(7)]
+        today_real = datetime.date.today()
         
         for i in range(7):
             items = sorted(week_data[i], key=lambda x: x['air_date'])
             final_days.append({
                 "date": week_dates[i].strftime("%Y-%m-%d"),
                 "weekday_cn": ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][i],
-                "is_today": week_dates[i] == today,
+                "is_today": week_dates[i] == today_real, # 只有真正的今天才高亮
                 "items": items
             })
         
-        # 获取 Emby 地址用于前端跳转 (优先用 public_host，没有则用 host)
+        # 获取 Emby 地址 (优先用 public_host)
         emby_url = cfg.get("emby_public_host") or cfg.get("emby_host") or ""
-        # 去掉可能的末尾斜杠
         if emby_url.endswith('/'): emby_url = emby_url[:-1]
 
         result = {
             "days": final_days, 
             "updated_at": datetime.datetime.now().strftime("%H:%M"),
-            "emby_url": emby_url # 传给前端
+            "emby_url": emby_url,
+            "date_range": f"{start_of_week.strftime('%m/%d')} - {end_of_week.strftime('%m/%d')}" # 返回日期范围给前端显示
         }
         
-        # 写入缓存
+        # 写入缓存 (按 offset 存储)
         with self._cache_lock:
-            self._cache = result
-            self._cache_time = now
+            self._cache[week_offset] = {
+                'data': result,
+                'time': now
+            }
             
         return result
 
@@ -113,7 +120,6 @@ class CalendarService:
             "IsVirtual": "false",
             "api_key": key
         }
-        
         try:
             res = requests.get(url, params=params, timeout=10)
             if res.status_code == 200:
@@ -125,20 +131,23 @@ class CalendarService:
         return []
 
     def _fetch_series_status(self, series, api_key, start_date, end_date, proxies):
-        """查询 TMDB 并比对本地库存"""
         tmdb_id = series.get("ProviderIds", {}).get("Tmdb")
         if not tmdb_id: return None
 
         try:
             url = f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={api_key}&language=zh-CN"
             res = requests.get(url, timeout=5, proxies=proxies) 
-            
             if res.status_code != 200: return None
             
             data = res.json()
             candidates = []
             if data.get("last_episode_to_air"): candidates.append(data["last_episode_to_air"])
             if data.get("next_episode_to_air"): candidates.append(data["next_episode_to_air"])
+            
+            # 🔥 增强逻辑：如果只有本季最后一集，也要检查一下
+            # 有时候 TMDB 返回的 next_episode 是空的（因为还没定档），但 last_episode 可能是两周前的
+            # 我们还需要一种机制去获取“这一季的所有集”，但这会增加 API 消耗。
+            # 目前维持原逻辑，只看 last 和 next，这能覆盖 90% 的连载场景。
 
             target_ep = None
             for ep in candidates:
@@ -155,7 +164,6 @@ class CalendarService:
             season_num = target_ep.get("season_number")
             ep_num = target_ep.get("episode_number")
             
-            # 检查 Emby 库存
             has_file = self._check_emby_has_episode(series["Id"], season_num, ep_num)
             
             status = "upcoming"

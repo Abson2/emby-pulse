@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="container mx-auto px-4 py-6">
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
                 <i class="fa-solid fa-calendar-days text-indigo-500"></i>
@@ -14,22 +14,30 @@
             </p>
         </div>
         
+        <div class="flex items-center bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-1">
+            <button onclick="changeWeek(-1)" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md text-gray-500 transition-colors" title="上一周">
+                <i class="fa-solid fa-chevron-left"></i>
+            </button>
+            
+            <div class="px-4 text-sm font-mono font-bold text-gray-700 dark:text-gray-200 min-w-[100px] text-center" id="date-range-display">
+                加载中...
+            </div>
+            
+            <button onclick="changeWeek(1)" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md text-gray-500 transition-colors" title="下一周">
+                <i class="fa-solid fa-chevron-right"></i>
+            </button>
+        </div>
+
         <div class="flex items-center gap-3">
             <button onclick="fetchCalendar(true)" id="refresh-btn" class="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-300 transition-all shadow-sm group">
                 <i class="fa-solid fa-arrows-rotate group-hover:animate-spin"></i>
-                <span class="hidden sm:inline">刷新数据</span>
+                <span class="hidden sm:inline">刷新</span>
             </button>
             
-            <div class="flex flex-wrap gap-4 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800/50 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-                <div class="flex items-center gap-2">
-                    <span class="w-2.5 h-2.5 rounded-full bg-green-500 shadow-sm"></span> 已入库
-                </div>
-                <div class="flex items-center gap-2">
-                    <span class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm"></span> 缺失
-                </div>
-                <div class="flex items-center gap-2">
-                    <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm"></span> 待播
-                </div>
+            <div class="hidden lg:flex flex-wrap gap-4 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800/50 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-green-500 shadow-sm"></span> 已入库</div>
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm"></span> 缺失</div>
+                <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm"></span> 待播</div>
             </div>
         </div>
     </div>
@@ -39,7 +47,7 @@
             <div class="absolute top-0 left-0 w-full h-full border-4 border-indigo-200 dark:border-indigo-900 rounded-full"></div>
             <div class="absolute top-0 left-0 w-full h-full border-4 border-indigo-600 dark:border-indigo-500 rounded-full animate-spin border-t-transparent"></div>
         </div>
-        <p class="mt-4 text-gray-500 dark:text-gray-400 font-medium animate-pulse">正在同步 TMDB 元数据...</p>
+        <p class="mt-4 text-gray-500 dark:text-gray-400 font-medium animate-pulse">正在同步数据...</p>
     </div>
 
     <div id="error-msg" class="hidden mx-auto max-w-2xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
@@ -48,40 +56,56 @@
         </div>
         <h3 class="text-lg font-semibold text-red-800 dark:text-red-300 mb-1">加载失败</h3>
         <p id="error-text" class="text-red-600 dark:text-red-400 text-sm"></p>
-        <button onclick="fetchCalendar(true)" class="mt-4 px-4 py-2 bg-white dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 rounded-lg text-sm font-medium hover:bg-red-50 dark:hover:bg-red-800/50 transition-colors">
-            重试
-        </button>
+        <button onclick="fetchCalendar(true)" class="mt-4 px-4 py-2 bg-white dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 rounded-lg text-sm font-medium hover:bg-red-50 dark:hover:bg-red-800/50 transition-colors">重试</button>
     </div>
 
-    <div id="calendar-grid" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
-        </div>
+    <div id="calendar-grid" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4"></div>
 </div>
 
 <script>
-// 这里定义默认的 Emby 地址，基于您的日志
-// 如果后端配置了 emby_public_host，会优先使用后端的
+// 全局变量：当前周偏移量
+let currentOffset = 0;
+// 默认 Emby 地址，如果后端没传配置则使用此值
 const DEFAULT_EMBY_URL = "http://192.168.31.2:8096";
 
 document.addEventListener('DOMContentLoaded', function() {
     fetchCalendar(false);
 });
 
+// 切换周 (offset: -1 或 1)
+function changeWeek(offset) {
+    currentOffset += offset;
+    fetchCalendar(false);
+}
+
+// 重置回本周
+function resetWeek() {
+    currentOffset = 0;
+    fetchCalendar(false);
+}
+
 async function fetchCalendar(forceRefresh = false) {
     const loadingEl = document.getElementById('loading');
     const errorEl = document.getElementById('error-msg');
     const gridEl = document.getElementById('calendar-grid');
     const refreshBtn = document.getElementById('refresh-btn');
+    const dateRangeEl = document.getElementById('date-range-display');
 
-    // 重置状态
     if (forceRefresh) {
         gridEl.classList.add('hidden');
         loadingEl.classList.remove('hidden');
         errorEl.classList.add('hidden');
         if(refreshBtn) refreshBtn.disabled = true;
+    } else {
+        // 如果不是强制刷新，且只是切周，可以只显示轻微加载态（可选），这里保持统一全屏加载
+        gridEl.classList.add('hidden');
+        loadingEl.classList.remove('hidden');
+        errorEl.classList.add('hidden');
     }
 
     try {
-        const url = forceRefresh ? '/api/calendar/weekly?refresh=true' : '/api/calendar/weekly';
+        // 携带 offset 和 refresh 参数
+        const url = `/api/calendar/weekly?refresh=${forceRefresh}&offset=${currentOffset}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         
@@ -89,6 +113,16 @@ async function fetchCalendar(forceRefresh = false) {
         
         if (data.error) {
             throw new Error(data.error);
+        }
+
+        // 更新日期范围显示
+        if (data.date_range) {
+            // 如果是本周，加个标记
+            let label = data.date_range;
+            if (currentOffset === 0) label = label; 
+            else if (currentOffset === 1) label = "下周 " + label;
+            else if (currentOffset === -1) label = "上周 " + label;
+            dateRangeEl.textContent = label;
         }
 
         renderCalendar(data.days, data.emby_url);
@@ -108,7 +142,7 @@ function renderCalendar(days, embyUrlFromApi) {
     const container = document.getElementById('calendar-grid');
     container.innerHTML = '';
     
-    // 优先使用后端传来的 URL，如果没有则使用默认内网IP
+    // 使用后端传来的 URL
     const embyBaseUrl = embyUrlFromApi || DEFAULT_EMBY_URL;
     const imgBase = "https://image.tmdb.org/t/p/w300";
 
@@ -147,23 +181,19 @@ function renderCalendar(days, embyUrlFromApi) {
                 let titleAttr = '待播出';
 
                 if (item.status === 'ready') {
-                    // 🟢 已入库：跳转播放
                     statusColor = 'bg-green-500';
                     cardHover = 'cursor-pointer hover:border-green-400/50 hover:shadow-green-500/10 hover:shadow-lg hover:-translate-y-0.5';
                     titleAttr = '已入库 - 点击播放';
-                    // 构建 Emby Web 链接
                     const playUrl = `${embyBaseUrl}/web/index.html#!/item?id=${item.series_id}`;
                     clickAction = `window.open('${playUrl}', '_blank')`;
 
                 } else if (item.status === 'missing') {
-                    // 🔴 缺失：点击复制
                     statusColor = 'bg-red-500 animate-pulse';
                     cardHover = 'cursor-copy border-red-300 dark:border-red-800 hover:shadow-red-500/10 hover:shadow-lg bg-red-50 dark:bg-red-900/10';
                     titleAttr = '缺失 - 点击复制剧名';
                     const copyText = `${item.series_name} S${String(item.season).padStart(2,'0')}E${String(item.episode).padStart(2,'0')}`;
                     clickAction = `copyToClipboard('${copyText}')`;
                 } else {
-                    // 待播
                     statusColor = 'bg-blue-500';
                     cardHover = 'opacity-80 hover:opacity-100';
                 }
@@ -176,7 +206,6 @@ function renderCalendar(days, embyUrlFromApi) {
                              <img src="${posterUrl}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy">
                              <div class="absolute bottom-0 inset-x-0 h-1 ${statusColor}"></div>
                         </div>
-                        
                         <div class="flex flex-col justify-center min-w-0 flex-1">
                             <h4 class="text-xs font-bold text-gray-800 dark:text-gray-200 truncate leading-tight mb-1">
                                 ${item.series_name}
@@ -184,7 +213,6 @@ function renderCalendar(days, embyUrlFromApi) {
                             <p class="text-[10px] text-gray-500 dark:text-gray-400 truncate mb-1.5">
                                 ${item.ep_name || 'Episode ' + item.episode}
                             </p>
-                            
                             <div class="flex items-center justify-between">
                                 <span class="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-[10px] text-gray-600 dark:text-gray-300 font-mono font-medium">
                                     S${String(item.season).padStart(2, '0')}E${String(item.episode).padStart(2, '0')}
@@ -196,16 +224,13 @@ function renderCalendar(days, embyUrlFromApi) {
             });
         }
 
-        html += `   </div>
-            </div>`;
-        
+        html += `   </div></div>`;
         container.innerHTML += html;
     });
 }
 
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
-        // 简单的 Toast 提示，或者直接 Alert
         alert(`已复制到剪贴板：\n${text}`);
     }).catch(err => {
         console.error('复制失败', err);
