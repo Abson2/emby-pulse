@@ -1,0 +1,141 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+                📅 追剧日历 <span class="text-sm font-normal text-gray-400 bg-gray-800 px-2 py-1 rounded-md border border-gray-700">Beta</span>
+            </h1>
+            <p class="text-gray-400 text-sm mt-1">本周剧集更新排期 (基于 TMDB 数据实时同步)</p>
+        </div>
+        
+        <div class="flex flex-wrap gap-3 text-xs text-gray-300 bg-gray-800/50 p-2 rounded-lg border border-white/5">
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span> 已入库</div>
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"></span> 缺失/催更</div>
+            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]"></span> 待播出</div>
+        </div>
+    </div>
+
+    <div id="loading" class="flex flex-col items-center justify-center py-20">
+        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
+        <p class="text-gray-400 animate-pulse">正在同步 TMDB 元数据...</p>
+    </div>
+
+    <div id="error-msg" class="hidden bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-lg text-center"></div>
+
+    <div id="calendar-grid" class="hidden grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4 min-h-[600px]">
+        </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    fetchCalendar();
+});
+
+async function fetchCalendar() {
+    try {
+        const res = await fetch('/api/calendar/weekly');
+        const data = await res.json();
+        
+        document.getElementById('loading').classList.add('hidden');
+        
+        if (data.error) {
+            showError(data.error);
+            return;
+        }
+
+        renderCalendar(data.days);
+    } catch (e) {
+        document.getElementById('loading').classList.add('hidden');
+        showError("网络请求失败，请检查日志");
+    }
+}
+
+function showError(msg) {
+    const el = document.getElementById('error-msg');
+    el.textContent = "⚠️ 加载失败: " + msg;
+    el.classList.remove('hidden');
+}
+
+function renderCalendar(days) {
+    const container = document.getElementById('calendar-grid');
+    container.classList.remove('hidden');
+    
+    // TMDB 图片基础URL
+    const imgBase = "https://image.tmdb.org/t/p/w300";
+
+    days.forEach(day => {
+        // 判断是否是今天，增加高亮边框
+        const isTodayClass = day.is_today ? 'ring-1 ring-indigo-500 bg-indigo-500/10' : 'bg-gray-800/30';
+        const dateColor = day.is_today ? 'text-indigo-400' : 'text-gray-500';
+
+        let html = `
+            <div class="flex flex-col gap-3 p-3 rounded-xl border border-white/5 ${isTodayClass} transition-all duration-300 hover:bg-gray-800/60 h-full">
+                <div class="flex justify-between items-center border-b border-white/5 pb-2 mb-1">
+                    <span class="font-bold text-white text-lg">${day.weekday_cn}</span>
+                    <span class="text-xs ${dateColor} font-mono">${day.date.slice(5)}</span>
+                </div>
+                
+                <div class="flex flex-col gap-3 flex-1">
+        `;
+
+        if (day.items.length === 0) {
+            html += `<div class="flex-1 flex items-center justify-center text-gray-600 text-xs py-10">无更新</div>`;
+        } else {
+            day.items.forEach(item => {
+                // 状态样式映射
+                let statusDot = '';
+                let statusText = '';
+                let statusBg = '';
+                
+                if (item.status === 'ready') {
+                    statusDot = 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.8)]';
+                    statusText = '已入库';
+                    statusBg = 'group-hover:ring-green-500/30';
+                } else if (item.status === 'missing') {
+                    statusDot = 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.8)]';
+                    statusText = '缺 失';
+                    statusBg = 'ring-1 ring-red-500/30 bg-red-500/5';
+                } else {
+                    statusDot = 'bg-blue-500';
+                    statusText = '待播';
+                    statusBg = 'opacity-70 grayscale'; // 未播出的稍微灰一点
+                }
+
+                const posterUrl = item.poster_path ? (imgBase + item.poster_path) : 'https://via.placeholder.com/300x450?text=No+Img';
+
+                html += `
+                    <div class="group relative flex gap-3 p-2 rounded-lg bg-gray-900/50 hover:bg-gray-800 border border-white/5 hover:border-white/10 transition-all ${statusBg}">
+                        <div class="w-16 h-24 flex-shrink-0 rounded-md overflow-hidden bg-gray-800 relative">
+                             <img src="${posterUrl}" class="w-full h-full object-cover" loading="lazy">
+                             <div class="absolute top-1 right-1 w-2.5 h-2.5 rounded-full ${statusDot}"></div>
+                        </div>
+                        
+                        <div class="flex flex-col justify-between py-0.5 min-w-0">
+                            <div>
+                                <h3 class="text-sm font-bold text-white truncate leading-tight mb-1" title="${item.series_name}">${item.series_name}</h3>
+                                <p class="text-xs text-gray-400 truncate">${item.ep_name || 'Episode ' + item.episode}</p>
+                            </div>
+                            
+                            <div class="flex items-center justify-between mt-2">
+                                <span class="px-1.5 py-0.5 bg-gray-700/50 rounded text-[10px] text-gray-300 font-mono tracking-wide">
+                                    S${String(item.season).padStart(2, '0')}E${String(item.episode).padStart(2, '0')}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <a href="#" onclick="alert('即将支持跳转到 Emby 播放 S${item.season}E${item.episode}'); return false;" class="absolute inset-0 z-10"></a>
+                    </div>
+                `;
+            });
+        }
+
+        html += `   </div>
+            </div>`;
+        
+        container.innerHTML += html;
+    });
+}
+</script>
+{% endblock %}
