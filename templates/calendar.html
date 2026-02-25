@@ -14,15 +14,22 @@
             </p>
         </div>
         
-        <div class="flex flex-wrap gap-4 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800/50 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-            <div class="flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-green-500 shadow-sm"></span> 已入库
-            </div>
-            <div class="flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm"></span> 缺失/催更
-            </div>
-            <div class="flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm"></span> 待播出
+        <div class="flex items-center gap-3">
+            <button onclick="fetchCalendar(true)" id="refresh-btn" class="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-300 transition-all shadow-sm group">
+                <i class="fa-solid fa-arrows-rotate group-hover:animate-spin"></i>
+                <span class="hidden sm:inline">刷新数据</span>
+            </button>
+            
+            <div class="flex flex-wrap gap-4 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800/50 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-green-500 shadow-sm"></span> 已入库
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm"></span> 缺失
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm"></span> 待播
+                </div>
             </div>
         </div>
     </div>
@@ -41,7 +48,7 @@
         </div>
         <h3 class="text-lg font-semibold text-red-800 dark:text-red-300 mb-1">加载失败</h3>
         <p id="error-text" class="text-red-600 dark:text-red-400 text-sm"></p>
-        <button onclick="fetchCalendar()" class="mt-4 px-4 py-2 bg-white dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 rounded-lg text-sm font-medium hover:bg-red-50 dark:hover:bg-red-800/50 transition-colors">
+        <button onclick="fetchCalendar(true)" class="mt-4 px-4 py-2 bg-white dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 rounded-lg text-sm font-medium hover:bg-red-50 dark:hover:bg-red-800/50 transition-colors">
             重试
         </button>
     </div>
@@ -51,22 +58,31 @@
 </div>
 
 <script>
+// 这里定义默认的 Emby 地址，基于您的日志
+// 如果后端配置了 emby_public_host，会优先使用后端的
+const DEFAULT_EMBY_URL = "http://192.168.31.2:8096";
+
 document.addEventListener('DOMContentLoaded', function() {
-    fetchCalendar();
+    fetchCalendar(false);
 });
 
-async function fetchCalendar() {
+async function fetchCalendar(forceRefresh = false) {
     const loadingEl = document.getElementById('loading');
     const errorEl = document.getElementById('error-msg');
     const gridEl = document.getElementById('calendar-grid');
+    const refreshBtn = document.getElementById('refresh-btn');
 
     // 重置状态
-    loadingEl.classList.remove('hidden');
-    errorEl.classList.add('hidden');
-    gridEl.classList.add('hidden');
+    if (forceRefresh) {
+        gridEl.classList.add('hidden');
+        loadingEl.classList.remove('hidden');
+        errorEl.classList.add('hidden');
+        if(refreshBtn) refreshBtn.disabled = true;
+    }
 
     try {
-        const res = await fetch('/api/calendar/weekly');
+        const url = forceRefresh ? '/api/calendar/weekly?refresh=true' : '/api/calendar/weekly';
+        const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         
         const data = await res.json();
@@ -75,7 +91,7 @@ async function fetchCalendar() {
             throw new Error(data.error);
         }
 
-        renderCalendar(data.days);
+        renderCalendar(data.days, data.emby_url);
         loadingEl.classList.add('hidden');
         gridEl.classList.remove('hidden');
 
@@ -83,17 +99,20 @@ async function fetchCalendar() {
         loadingEl.classList.add('hidden');
         document.getElementById('error-text').textContent = e.message || "无法连接到服务器";
         errorEl.classList.remove('hidden');
+    } finally {
+        if(refreshBtn) refreshBtn.disabled = false;
     }
 }
 
-function renderCalendar(days) {
+function renderCalendar(days, embyUrlFromApi) {
     const container = document.getElementById('calendar-grid');
     container.innerHTML = '';
     
+    // 优先使用后端传来的 URL，如果没有则使用默认内网IP
+    const embyBaseUrl = embyUrlFromApi || DEFAULT_EMBY_URL;
     const imgBase = "https://image.tmdb.org/t/p/w300";
 
     days.forEach(day => {
-        // 今天高亮逻辑
         const isToday = day.is_today;
         const colClass = isToday 
             ? 'ring-2 ring-indigo-500 bg-indigo-50/50 dark:bg-indigo-900/20' 
@@ -121,36 +140,45 @@ function renderCalendar(days) {
                 </div>`;
         } else {
             day.items.forEach(item => {
-                // 状态样式
                 let statusColor = 'bg-gray-400';
-                let statusText = '未知';
                 let cardHover = 'hover:border-gray-300 dark:hover:border-gray-600';
-                
+                let clickAction = '';
+                let cursorStyle = 'cursor-default';
+                let titleAttr = '待播出';
+
                 if (item.status === 'ready') {
+                    // 🟢 已入库：跳转播放
                     statusColor = 'bg-green-500';
-                    statusText = '已入库';
-                    cardHover = 'hover:border-green-400/50 hover:shadow-green-500/10 hover:shadow-lg';
+                    cardHover = 'cursor-pointer hover:border-green-400/50 hover:shadow-green-500/10 hover:shadow-lg hover:-translate-y-0.5';
+                    titleAttr = '已入库 - 点击播放';
+                    // 构建 Emby Web 链接
+                    const playUrl = `${embyBaseUrl}/web/index.html#!/item?id=${item.series_id}`;
+                    clickAction = `window.open('${playUrl}', '_blank')`;
+
                 } else if (item.status === 'missing') {
+                    // 🔴 缺失：点击复制
                     statusColor = 'bg-red-500 animate-pulse';
-                    statusText = '缺 失';
-                    cardHover = 'border-red-300 dark:border-red-800 hover:shadow-red-500/10 hover:shadow-lg bg-red-50 dark:bg-red-900/10';
+                    cardHover = 'cursor-copy border-red-300 dark:border-red-800 hover:shadow-red-500/10 hover:shadow-lg bg-red-50 dark:bg-red-900/10';
+                    titleAttr = '缺失 - 点击复制剧名';
+                    const copyText = `${item.series_name} S${String(item.season).padStart(2,'0')}E${String(item.episode).padStart(2,'0')}`;
+                    clickAction = `copyToClipboard('${copyText}')`;
                 } else {
+                    // 待播
                     statusColor = 'bg-blue-500';
-                    statusText = '待播';
                     cardHover = 'opacity-80 hover:opacity-100';
                 }
 
                 const posterUrl = item.poster_path ? (imgBase + item.poster_path) : 'https://via.placeholder.com/300x450?text=No+Img';
 
                 html += `
-                    <div class="group relative flex gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 transition-all cursor-default ${cardHover}">
+                    <div onclick="${clickAction}" title="${titleAttr}" class="group relative flex gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 transition-all ${cardHover}">
                         <div class="relative w-12 h-18 flex-shrink-0 rounded overflow-hidden bg-gray-200 dark:bg-gray-700">
                              <img src="${posterUrl}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy">
                              <div class="absolute bottom-0 inset-x-0 h-1 ${statusColor}"></div>
                         </div>
                         
                         <div class="flex flex-col justify-center min-w-0 flex-1">
-                            <h4 class="text-xs font-bold text-gray-800 dark:text-gray-200 truncate leading-tight mb-1" title="${item.series_name}">
+                            <h4 class="text-xs font-bold text-gray-800 dark:text-gray-200 truncate leading-tight mb-1">
                                 ${item.series_name}
                             </h4>
                             <p class="text-[10px] text-gray-500 dark:text-gray-400 truncate mb-1.5">
@@ -172,6 +200,15 @@ function renderCalendar(days) {
             </div>`;
         
         container.innerHTML += html;
+    });
+}
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        // 简单的 Toast 提示，或者直接 Alert
+        alert(`已复制到剪贴板：\n${text}`);
+    }).catch(err => {
+        console.error('复制失败', err);
     });
 }
 </script>

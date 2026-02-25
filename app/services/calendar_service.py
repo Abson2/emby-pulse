@@ -13,7 +13,7 @@ class CalendarService:
         self._cache = {}
         self._cache_time = 0
         self._cache_lock = threading.Lock()
-        self.CACHE_TTL = 3600  # 缓存 1 小时
+        self.CACHE_TTL = 3600  # 默认缓存 1 小时
 
     def _get_proxies(self):
         """获取全局代理配置"""
@@ -22,15 +22,17 @@ class CalendarService:
             return {"http": proxy, "https": proxy}
         return None
 
-    def get_weekly_calendar(self):
+    def get_weekly_calendar(self, force_refresh=False):
         """
         获取本周的剧集更新日历
+        :param force_refresh: 是否强制刷新（跳过缓存）
         """
-        # 1. 检查缓存
+        # 1. 检查缓存 (如果 force_refresh 为 True，则跳过)
         now = time.time()
-        with self._cache_lock:
-            if self._cache and (now - self._cache_time < self.CACHE_TTL):
-                return self._cache
+        if not force_refresh:
+            with self._cache_lock:
+                if self._cache and (now - self._cache_time < self.CACHE_TTL):
+                    return self._cache
 
         api_key = cfg.get("tmdb_api_key")
         if not api_key:
@@ -46,11 +48,11 @@ class CalendarService:
         if not continuing_series:
             return {"days": []}
 
-        # 4. 并发查询 TMDB (带代理!)
+        # 4. 并发查询 TMDB (带代理)
         week_data = {i: [] for i in range(7)}
-        proxies = self._get_proxies() # 获取代理
+        proxies = self._get_proxies()
         
-        # 增加线程数到 20 以加速 I/O
+        # 这里的 max_workers 可以根据您的机器性能调整，20 比较稳妥
         with ThreadPoolExecutor(max_workers=20) as executor:
             future_to_series = {
                 executor.submit(self._fetch_series_status, s, api_key, start_of_week, end_of_week, proxies): s 
@@ -79,8 +81,17 @@ class CalendarService:
                 "is_today": week_dates[i] == today,
                 "items": items
             })
+        
+        # 获取 Emby 地址用于前端跳转 (优先用 public_host，没有则用 host)
+        emby_url = cfg.get("emby_public_host") or cfg.get("emby_host") or ""
+        # 去掉可能的末尾斜杠
+        if emby_url.endswith('/'): emby_url = emby_url[:-1]
 
-        result = {"days": final_days, "updated_at": datetime.datetime.now().strftime("%H:%M")}
+        result = {
+            "days": final_days, 
+            "updated_at": datetime.datetime.now().strftime("%H:%M"),
+            "emby_url": emby_url # 传给前端
+        }
         
         # 写入缓存
         with self._cache_lock:
@@ -107,7 +118,6 @@ class CalendarService:
             res = requests.get(url, params=params, timeout=10)
             if res.status_code == 200:
                 items = res.json().get("Items", [])
-                # 过滤：必须有 TMDB ID 且状态是 Continuing
                 return [i for i in items if i.get("Status") == "Continuing" and i.get("ProviderIds", {}).get("Tmdb")]
         except Exception as e:
             logger.error(f"Emby Series Fetch Error: {e}")
@@ -120,7 +130,6 @@ class CalendarService:
         if not tmdb_id: return None
 
         try:
-            # 🔥 修复：这里加上 proxies 参数
             url = f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={api_key}&language=zh-CN"
             res = requests.get(url, timeout=5, proxies=proxies) 
             
@@ -135,9 +144,7 @@ class CalendarService:
             for ep in candidates:
                 air_date_str = ep.get("air_date")
                 if not air_date_str: continue
-                # 简单解析 YYYY-MM-DD
                 air_date = datetime.datetime.strptime(air_date_str, "%Y-%m-%d").date()
-                
                 if start_date <= air_date <= end_date:
                     target_ep = ep
                     break 
@@ -176,7 +183,6 @@ class CalendarService:
                 }
             }
         except Exception as e:
-            # 某个剧查不到就算了，不要卡住
             return None
 
     def _check_emby_has_episode(self, series_id, season, episode):
@@ -184,7 +190,6 @@ class CalendarService:
         user_id = self._get_admin_id()
         if not key or not host or not user_id: return False
         
-        # 优化：只查Id，减少数据量
         url = f"{host}/emby/Users/{user_id}/Items"
         params = {
             "ParentId": series_id,
@@ -193,11 +198,11 @@ class CalendarService:
             "ParentIndexNumber": season,
             "IndexNumber": episode,
             "Limit": 1,
-            "Fields": "Id", # 只拿ID，快一点
+            "Fields": "Id", 
             "api_key": key
         }
         try:
-            res = requests.get(url, params=params, timeout=2) # 超时设短一点
+            res = requests.get(url, params=params, timeout=2)
             if res.status_code == 200:
                 return res.json().get("TotalRecordCount", 0) > 0
         except: pass
@@ -209,7 +214,6 @@ class CalendarService:
             res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=3)
             if res.status_code == 200:
                 users = res.json()
-                # 优先找管理员
                 for u in users:
                     if u.get("Policy", {}).get("IsAdministrator"):
                         return u['Id']

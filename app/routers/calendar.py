@@ -12,8 +12,9 @@ async def calendar_page(request: Request):
     return templates.TemplateResponse("calendar.html", {"request": request, "page": "calendar"})
 
 @router.get("/api/calendar/weekly")
-async def get_weekly_calendar():
+async def get_weekly_calendar(refresh: bool = False):
     """
     API: 获取本周数据 (JSON)
+    refresh: 是否强制刷新缓存
     """
-    return calendar_service.get_weekly_calendar()
+    return calendar_service.get_weekly_calendar(force_refresh=refresh)
