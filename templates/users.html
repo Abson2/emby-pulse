@@ -70,6 +70,10 @@
                 <input type="text" id="edit-username" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-900/50 text-gray-500 cursor-not-allowed" disabled>
             </div>
             <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">重置密码 (可选)</label>
+                <input type="password" id="edit-password" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="留空则不修改密码">
+            </div>
+            <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">账号状态</label>
                 <select id="edit-disabled" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
                     <option value="false">✅ 正常启用</option>
@@ -235,6 +239,10 @@ function copyInvite() {
 function openNewUserModal() { 
     const modal = document.getElementById('new-user-modal');
     modal.classList.remove('hidden');
+    // 清空输入框
+    document.getElementById('new-username').value = '';
+    document.getElementById('new-password').value = '';
+    document.getElementById('new-expire').value = '';
     setTimeout(() => { modal.classList.add('flex'); }, 10);
 }
 function closeNewUserModal() { 
@@ -245,7 +253,7 @@ function closeNewUserModal() {
 
 async function submitNewUser() {
     const name = document.getElementById('new-username').value;
-    const pass = document.getElementById('new-password').value; // 获取密码
+    const pass = document.getElementById('new-password').value; 
     const expire = document.getElementById('new-expire').value;
     if (!name) return alert("请输入用户名");
     
@@ -264,7 +272,7 @@ async function submitNewUser() {
     }
 }
 
-// --- 🔥 新增：编辑用户相关 ---
+// --- 🔥 编辑用户相关 ---
 function openEditUserModal(uid) {
     const user = users.find(u => u.Id === uid);
     if(!user) return;
@@ -273,6 +281,7 @@ function openEditUserModal(uid) {
     document.getElementById('edit-username').value = user.Name;
     document.getElementById('edit-disabled').value = user.IsDisabled ? "true" : "false";
     document.getElementById('edit-expire').value = user.ExpireDate || '';
+    document.getElementById('edit-password').value = ''; // 重置密码框
     
     const modal = document.getElementById('edit-user-modal');
     modal.classList.remove('hidden');
@@ -289,6 +298,7 @@ async function submitEditUser() {
     const uid = document.getElementById('edit-userid').value;
     const isDisabled = document.getElementById('edit-disabled').value === "true";
     const expire = document.getElementById('edit-expire').value;
+    const pass = document.getElementById('edit-password').value; // 获取密码
     
     const res = await fetch('/api/manage/user/update', {
         method: 'POST',
@@ -296,7 +306,8 @@ async function submitEditUser() {
         body: JSON.stringify({ 
             user_id: uid, 
             is_disabled: isDisabled,
-            expire_date: expire || "" // 传空字符串会被后端转为 Null (永久)
+            expire_date: expire || "",
+            password: pass || null // 如果为空，传null
         })
     });
     

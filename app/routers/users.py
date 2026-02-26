@@ -8,7 +8,7 @@ import secrets
 
 router = APIRouter()
 
-# 🔥 自动检查过期用户并禁用
+# 🔥 自动检查过期用户并禁用 (保留功能)
 def check_expired_users():
     try:
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -75,7 +75,7 @@ def api_manage_users(request: Request):
         return {"status": "success", "data": final_list}
     except Exception as e: return {"status": "error", "message": str(e)}
 
-# 生成邀请码接口
+# 生成邀请码接口 (保留功能)
 @router.post("/api/manage/invite/gen")
 def api_gen_invite(data: InviteGenModel, request: Request):
     if not request.session.get("user"): return {"status": "error"}
@@ -93,7 +93,7 @@ def api_gen_invite(data: InviteGenModel, request: Request):
 @router.post("/api/manage/user/update")
 def api_manage_user_update(data: UserUpdateModel, request: Request):
     """
-    更新用户：只处理 停用/启用 和 过期时间
+    更新用户：支持修改 密码、停用状态、过期时间
     """
     if not request.session.get("user"): return {"status": "error"}
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -109,7 +109,15 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
             if exist: query_db("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (expire_val, data.user_id))
             else: query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (data.user_id, expire_val, datetime.datetime.now().isoformat()))
         
-        # 2. 刷新策略 (仅处理 停用/启用)
+        # 2. 🔥 修改密码 (新增功能)
+        if data.password:
+            print(f"🔐 Resetting Password for {data.user_id}")
+            pwd_res = requests.post(f"{host}/emby/Users/{data.user_id}/Password?api_key={key}", 
+                                  json={"Id": data.user_id, "NewPw": data.password})
+            if pwd_res.status_code not in [200, 204]:
+                return {"status": "error", "message": "密码修改失败，请检查日志"}
+
+        # 3. 刷新策略 (处理 停用/启用)
         if data.is_disabled is not None:
             print(f"🔧 Updating Policy (IsDisabled={data.is_disabled})...")
             p_res = requests.get(f"{host}/emby/Users/{data.user_id}?api_key={key}")
@@ -124,7 +132,7 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
                 if r.status_code != 204:
                     print(f"⚠️ Policy Update Warning: {r.status_code}")
 
-        return {"status": "success", "message": "设置已更新"}
+        return {"status": "success", "message": "用户信息已更新"}
     except Exception as e: 
         print(f"❌ Error: {e}")
         return {"status": "error", "message": str(e)}
@@ -143,11 +151,9 @@ def api_manage_user_new(data: NewUserModel, request: Request):
         if res.status_code != 200: return {"status": "error", "message": f"创建失败: {res.text}"}
         new_id = res.json()['Id']
         
-        # 2. 🔥 设置密码 (如果提供了)
+        # 2. 设置密码 (如果提供了)
         if data.password:
-            pwd_res = requests.post(f"{host}/emby/Users/{new_id}/Password?api_key={key}", json={"Id": new_id, "NewPw": data.password})
-            if pwd_res.status_code not in [200, 204]:
-                print(f"⚠️ Set Password Failed: {pwd_res.status_code}")
+            requests.post(f"{host}/emby/Users/{new_id}/Password?api_key={key}", json={"Id": new_id, "NewPw": data.password})
         
         # 3. 立即初始化策略 (防止默认被禁用)
         requests.post(f"{host}/emby/Users/{new_id}/Policy?api_key={key}", json={"IsDisabled": False, "LoginAttemptsBeforeLockout": -1})
