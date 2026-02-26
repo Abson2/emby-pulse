@@ -76,8 +76,8 @@
 
 <script>
 let currentOffset = 0;
-// 🔥 核心修改：接收后端注入的公网地址
-const embyPublicUrl = "{{ emby_public_url }}";
+// 🔥 新增：用于存储从 API 获取的 ServerId
+let currentServerId = ""; 
 const DEFAULT_EMBY_URL = "http://192.168.31.2:8096";
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -89,7 +89,6 @@ function changeWeek(offset) {
     fetchCalendar(false);
 }
 
-// 修改缓存时间
 async function updateTTL(val) {
     try {
         await fetch('/api/calendar/config', {
@@ -111,16 +110,10 @@ async function fetchCalendar(forceRefresh = false) {
     const dateRangeEl = document.getElementById('date-range-display');
     const ttlSelect = document.getElementById('ttl-select');
 
-    if (forceRefresh) {
-        gridEl.classList.add('hidden');
-        loadingEl.classList.remove('hidden');
-        errorEl.classList.add('hidden');
-        if(refreshBtn) refreshBtn.disabled = true;
-    } else {
-        gridEl.classList.add('hidden');
-        loadingEl.classList.remove('hidden');
-        errorEl.classList.add('hidden');
-    }
+    gridEl.classList.add('hidden');
+    loadingEl.classList.remove('hidden');
+    errorEl.classList.add('hidden');
+    if(refreshBtn) refreshBtn.disabled = true;
 
     try {
         const url = `/api/calendar/weekly?refresh=${forceRefresh}&offset=${currentOffset}`;
@@ -129,24 +122,21 @@ async function fetchCalendar(forceRefresh = false) {
         
         const data = await res.json();
         
-        if (data.error) {
-            throw new Error(data.error);
-        }
+        if (data.error) throw new Error(data.error);
 
         if (data.date_range) {
             let label = data.date_range;
-            if (currentOffset === 0) label = label; 
-            else if (currentOffset === 1) label = "下周 " + label;
+            if (currentOffset === 1) label = "下周 " + label;
             else if (currentOffset === -1) label = "上周 " + label;
             dateRangeEl.textContent = label;
         }
 
-        // 回显当前 TTL 配置
-        if (data.current_ttl) {
-            ttlSelect.value = data.current_ttl;
-        }
+        if (data.current_ttl) ttlSelect.value = data.current_ttl;
 
-        renderCalendar(data.days);
+        // 🔥 获取并保存 ServerId
+        currentServerId = data.server_id || ""; 
+        renderCalendar(data.days, data.emby_url);
+        
         loadingEl.classList.add('hidden');
         gridEl.classList.remove('hidden');
 
@@ -159,12 +149,11 @@ async function fetchCalendar(forceRefresh = false) {
     }
 }
 
-function renderCalendar(days) {
+function renderCalendar(days, embyUrlFromApi) {
     const container = document.getElementById('calendar-grid');
     container.innerHTML = '';
     
-    // 🔥 优先使用公网地址，没有则用默认内网
-    const embyBaseUrl = embyPublicUrl || DEFAULT_EMBY_URL;
+    const embyBaseUrl = embyUrlFromApi || DEFAULT_EMBY_URL;
     const imgBase = "https://image.tmdb.org/t/p/w300";
 
     days.forEach(day => {
@@ -203,9 +192,12 @@ function renderCalendar(days) {
                     statusColor = 'bg-green-500';
                     cardHover = 'cursor-pointer hover:border-green-400/50 hover:shadow-green-500/10 hover:shadow-lg hover:-translate-y-0.5';
                     titleAttr = '已入库 - 点击播放';
-                    const playUrl = `${embyBaseUrl}/web/index.html#!/item?id=${item.series_id}`;
+                    
+                    // 🔥 这里的播放链接现在带上了 serverId
+                    const playUrl = `${embyBaseUrl}/web/index.html#!/item?id=${item.series_id}&serverId=${currentServerId}`;
                     clickAction = `window.open('${playUrl}', '_blank')`;
-                } else if (item.status === 'missing') {
+                    
+                } else if (item.status === 'missing' || item.status === 'today') {
                     statusColor = 'bg-red-500 animate-pulse';
                     cardHover = 'cursor-copy border-red-300 dark:border-red-800 hover:shadow-red-500/10 hover:shadow-lg bg-red-50 dark:bg-red-900/10';
                     titleAttr = '缺失 - 点击复制剧名';
@@ -228,10 +220,7 @@ function renderCalendar(days) {
                             <h4 class="text-xs font-bold text-gray-800 dark:text-gray-200 truncate leading-tight mb-1">
                                 ${item.series_name}
                             </h4>
-                            <p class="text-[10px] text-gray-500 dark:text-gray-400 truncate mb-1.5">
-                                ${item.ep_name || ('Episode ' + item.episode)}
-                            </p>
-                            <div class="flex items-center justify-between">
+                            <div class="flex items-center justify-between mt-1">
                                 <span class="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-[10px] text-gray-600 dark:text-gray-300 font-mono font-medium">
                                     S${String(item.season).padStart(2, '0')}E${String(item.episode).padStart(2, '0')}
                                 </span>

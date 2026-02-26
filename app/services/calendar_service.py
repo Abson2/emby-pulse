@@ -13,7 +13,6 @@ class CalendarService:
         # 缓存结构: { offset: {'data': ..., 'time': timestamp} }
         self._cache = {} 
         self._cache_lock = threading.Lock()
-        # CACHE_TTL 不再硬编码，改为动态获取
 
     def _get_proxies(self):
         """获取全局代理配置"""
@@ -28,7 +27,7 @@ class CalendarService:
         """
         now = time.time()
         
-        # 🔥 动态获取配置，默认 1 天 (86400秒)
+        # 动态获取配置，默认 1 天 (86400秒)
         cache_ttl = int(cfg.get("calendar_cache_ttl") or 86400)
 
         # 1. 检查对应周的缓存
@@ -36,10 +35,7 @@ class CalendarService:
             with self._cache_lock:
                 cached_item = self._cache.get(week_offset)
                 if cached_item and (now - cached_item['time'] < cache_ttl):
-                    # 注入 current_ttl 以便前端回显
-                    data = cached_item['data']
-                    data['current_ttl'] = cache_ttl
-                    return data
+                    return cached_item['data']
 
         api_key = cfg.get("tmdb_api_key")
         if not api_key:
@@ -76,49 +72,35 @@ class CalendarService:
                 except Exception as e:
                     logger.error(f"Calendar Task Error: {e}")
 
-        # 🔥 5. 核心修复：智能合并与去重 (保持您的逻辑不变)
+        # 5. 智能合并与去重
         for i in range(7):
             raw_items = week_data[i]
             if not raw_items: continue
 
-            # 关键点：按 (tmdb_id, season) 分组
             grouped = {}
             for item in raw_items:
-                # 优先使用 tmdb_id，没有则回退到 series_id
                 key = (item.get('tmdb_id') or item['series_id'], item['season'])
                 if key not in grouped:
                     grouped[key] = []
                 grouped[key].append(item)
             
-            # 执行合并
             merged_items = []
             for key, group in grouped.items():
-                # 第一步：组内去重
                 unique_eps = {}
                 for x in group:
                     unique_eps[x['episode']] = x
                 
-                # 排序
                 sorted_eps = sorted(unique_eps.values(), key=lambda x: x['episode'])
-                
                 if not sorted_eps: continue
 
-                # 第二步：生成最终显示的卡片
                 if len(sorted_eps) == 1:
                     merged_items.append(sorted_eps[0])
                 else:
                     first = sorted_eps[0]
                     last = sorted_eps[-1]
-                    
                     merged = first.copy()
-                    
-                    # 1. 合并集数显示: "13-14"
                     merged['episode'] = f"{first['episode']}-{last['episode']}"
-                    
-                    # 2. 🔥 移除单集标题介绍
                     merged['ep_name'] = None 
-                    
-                    # 3. 合并状态
                     statuses = [x['status'] for x in sorted_eps]
                     if 'missing' in statuses:
                         merged['status'] = 'missing'
@@ -126,7 +108,6 @@ class CalendarService:
                         merged['status'] = 'ready'
                     else:
                         merged['status'] = 'upcoming'
-                    
                     merged_items.append(merged)
             
             week_data[i] = merged_items
@@ -145,15 +126,26 @@ class CalendarService:
                 "items": items
             })
         
-        emby_url = cfg.get("emby_public_host") or cfg.get("emby_host") or ""
+        # 获取公网/内网地址
+        emby_url = cfg.get("emby_public_url") or cfg.get("emby_public_host") or cfg.get("emby_host") or ""
         if emby_url.endswith('/'): emby_url = emby_url[:-1]
+
+        # 🔥 获取 Emby ServerId (解决跳转播放验证问题)
+        server_id = ""
+        try:
+            key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
+            sys_res = requests.get(f"{host}/emby/System/Info?api_key={key}", timeout=5)
+            if sys_res.status_code == 200:
+                server_id = sys_res.json().get("Id", "")
+        except: pass
 
         result = {
             "days": final_days, 
             "updated_at": datetime.datetime.now().strftime("%H:%M"),
             "emby_url": emby_url,
+            "server_id": server_id, # 🔥 返回 ServerId
             "date_range": f"{start_of_week.strftime('%m/%d')} - {end_of_week.strftime('%m/%d')}",
-            "current_ttl": cache_ttl # 🔥 返回当前配置的 TTL
+            "current_ttl": cache_ttl 
         }
         
         with self._cache_lock:
@@ -200,7 +192,6 @@ class CalendarService:
             data_series = res_series.json()
             target_seasons = set()
             
-            # 确定要查哪些季
             if data_series.get("last_episode_to_air"):
                 target_seasons.add(data_series["last_episode_to_air"].get("season_number"))
             if data_series.get("next_episode_to_air"):
@@ -250,7 +241,7 @@ class CalendarService:
                             "data": {
                                 "series_name": series.get("Name"),
                                 "series_id": series.get("Id"),
-                                "tmdb_id": tmdb_id, # 🔥 关键：带上 TMDB ID 用于后续分组去重
+                                "tmdb_id": tmdb_id,
                                 "ep_name": ep.get("name"),
                                 "season": season_val,
                                 "episode": ep_val,
@@ -262,7 +253,6 @@ class CalendarService:
                         })
             
             return final_episodes
-
         except Exception as e:
             return []
 
