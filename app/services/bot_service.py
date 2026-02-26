@@ -7,7 +7,6 @@ import logging
 import urllib.parse
 import json 
 from collections import defaultdict
-# from dateutil import parser # ❌ 移除这个库
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter
 from app.services.report_service import report_gen, HAS_PIL
@@ -197,12 +196,10 @@ class TelegramBot:
             except Exception as e:
                 logger.error(f"Group Process Error: {e}")
 
-    # 🔥 新增：原生时间解析函数
+    # 原生时间解析函数
     def _parse_emby_time(self, date_str):
         if not date_str: return None
         try:
-            # 去掉可能的 Z 后缀，截取前26位 (微秒部分)
-            # Emby 格式: 2024-02-24T18:00:00.1234567Z
             clean_str = date_str.replace('Z', '')[:26]
             if '.' in clean_str:
                 return datetime.datetime.strptime(clean_str, "%Y-%m-%dT%H:%M:%S.%f")
@@ -211,7 +208,7 @@ class TelegramBot:
         except:
             return None
 
-    # 🔥 修复：使用原生解析
+    # 使用原生解析
     def _check_fresh_episodes(self, series_id):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         admin_id = self._get_admin_id()
@@ -240,8 +237,7 @@ class TelegramBot:
 
             for i, item in enumerate(items):
                 curr_time = self._parse_emby_time(item.get("DateCreated"))
-                
-                if not curr_time: # 解析失败
+                if not curr_time: 
                     if i == 0: fresh_list.append(item)
                     break
 
@@ -249,14 +245,12 @@ class TelegramBot:
                     fresh_list.append(item)
                     last_time = curr_time
                 else:
-                    # 计算间隔 (秒)
                     delta = abs((last_time - curr_time).total_seconds())
-                    
                     if delta <= 60:
                         fresh_list.append(item)
                         last_time = curr_time 
                     else:
-                        break # 断层
+                        break 
             
             return fresh_list
         except Exception as e:
@@ -383,7 +377,7 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Playback Push Error: {e}")
 
-    # ================= 指令系统 (保持不变) =================
+    # ================= 指令系统 =================
 
     def _set_commands(self):
         token = cfg.get("tg_bot_token")
@@ -497,7 +491,7 @@ class TelegramBot:
         
         try:
             user_id = self._get_admin_id()
-            if not user_id: return self.send_message(cid, "❌ 错误: 无法获取 Emby 用户身份")
+            if not user_id: return self.send_message(chat_id, "❌ 错误: 无法获取 Emby 用户身份")
 
             # 1️⃣ 第一步：只搜基础信息
             fields = "ProductionYear,Type,Id" 
@@ -567,7 +561,8 @@ class TelegramBot:
                     sub_type = "📺" if sub.get("Type") == "Series" else "🎬"
                     caption += f"{sub_type} {sub.get('Name')} {sub_year}\n"
             
-            base_url = cfg.get("emby_public_host") or host
+            # 🔥🔥🔥 核心修复：优先使用 emby_public_url
+            base_url = cfg.get("emby_public_url") or cfg.get("emby_public_host") or host
             if base_url.endswith('/'): base_url = base_url[:-1]
             play_url = f"{base_url}/web/index.html#!/item?id={top.get('Id')}&serverId={top.get('ServerId')}"
             keyboard = {"inline_keyboard": [[{"text": "▶️ 立即播放", "url": play_url}]]}

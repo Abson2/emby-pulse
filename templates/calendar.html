@@ -146,7 +146,6 @@ async function fetchCalendar(forceRefresh = false) {
             ttlSelect.value = data.current_ttl;
         }
 
-        // 这里不再用后端传回来的 emby_url，而是优先用 embyPublicUrl
         renderCalendar(data.days);
         loadingEl.classList.add('hidden');
         gridEl.classList.remove('hidden');
