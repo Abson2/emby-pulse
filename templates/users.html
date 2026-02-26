@@ -1,254 +1,224 @@
 {% extends "layout.html" %}
-{% block title %}用户管理 - EmbyPulse{% endblock %}
-
-{% block head %}
-<style>
-    .status-badge { @apply px-2 py-0.5 rounded-full text-xs font-bold; }
-    .status-active { @apply bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400; }
-    .status-disabled { @apply bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400; }
-</style>
-{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto w-full px-4 md:px-8 py-8 pb-24">
-    
-    <div class="flex items-center justify-between mb-8">
-        <div>
-            <h1 class="text-2xl font-black text-gray-900 dark:text-white">用户管理</h1>
-            <p class="text-xs text-gray-500 mt-1">管理 Emby 账号与有效期</p>
+<div class="container mx-auto px-4 py-6">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-3">
+            <i class="fa-solid fa-users text-indigo-500"></i>
+            用户管理
+        </h1>
+        <div class="flex gap-2">
+            <button onclick="openInviteModal()" class="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition shadow-sm font-medium">
+                <i class="fa-solid fa-link"></i> 邀请链接
+            </button>
+            <button onclick="openNewUserModal()" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition shadow-sm font-medium">
+                <i class="fa-solid fa-user-plus"></i> 新建用户
+            </button>
         </div>
-        <button onclick="openModal('new')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-200 dark:shadow-none transition flex items-center">
-            <i class="fa-solid fa-user-plus mr-2"></i> 新建用户
-        </button>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
         <div class="overflow-x-auto">
-            <table class="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                <thead class="text-xs text-gray-700 dark:text-gray-300 uppercase bg-gray-50 dark:bg-gray-700/50">
+            <table class="w-full text-left text-sm text-gray-600 dark:text-gray-300">
+                <thead class="bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-gray-100 font-medium border-b border-gray-100 dark:border-gray-700">
                     <tr>
-                        <th class="px-6 py-3">用户</th>
-                        <th class="px-6 py-3">最后活动</th>
-                        <th class="px-6 py-3">有效期至</th>
-                        <th class="px-6 py-3">状态</th>
-                        <th class="px-6 py-3 text-right">操作</th>
+                        <th class="px-6 py-4">用户</th>
+                        <th class="px-6 py-4">状态</th>
+                        <th class="px-6 py-4">有效期至</th>
+                        <th class="px-6 py-4">最后登录</th>
+                        <th class="px-6 py-4 text-right">操作</th>
                     </tr>
                 </thead>
-                <tbody id="user-list-body">
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700" id="user-list-body">
                     </tbody>
             </table>
         </div>
     </div>
 </div>
 
-<div id="modal-overlay" class="fixed inset-0 bg-black/50 z-[60] hidden backdrop-blur-sm transition-opacity" onclick="closeModal()"></div>
-<div id="user-modal" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-2xl z-[70] hidden p-6 transition-all">
-    <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4" id="modal-title">编辑用户</h3>
-    
-    <input type="hidden" id="edit-user-id">
-    
-    <div class="space-y-4">
-        <div id="name-field">
-            <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">用户名</label>
-            <input type="text" id="edit-name" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="输入用户名">
-        </div>
-        
-        <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-xl p-3 flex gap-3">
-            <div class="text-amber-500 mt-0.5"><i class="fa-solid fa-triangle-exclamation"></i></div>
-            <div class="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-                <p class="font-bold mb-1">密码说明</p>
-                <p>新建用户默认<strong>密码为空</strong>。请创建后通知用户登录 Emby 客户端自行设置密码。</p>
+<div id="new-user-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-100">
+        <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4">新建用户</h3>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">用户名</label>
+                <input type="text" id="new-username" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">有效期 (留空为永久)</label>
+                <input type="date" id="new-expire" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div class="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg text-xs text-yellow-700 dark:text-yellow-400">
+                ⚠️ 注意：Emby 接口限制，新建用户密码默认为空。请创建后通知用户登录并修改密码。
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button onclick="closeNewUserModal()" class="px-4 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">取消</button>
+                <button onclick="submitNewUser()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">创建</button>
             </div>
         </div>
-
-        <div>
-            <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">账号有效期</label>
-            <input type="date" id="edit-expire" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-            <div class="flex gap-2 mt-2">
-                <button type="button" onclick="setExpire(30)" class="text-[10px] bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded hover:bg-gray-200 dark:text-gray-300">1个月</button>
-                <button type="button" onclick="setExpire(365)" class="text-[10px] bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded hover:bg-gray-200 dark:text-gray-300">1年</button>
-                <button type="button" onclick="document.getElementById('edit-expire').value=''" class="text-[10px] text-blue-500 px-2 py-1 hover:underline">永久有效</button>
-            </div>
-        </div>
-
-        <div class="flex items-center justify-between pt-2 hidden" id="disable-field">
-            <span class="text-sm font-bold text-gray-700 dark:text-gray-300">禁用账号</span>
-            <label class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" id="edit-disabled" class="sr-only peer">
-                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
-            </label>
-        </div>
-    </div>
-
-    <div class="flex gap-3 mt-6">
-        <button onclick="closeModal()" class="flex-1 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-sm font-bold hover:bg-gray-50 dark:hover:bg-gray-700">取消</button>
-        <button onclick="saveUser()" id="save-btn" class="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 dark:shadow-none transition-all">保存</button>
     </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
+<div id="invite-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6">
+        <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4">生成邀请链接</h3>
+        <div class="space-y-4" id="invite-form-step">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">账号有效期 (到期自动禁用)</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="selectDuration(1)" class="dur-btn px-3 py-2 border rounded-lg text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border-gray-200 dark:border-gray-600">1 天</button>
+                    <button onclick="selectDuration(7)" class="dur-btn px-3 py-2 border rounded-lg text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border-gray-200 dark:border-gray-600">7 天</button>
+                    <button onclick="selectDuration(30)" class="dur-btn px-3 py-2 border rounded-lg text-sm bg-indigo-50 border-indigo-500 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-300">30 天</button>
+                    <button onclick="selectDuration(90)" class="dur-btn px-3 py-2 border rounded-lg text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border-gray-200 dark:border-gray-600">3 个月</button>
+                    <button onclick="selectDuration(180)" class="dur-btn px-3 py-2 border rounded-lg text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border-gray-200 dark:border-gray-600">6 个月</button>
+                    <button onclick="selectDuration(365)" class="dur-btn px-3 py-2 border rounded-lg text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border-gray-200 dark:border-gray-600">12 个月</button>
+                    <button onclick="selectDuration(-1)" class="dur-btn px-3 py-2 border rounded-lg text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border-gray-200 dark:border-gray-600 col-span-3">永久有效</button>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button onclick="document.getElementById('invite-modal').classList.add('hidden')" class="px-4 py-2 text-gray-500">取消</button>
+                <button onclick="generateInvite()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg">生成链接</button>
+            </div>
+        </div>
+
+        <div id="invite-result-step" class="hidden text-center space-y-4">
+            <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg break-all font-mono text-sm text-gray-600 dark:text-gray-300 select-all" id="invite-link-box">
+                ...
+            </div>
+            <div class="flex justify-center gap-3">
+                <button onclick="copyInvite()" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">复制链接</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-    let currentMode = 'new'; 
+let users = [];
+let selectedDuration = 30; // 默认选中30天
 
-    async function init() {
-        loadList();
+document.addEventListener('DOMContentLoaded', loadUsers);
+
+async function loadUsers() {
+    const res = await fetch('/api/manage/users');
+    const json = await res.json();
+    if (json.status === 'success') {
+        users = json.data;
+        renderUsers();
     }
+}
 
-    async function loadList() {
-        const tbody = document.getElementById('user-list-body');
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8"><i class="fa-solid fa-circle-notch fa-spin text-gray-400"></i></td></tr>';
-        
-        try {
-            const res = await fetch('/api/manage/users');
-            const json = await res.json();
-            
-            if(json.status === 'success') {
-                if (json.data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-xs text-gray-400">暂无用户</td></tr>';
-                    return;
-                }
+function renderUsers() {
+    const tbody = document.getElementById('user-list-body');
+    tbody.innerHTML = users.map(u => `
+        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+            <td class="px-6 py-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold">
+                        ${u.Name[0].toUpperCase()}
+                    </div>
+                    <div>
+                        <div class="font-medium text-gray-900 dark:text-white">${u.Name}</div>
+                        ${u.IsAdmin ? '<span class="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">管理员</span>' : ''}
+                    </div>
+                </div>
+            </td>
+            <td class="px-6 py-4">
+                ${u.IsDisabled 
+                    ? '<span class="px-2 py-1 rounded-full text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">已禁用</span>' 
+                    : '<span class="px-2 py-1 rounded-full text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">正常</span>'}
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                ${u.ExpireDate || '永久'}
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                ${u.LastLoginDate ? new Date(u.LastLoginDate).toLocaleDateString() : '从未'}
+            </td>
+            <td class="px-6 py-4 text-right">
+                <button onclick="deleteUser('${u.Id}')" class="text-red-500 hover:text-red-700 text-sm">删除</button>
+            </td>
+        </tr>
+    `).join('');
+}
 
-                let html = '';
-                json.data.forEach(u => {
-                    const statusClass = u.IsDisabled ? 'status-disabled' : 'status-active';
-                    const statusText = u.IsDisabled ? '已禁用' : '正常';
-                    const expireText = u.ExpireDate || '永久';
-                    const lastActive = u.LastLoginDate ? new Date(u.LastLoginDate).toLocaleDateString() : '从未';
-                    
-                    let avatarHtml = `<div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center mr-3 text-xs font-bold text-gray-500">${u.Name[0].toUpperCase()}</div>`;
-                    if (u.PrimaryImageTag) {
-                        avatarHtml = `<img src="/api/proxy/user_image/${u.Id}?tag=${u.PrimaryImageTag}" class="w-8 h-8 rounded-full object-cover mr-3 border border-gray-200 dark:border-gray-600">`;
-                    }
+// --- 🔥 新增：邀请相关逻辑 ---
+function openInviteModal() {
+    document.getElementById('invite-modal').classList.remove('hidden');
+    document.getElementById('invite-form-step').classList.remove('hidden');
+    document.getElementById('invite-result-step').classList.add('hidden');
+    // 重置选中状态
+    selectDuration(30); 
+}
 
-                    html += `
-                    <tr class="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                        <td class="px-6 py-4 font-bold text-gray-900 dark:text-white flex items-center">
-                            ${avatarHtml}
-                            <div>
-                                ${u.Name}
-                                ${u.IsAdmin ? '<span class="ml-2 text-[10px] bg-yellow-100 text-yellow-700 px-1.5 rounded border border-yellow-200">ADMIN</span>' : ''}
-                            </div>
-                        </td>
-                        <td class="px-6 py-4">${lastActive}</td>
-                        <td class="px-6 py-4 font-mono text-xs">${expireText}</td>
-                        <td class="px-6 py-4"><span class="${statusClass}">${statusText}</span></td>
-                        <td class="px-6 py-4 text-right">
-                            <button onclick="editUser('${u.Id}', '${u.Name}', '${u.ExpireDate || ''}', ${u.IsDisabled})" class="text-blue-500 hover:text-blue-700 mr-3 transition"><i class="fa-solid fa-pen-to-square"></i></button>
-                            <button onclick="deleteUser('${u.Id}', '${u.Name}')" class="text-red-500 hover:text-red-700 transition"><i class="fa-solid fa-trash"></i></button>
-                        </td>
-                    </tr>`;
-                });
-                tbody.innerHTML = html;
-            }
-        } catch(e) { tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500 text-xs">加载失败: ${e}</td></tr>`; }
-    }
-
-    function openModal(mode) {
-        currentMode = mode;
-        document.getElementById('modal-overlay').classList.remove('hidden');
-        document.getElementById('user-modal').classList.remove('hidden');
-        
-        if (mode === 'new') {
-            document.getElementById('modal-title').innerText = '新增用户';
-            document.getElementById('name-field').classList.remove('hidden');
-            document.getElementById('disable-field').classList.add('hidden'); // 新建不显示禁用开关
-            
-            document.getElementById('edit-name').value = '';
-            document.getElementById('edit-expire').value = '';
+function selectDuration(days) {
+    selectedDuration = days;
+    document.querySelectorAll('.dur-btn').forEach(btn => {
+        btn.classList.remove('bg-indigo-50', 'border-indigo-500', 'text-indigo-600', 'dark:bg-indigo-900/50', 'dark:text-indigo-300');
+        btn.classList.add('border-gray-200', 'dark:border-gray-600');
+    });
+    // 找到对应按钮高亮
+    const btns = document.querySelectorAll('.dur-btn');
+    for (let btn of btns) {
+        // 根据 onclick 内容判断比较粗糙，但这里够用
+        if (btn.getAttribute('onclick').includes(`selectDuration(${days})`)) {
+            btn.classList.remove('border-gray-200', 'dark:border-gray-600');
+            btn.classList.add('bg-indigo-50', 'border-indigo-500', 'text-indigo-600', 'dark:bg-indigo-900/50', 'dark:text-indigo-300');
+            break;
         }
     }
+}
 
-    function editUser(id, name, expire, disabled) {
-        currentMode = 'edit';
-        document.getElementById('modal-overlay').classList.remove('hidden');
-        document.getElementById('user-modal').classList.remove('hidden');
-        
-        document.getElementById('modal-title').innerText = `编辑用户: ${name}`;
-        document.getElementById('name-field').classList.add('hidden'); // 编辑时不改名
-        document.getElementById('disable-field').classList.remove('hidden'); // 编辑显示禁用开关
-        
-        document.getElementById('edit-user-id').value = id;
-        document.getElementById('edit-expire').value = expire;
-        document.getElementById('edit-disabled').checked = disabled;
+async function generateInvite() {
+    const res = await fetch('/api/manage/invite/gen', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ days: selectedDuration })
+    });
+    const json = await res.json();
+    if (json.status === 'success') {
+        const link = window.location.origin + '/invite/' + json.code;
+        document.getElementById('invite-link-box').textContent = link;
+        document.getElementById('invite-form-step').classList.add('hidden');
+        document.getElementById('invite-result-step').classList.remove('hidden');
+    } else {
+        alert('生成失败: ' + json.message);
     }
+}
 
-    function closeModal() {
-        document.getElementById('modal-overlay').classList.add('hidden');
-        document.getElementById('user-modal').classList.add('hidden');
+function copyInvite() {
+    const text = document.getElementById('invite-link-box').textContent;
+    navigator.clipboard.writeText(text).then(() => alert('✅ 已复制到剪贴板'));
+}
+
+// --- 原有：新建用户逻辑 ---
+function openNewUserModal() { document.getElementById('new-user-modal').classList.remove('hidden'); }
+function closeNewUserModal() { document.getElementById('new-user-modal').classList.add('hidden'); }
+
+async function submitNewUser() {
+    const name = document.getElementById('new-username').value;
+    const expire = document.getElementById('new-expire').value;
+    if (!name) return alert("请输入用户名");
+    
+    const res = await fetch('/api/manage/user/new', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name, expire_date: expire || null })
+    });
+    const json = await res.json();
+    if (json.status === 'success') {
+        alert(json.message);
+        closeNewUserModal();
+        loadUsers();
+    } else {
+        alert(json.message);
     }
+}
 
-    function setExpire(days) {
-        const date = new Date();
-        date.setDate(date.getDate() + days);
-        document.getElementById('edit-expire').value = date.toISOString().split('T')[0];
-    }
-
-    async function saveUser() {
-        const expire = document.getElementById('edit-expire').value || null;
-        const btn = document.getElementById('save-btn');
-        const oldText = btn.innerText;
-        
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 处理中';
-        
-        let url = '', body = {};
-        
-        if (currentMode === 'new') {
-            url = '/api/manage/user/new';
-            body = {
-                name: document.getElementById('edit-name').value,
-                expire_date: expire
-                // password 字段已移除
-            };
-            if(!body.name) { btn.disabled=false; btn.innerText=oldText; return alert('请输入用户名'); }
-        } else {
-            url = '/api/manage/user/update';
-            body = {
-                user_id: document.getElementById('edit-user-id').value,
-                expire_date: expire,
-                is_disabled: document.getElementById('edit-disabled').checked
-                // password 字段已移除
-            };
-        }
-
-        try {
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(body)
-            });
-            const json = await res.json();
-            
-            if(json.status === 'success') {
-                closeModal();
-                loadList();
-                // 成功后弹出提示，告知密码为空
-                alert(json.message);
-            } else {
-                alert('操作失败: ' + json.message);
-            }
-        } catch(e) { alert('网络错误'); } 
-        finally {
-            btn.disabled = false;
-            btn.innerText = oldText;
-        }
-    }
-
-    async function deleteUser(id, name) {
-        if(!confirm(`⚠️ 危险操作！\n\n确定要永久删除用户 [${name}] 吗？\n此操作不可恢复，且会清空该用户的播放记录！`)) return;
-        
-        try {
-            const res = await fetch(`/api/manage/user/${id}`, { method: 'DELETE' });
-            const json = await res.json();
-            if(json.status === 'success') {
-                loadList();
-            } else {
-                alert('删除失败: ' + json.message);
-            }
-        } catch(e) { alert('网络错误'); }
-    }
-
-    init();
+async function deleteUser(uid) {
+    if (!confirm('确定要删除此用户吗？操作不可恢复！')) return;
+    const res = await fetch(`/api/manage/user/${uid}`, { method: 'DELETE' });
+    const json = await res.json();
+    if (json.status === 'success') loadUsers();
+    else alert(json.message);
+}
 </script>
 {% endblock %}

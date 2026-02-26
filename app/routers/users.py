@@ -1,11 +1,41 @@
 from fastapi import APIRouter, Request
-from app.schemas.models import UserUpdateModel, NewUserModel
+from app.schemas.models import UserUpdateModel, NewUserModel, InviteGenModel
 from app.core.config import cfg
 from app.core.database import query_db
 import requests
 import datetime
+import secrets
 
 router = APIRouter()
+
+# 🔥 新增：自动检查过期用户并禁用
+def check_expired_users():
+    try:
+        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
+        if not key or not host: return
+        
+        # 1. 查出所有设置了过期时间的用户
+        rows = query_db("SELECT user_id, expire_date FROM users_meta WHERE expire_date IS NOT NULL")
+        if not rows: return
+        
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        
+        for row in rows:
+            if row['expire_date'] < now_str: # 已过期
+                uid = row['user_id']
+                try:
+                    u_res = requests.get(f"{host}/emby/Users/{uid}?api_key={key}", timeout=5)
+                    if u_res.status_code == 200:
+                        user = u_res.json()
+                        policy = user.get('Policy', {})
+                        # 如果未禁用，则执行禁用
+                        if not policy.get('IsDisabled', False):
+                            print(f"🚫 Auto-Disabling Expired User: {user.get('Name')} (Expire: {row['expire_date']})")
+                            policy['IsDisabled'] = True
+                            requests.post(f"{host}/emby/Users/{uid}/Policy?api_key={key}", json=policy)
+                except: pass
+    except Exception as e:
+        print(f"Check Expire Error: {e}")
 
 @router.get("/api/manage/users")
 def api_manage_users(request: Request):
@@ -13,6 +43,10 @@ def api_manage_users(request: Request):
     获取用户列表及元数据
     """
     if not request.session.get("user"): return {"status": "error"}
+    
+    # 🔥 每次获取列表时，顺手检查一下过期状态
+    check_expired_users()
+    
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     try:
         res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=5)
@@ -39,6 +73,21 @@ def api_manage_users(request: Request):
                 "PrimaryImageTag": u.get('PrimaryImageTag')
             })
         return {"status": "success", "data": final_list}
+    except Exception as e: return {"status": "error", "message": str(e)}
+
+# 🔥 新增：生成邀请码接口
+@router.post("/api/manage/invite/gen")
+def api_gen_invite(data: InviteGenModel, request: Request):
+    if not request.session.get("user"): return {"status": "error"}
+    try:
+        # 生成 6 位随机码 (例如 a1b2c3)
+        code = secrets.token_hex(3) 
+        created_at = datetime.datetime.now().isoformat()
+        
+        query_db("INSERT INTO invitations (code, days, created_at) VALUES (?, ?, ?)", 
+                 (code, data.days, created_at))
+                 
+        return {"status": "success", "code": code}
     except Exception as e: return {"status": "error", "message": str(e)}
 
 @router.post("/api/manage/user/update")

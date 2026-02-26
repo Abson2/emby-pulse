@@ -40,3 +40,15 @@ class NewUserModel(BaseModel):
     name: str
     password: Optional[str] = None 
     expire_date: Optional[str] = None
+
+# 🔥🔥 以下是本次新增的模型 🔥🔥
+
+# 新增：生成邀请码参数
+class InviteGenModel(BaseModel):
+    days: int  # -1=永久, 1, 7, 30...
+
+# 新增：用户注册参数
+class UserRegisterModel(BaseModel):
+    code: str
+    username: str
+    password: str

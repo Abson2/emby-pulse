@@ -22,6 +22,15 @@ def init_db():
                         created_at TEXT
                     )''')
         
+        # 2. 🔥 新增：邀请码表
+        c.execute('''CREATE TABLE IF NOT EXISTS invitations (
+                        code TEXT PRIMARY KEY,
+                        days INTEGER,        -- 有效期天数 (-1为永久)
+                        used_count INTEGER DEFAULT 0,
+                        max_uses INTEGER DEFAULT 1,
+                        created_at TEXT
+                    )''')
+        
         conn.commit()
         conn.close()
         print("✅ Database initialized (Plugin Read-Only Mode).")

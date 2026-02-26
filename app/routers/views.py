@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from app.core.config import cfg
+from app.core.database import query_db
 import logging
 
 # 初始化
@@ -38,13 +39,26 @@ async def login_page(request: Request):
     if check_login(request): return RedirectResponse("/")
     return templates.TemplateResponse("login.html", {"request": request})
 
+# 🔥 新增：邀请注册页
+@router.get("/invite/{code}", response_class=HTMLResponse)
+async def invite_page(code: str, request: Request):
+    # 校验邀请码有效性
+    invite = query_db("SELECT * FROM invitations WHERE code = ?", (code,), one=True)
+    valid = False
+    days = 0
+    if invite and invite['used_count'] < invite['max_uses']:
+        valid = True
+        days = invite['days']
+    
+    return templates.TemplateResponse("register.html", {"request": request, "code": code, "valid": valid, "days": days})
+
 # 3. 内容排行
 @router.get("/content", response_class=HTMLResponse)
 async def content_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("content.html", {"request": request, "active_page": "content"})
 
-# 4. 数据洞察 (前端链接是 /details)
+# 4. 数据洞察
 @router.get("/details", response_class=HTMLResponse)
 async def details_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
@@ -62,28 +76,27 @@ async def bot_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("bot.html", {"request": request, "active_page": "bot"})
 
-# 7. 用户管理 (前端链接是 /users_manage)
+# 7. 用户管理
 @router.get("/users_manage", response_class=HTMLResponse)
 @router.get("/users", response_class=HTMLResponse)
 async def users_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("users.html", {"request": request, "active_page": "users"})
 
-# 8. 系统设置 (前端链接是 /settings)
+# 8. 系统设置
 @router.get("/settings", response_class=HTMLResponse)
 @router.get("/system", response_class=HTMLResponse)
 async def system_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
-    # 注意：这里加载的是 settings.html
     return templates.TemplateResponse("settings.html", {"request": request, "active_page": "settings"})
 
-# 9. 质量盘点 (新功能)
+# 9. 质量盘点
 @router.get("/insight", response_class=HTMLResponse)
 async def insight_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     return templates.TemplateResponse("insight.html", {"request": request, "active_page": "insight"})
 
-# 10. 任务中心 (新功能)
+# 10. 任务中心
 @router.get("/tasks", response_class=HTMLResponse)
 async def tasks_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
