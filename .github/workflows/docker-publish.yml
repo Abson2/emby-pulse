@@ -11,6 +11,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # 🔥 新增 1：设置 QEMU，这是跨平台编译 ARM 镜像必须的环境
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
@@ -25,5 +29,6 @@ jobs:
         with:
           context: .
           push: true
-          # ⚠️⚠️⚠️ 下面这行一定要改！
+          # 🔥 新增 2：告诉 Docker 同时打包 amd64 (普通电脑/NAS) 和 arm64 (树莓派/ARM NAS/Mac M系列)
+          platforms: linux/amd64,linux/arm64
           tags: zeyu8023/emby-stats:latest
