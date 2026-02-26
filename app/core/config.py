@@ -40,6 +40,7 @@ THEMES = {
 DEFAULT_CONFIG = {
     "emby_host": os.getenv("EMBY_HOST", "http://127.0.0.1:8096").rstrip('/'),
     "emby_api_key": os.getenv("EMBY_API_KEY", "").strip(),
+    "emby_public_host": "",
     "tmdb_api_key": os.getenv("TMDB_API_KEY", "").strip(),
     "proxy_url": "",
     "hidden_users": [],
@@ -48,7 +49,8 @@ DEFAULT_CONFIG = {
     "enable_bot": False,  
     "enable_notify": False,
     "enable_library_notify": False,
-    "webhook_token": "embypulse",  # 🔥 新增：Webhook 安全验证令牌
+    "webhook_token": "embypulse",
+    "calendar_cache_ttl": 86400, # 🔥 新增默认值
     "scheduled_tasks": []
 }
 

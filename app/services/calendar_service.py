@@ -13,7 +13,7 @@ class CalendarService:
         # 缓存结构: { offset: {'data': ..., 'time': timestamp} }
         self._cache = {} 
         self._cache_lock = threading.Lock()
-        self.CACHE_TTL = 3600  # 缓存 1 小时
+        # CACHE_TTL 不再硬编码，改为动态获取
 
     def _get_proxies(self):
         """获取全局代理配置"""
@@ -28,12 +28,18 @@ class CalendarService:
         """
         now = time.time()
         
+        # 🔥 动态获取配置，默认 1 天 (86400秒)
+        cache_ttl = int(cfg.get("calendar_cache_ttl") or 86400)
+
         # 1. 检查对应周的缓存
         if not force_refresh:
             with self._cache_lock:
                 cached_item = self._cache.get(week_offset)
-                if cached_item and (now - cached_item['time'] < self.CACHE_TTL):
-                    return cached_item['data']
+                if cached_item and (now - cached_item['time'] < cache_ttl):
+                    # 注入 current_ttl 以便前端回显
+                    data = cached_item['data']
+                    data['current_ttl'] = cache_ttl
+                    return data
 
         api_key = cfg.get("tmdb_api_key")
         if not api_key:
@@ -70,13 +76,12 @@ class CalendarService:
                 except Exception as e:
                     logger.error(f"Calendar Task Error: {e}")
 
-        # 🔥 5. 核心修复：智能合并与去重
+        # 🔥 5. 核心修复：智能合并与去重 (保持您的逻辑不变)
         for i in range(7):
             raw_items = week_data[i]
             if not raw_items: continue
 
             # 关键点：按 (tmdb_id, season) 分组
-            # 这样即使 Emby 里有多个重复的剧集条目，只要是同一部剧，就会被归到一组
             grouped = {}
             for item in raw_items:
                 # 优先使用 tmdb_id，没有则回退到 series_id
@@ -88,10 +93,9 @@ class CalendarService:
             # 执行合并
             merged_items = []
             for key, group in grouped.items():
-                # 第一步：组内去重 (防止出现 [13集, 13集, 14集])
+                # 第一步：组内去重
                 unique_eps = {}
                 for x in group:
-                    # 以集数为 Key，后面的覆盖前面的，确保唯一
                     unique_eps[x['episode']] = x
                 
                 # 排序
@@ -101,10 +105,8 @@ class CalendarService:
 
                 # 第二步：生成最终显示的卡片
                 if len(sorted_eps) == 1:
-                    # 只有一集，直接添加
                     merged_items.append(sorted_eps[0])
                 else:
-                    # 有多集，需要合并
                     first = sorted_eps[0]
                     last = sorted_eps[-1]
                     
@@ -114,11 +116,9 @@ class CalendarService:
                     merged['episode'] = f"{first['episode']}-{last['episode']}"
                     
                     # 2. 🔥 移除单集标题介绍
-                    # 如果显示 "Episode 13"，用户会觉得奇怪，因为它代表了 13-14
-                    # 设为 None 后，前端会回退显示 "Episode 13-14"，非常直观
                     merged['ep_name'] = None 
                     
-                    # 3. 合并状态 (优先级: 缺失 > 已入库 > 待播)
+                    # 3. 合并状态
                     statuses = [x['status'] for x in sorted_eps]
                     if 'missing' in statuses:
                         merged['status'] = 'missing'
@@ -152,7 +152,8 @@ class CalendarService:
             "days": final_days, 
             "updated_at": datetime.datetime.now().strftime("%H:%M"),
             "emby_url": emby_url,
-            "date_range": f"{start_of_week.strftime('%m/%d')} - {end_of_week.strftime('%m/%d')}"
+            "date_range": f"{start_of_week.strftime('%m/%d')} - {end_of_week.strftime('%m/%d')}",
+            "current_ttl": cache_ttl # 🔥 返回当前配置的 TTL
         }
         
         with self._cache_lock:
