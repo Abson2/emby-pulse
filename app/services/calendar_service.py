@@ -42,9 +42,7 @@ class CalendarService:
             return {"error": "未配置 TMDB API Key"}
 
         # 2. 计算目标周的时间范围
-        # 基准日期 = 今天 + 偏移周数
         target_date = datetime.date.today() + datetime.timedelta(weeks=week_offset)
-        # 计算该周的周一
         start_of_week = target_date - datetime.timedelta(days=target_date.weekday())
         end_of_week = start_of_week + datetime.timedelta(days=6)
         
@@ -65,7 +63,6 @@ class CalendarService:
             
             for future in as_completed(future_to_series):
                 try:
-                    # 🔥 修复：现在返回的是一个列表，因为一部剧一周可能有多集
                     results = future.result()
                     if results:
                         for item in results:
@@ -75,12 +72,61 @@ class CalendarService:
                 except Exception as e:
                     logger.error(f"Calendar Task Error: {e}")
 
+        # 🔥 新增步骤：合并同一天的同一部剧 (Episode 13, 14 -> 13-14)
+        for i in range(7):
+            raw_items = week_data[i]
+            if not raw_items: continue
+
+            # 按 series_id 分组
+            grouped = {}
+            for item in raw_items:
+                sid = item['series_id']
+                if sid not in grouped:
+                    grouped[sid] = []
+                grouped[sid].append(item)
+            
+            # 执行合并
+            merged_items = []
+            for sid, group in grouped.items():
+                if len(group) == 1:
+                    merged_items.append(group[0])
+                else:
+                    # 排序，确保是 13, 14 而不是 14, 13
+                    group.sort(key=lambda x: x['episode'])
+                    first = group[0]
+                    last = group[-1]
+                    
+                    # 复制一份作为合并后的对象
+                    merged = first.copy()
+                    
+                    # 1. 合并集数: "13-14"
+                    merged['episode'] = f"{first['episode']}-{last['episode']}"
+                    
+                    # 2. 合并单集标题 (可选，太长就省略)
+                    # merged['ep_name'] = f"{first['ep_name']} ..." 
+
+                    # 3. 合并状态 (优先级: 缺失 > 已入库 > 待播)
+                    # 逻辑: 只要有一集缺失，整体就算缺失(提醒去补); 否则只要有一集入了，就算入了
+                    statuses = [x['status'] for x in group]
+                    if 'missing' in statuses:
+                        merged['status'] = 'missing'
+                    elif 'ready' in statuses:
+                        merged['status'] = 'ready'
+                    else:
+                        merged['status'] = 'upcoming'
+                    
+                    merged_items.append(merged)
+            
+            # 将合并后的列表放回
+            week_data[i] = merged_items
+
         # 5. 排序与格式化
         final_days = []
         week_dates = [start_of_week + datetime.timedelta(days=i) for i in range(7)]
         today_real = datetime.date.today()
         
         for i in range(7):
+            # 按开播时间排序
             items = sorted(week_data[i], key=lambda x: x['air_date'])
             final_days.append({
                 "date": week_dates[i].strftime("%Y-%m-%d"),
@@ -89,7 +135,6 @@ class CalendarService:
                 "items": items
             })
         
-        # 获取 Emby 地址 (优先用 public_host)
         emby_url = cfg.get("emby_public_host") or cfg.get("emby_host") or ""
         if emby_url.endswith('/'): emby_url = emby_url[:-1]
 
@@ -100,7 +145,6 @@ class CalendarService:
             "date_range": f"{start_of_week.strftime('%m/%d')} - {end_of_week.strftime('%m/%d')}"
         }
         
-        # 写入缓存 (按 offset 存储)
         with self._cache_lock:
             self._cache[week_offset] = {
                 'data': result,
@@ -133,13 +177,10 @@ class CalendarService:
         return []
 
     def _fetch_series_status(self, series, api_key, start_date, end_date, proxies):
-        """查询 TMDB 并比对本地库存 (升级版：查整季)"""
         tmdb_id = series.get("ProviderIds", {}).get("Tmdb")
         if not tmdb_id: return []
 
         try:
-            # 1. 先查剧集详情，确定当前涉及哪些季
-            # 这一步是为了拿到 season_number，因为我们不知道现在播到第几季了
             url_series = f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={api_key}&language=zh-CN"
             res_series = requests.get(url_series, timeout=5, proxies=proxies)
             if res_series.status_code != 200: return []
@@ -147,22 +188,17 @@ class CalendarService:
             data_series = res_series.json()
             target_seasons = set()
             
-            # 检查上一集和下一集所在的季度
-            # 这样如果本周跨季（比如S01完结，S02开始），能同时查到
             if data_series.get("last_episode_to_air"):
                 target_seasons.add(data_series["last_episode_to_air"].get("season_number"))
             if data_series.get("next_episode_to_air"):
                 target_seasons.add(data_series["next_episode_to_air"].get("season_number"))
             
-            # 如果都没有，可能因为某些原因数据空了，尝试拿最后一季
             if not target_seasons and data_series.get("seasons"):
-                # 拿最后一个 season_number
                 last_season = data_series["seasons"][-1]
                 target_seasons.add(last_season.get("season_number"))
 
             final_episodes = []
 
-            # 2. 遍历涉及的季度，获取完整剧集列表
             for season_num in target_seasons:
                 if season_num is None: continue
                 
@@ -172,7 +208,6 @@ class CalendarService:
                 
                 episodes_list = res_season.json().get("episodes", [])
                 
-                # 3. 筛选本周的集数
                 for ep in episodes_list:
                     air_date_str = ep.get("air_date")
                     if not air_date_str: continue
@@ -182,12 +217,9 @@ class CalendarService:
                     except: continue
 
                     if start_date <= air_date <= end_date:
-                        # 🎯 命中！本周有这一集
-                        
                         season_val = ep.get("season_number")
                         ep_val = ep.get("episode_number")
                         
-                        # 查 Emby 状态
                         has_file = self._check_emby_has_episode(series["Id"], season_val, ep_val)
                         
                         status = "upcoming"
@@ -198,7 +230,7 @@ class CalendarService:
                         elif air_date < today:
                             status = "missing"
                         elif air_date == today:
-                            status = "today" # 借用状态，逻辑上前端可处理为 ready 或 upcoming
+                            status = "today" 
 
                         final_episodes.append({
                             "day_index": (air_date - start_date).days,
@@ -207,9 +239,9 @@ class CalendarService:
                                 "series_id": series.get("Id"),
                                 "ep_name": ep.get("name"),
                                 "season": season_val,
-                                "episode": ep_val,
+                                "episode": ep_val, # 这里还是数字，后面聚合时会变成字符串 "13-14"
                                 "air_date": ep.get("air_date"),
-                                "poster_path": data_series.get("poster_path"), # 用剧集海报
+                                "poster_path": data_series.get("poster_path"),
                                 "status": status,
                                 "overview": ep.get("overview")
                             }
@@ -218,7 +250,6 @@ class CalendarService:
             return final_episodes
 
         except Exception as e:
-            # logger.error(f"Fetch Series Detail Error: {e}")
             return []
 
     def _check_emby_has_episode(self, series_id, season, episode):
