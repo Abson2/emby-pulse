@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Request, Response, UploadFile, File, Form
 from app.schemas.models import UserUpdateModel, NewUserModel, InviteGenModel
 from app.core.config import cfg
 from app.core.database import query_db
@@ -85,7 +85,7 @@ def api_manage_users(request: Request):
         }
     except Exception as e: return {"status": "error", "message": str(e)}
 
-# 🔥 新增：用户头像代理接口 (解决头像裂开问题)
+# 🔥 用户头像代理接口 (解决头像裂开问题)
 @router.get("/api/user/image/{user_id}")
 def get_user_avatar(user_id: str):
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -103,6 +103,53 @@ def get_user_avatar(user_id: str):
             return Response(status_code=404)
     except:
         return Response(status_code=404)
+
+# 🔥🔥🔥 新增：修改用户头像接口 (支持 URL 或 文件)
+@router.post("/api/manage/user/image")
+async def api_update_user_image(
+    request: Request,
+    user_id: str = Form(...),
+    url: str = Form(None),
+    file: UploadFile = File(None)
+):
+    if not request.session.get("user"): return {"status": "error", "message": "Unauthorized"}
+    
+    key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
+    emby_url = f"{host}/emby/Users/{user_id}/Images/Primary?api_key={key}"
+    
+    image_data = None
+    
+    try:
+        # 情况 A: 传的是 URL (DiceBear)
+        if url:
+            print(f"🖼️ Downloading avatar from: {url}")
+            # 后端代下载图片
+            down_res = requests.get(url, timeout=10)
+            if down_res.status_code == 200:
+                image_data = down_res.content
+            else:
+                return {"status": "error", "message": "无法下载该头像"}
+        
+        # 情况 B: 传的是文件
+        elif file:
+            print(f"📂 Receiving file upload: {file.filename}")
+            image_data = await file.read()
+            
+        if not image_data:
+            return {"status": "error", "message": "未提供有效图片"}
+
+        # 上传到 Emby
+        # Emby API 接收二进制 Body，Content-Type 设为 image/*
+        headers = {"Content-Type": "image/png"} # DiceBear 默认png，通用性较好
+        up_res = requests.post(emby_url, data=image_data, headers=headers)
+        
+        if up_res.status_code == 204:
+            return {"status": "success"}
+        else:
+            return {"status": "error", "message": f"Emby 返回错误: {up_res.status_code}"}
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 # 生成邀请码接口 (保留功能)
 @router.post("/api/manage/invite/gen")

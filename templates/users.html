@@ -64,9 +64,33 @@
 </div>
 
 <div id="edit-user-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4">
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-100">
-        <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4">编辑用户</h3>
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-100 flex flex-col max-h-[90vh] overflow-y-auto hide-scrollbar">
+        <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-2">编辑用户</h3>
         <input type="hidden" id="edit-userid">
+        
+        <div class="flex flex-col items-center mb-6 border-b border-gray-100 dark:border-gray-700 pb-6">
+            <div class="relative group">
+                <img id="edit-avatar-preview" src="" class="w-20 h-20 rounded-full object-cover border-4 border-white dark:border-gray-700 shadow-md mb-3 bg-indigo-100">
+                <input type="file" id="edit-avatar-file" accept="image/*" class="hidden" onchange="previewFileAvatar()">
+            </div>
+            
+            <div class="flex gap-2 mb-3">
+                <button onclick="generateRandomAvatar()" class="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-xs rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition">
+                    <i class="fa-solid fa-dice mr-1"></i> 换一换
+                </button>
+                <button onclick="document.getElementById('edit-avatar-file').click()" class="px-3 py-1.5 bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition">
+                    <i class="fa-solid fa-upload mr-1"></i> 上传
+                </button>
+            </div>
+
+            <div class="flex gap-2">
+                <img onclick="setAvatarPreset('micah')" src="https://api.dicebear.com/9.x/micah/png?seed=Felix" class="w-8 h-8 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600">
+                <img onclick="setAvatarPreset('bottts')" src="https://api.dicebear.com/9.x/bottts/png?seed=Zoe" class="w-8 h-8 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600">
+                <img onclick="setAvatarPreset('avataaars')" src="https://api.dicebear.com/9.x/avataaars/png?seed=Jack" class="w-8 h-8 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600">
+                <img onclick="setAvatarPreset('notionists')" src="https://api.dicebear.com/9.x/notionists/png?seed=Abby" class="w-8 h-8 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600">
+            </div>
+        </div>
+
         <div class="space-y-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">当前用户</label>
@@ -76,20 +100,24 @@
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">重置密码 (可选)</label>
                 <input type="password" id="edit-password" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="留空则不修改密码">
             </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">账号状态</label>
-                <select id="edit-disabled" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
-                    <option value="false">✅ 正常启用</option>
-                    <option value="true">🚫 禁用账号</option>
-                </select>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">账号状态</label>
+                    <select id="edit-disabled" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <option value="false">✅ 正常</option>
+                        <option value="true">🚫 禁用</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">有效期</label>
+                    <input type="date" id="edit-expire" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
             </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">有效期 (留空为永久)</label>
-                <input type="date" id="edit-expire" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
-            <div class="flex justify-end gap-3 mt-6">
+            <div class="flex justify-end gap-3 mt-4">
                 <button onclick="closeEditUserModal()" class="px-4 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">取消</button>
-                <button onclick="submitEditUser()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">保存修改</button>
+                <button onclick="submitEditUser()" id="save-user-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition flex items-center">
+                    <span id="save-user-text">保存修改</span>
+                </button>
             </div>
         </div>
     </div>
@@ -137,7 +165,12 @@
 
 <script>
 let users = [];
+let embyUrl = ""; 
 let selectedDuration = 30; 
+
+// 🔥 头像管理状态
+let currentAvatarUrl = "";
+let currentAvatarFile = null;
 
 document.addEventListener('DOMContentLoaded', loadUsers);
 
@@ -146,6 +179,7 @@ async function loadUsers() {
     const json = await res.json();
     if (json.status === 'success') {
         users = json.data;
+        embyUrl = json.emby_url || "";
         renderUsers();
     }
 }
@@ -154,9 +188,7 @@ function renderUsers() {
     const desktopBody = document.getElementById('user-list-body-desktop');
     const mobileBody = document.getElementById('user-list-body-mobile');
     
-    // 生成头像 HTML 的辅助函数
     const getAvatar = (u) => {
-        // 使用新的代理接口，带上 onerror 回退
         const proxyUrl = `/api/user/image/${u.Id}`;
         const fallbackHtml = `
             <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs md:text-sm">
@@ -166,9 +198,7 @@ function renderUsers() {
         if (u.PrimaryImageTag) {
             return `
             <div class="relative w-8 h-8 md:w-10 md:h-10">
-                <img src="${proxyUrl}" 
-                     class="w-full h-full rounded-full object-cover absolute inset-0"
-                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+                <img src="${proxyUrl}" class="w-full h-full rounded-full object-cover absolute inset-0" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
                 <div class="w-full h-full rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs md:text-sm hidden">
                     ${u.Name[0].toUpperCase()}
                 </div>
@@ -177,7 +207,6 @@ function renderUsers() {
         return fallbackHtml;
     };
 
-    // 1. 渲染桌面端表格
     desktopBody.innerHTML = users.map(u => `
         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
             <td class="px-6 py-4">
@@ -207,7 +236,6 @@ function renderUsers() {
         </tr>
     `).join('');
 
-    // 2. 渲染移动端卡片
     mobileBody.innerHTML = users.map(u => `
         <div class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col gap-3">
             <div class="flex justify-between items-start">
@@ -303,7 +331,6 @@ function copyInvite() {
 function openNewUserModal() { 
     const modal = document.getElementById('new-user-modal');
     modal.classList.remove('hidden');
-    // 清空输入框
     document.getElementById('new-username').value = '';
     document.getElementById('new-password').value = '';
     document.getElementById('new-expire').value = '';
@@ -336,7 +363,7 @@ async function submitNewUser() {
     }
 }
 
-// --- 编辑用户相关 ---
+// --- 🔥 编辑用户相关 (加强版) ---
 function openEditUserModal(uid) {
     const user = users.find(u => u.Id === uid);
     if(!user) return;
@@ -345,7 +372,19 @@ function openEditUserModal(uid) {
     document.getElementById('edit-username').value = user.Name;
     document.getElementById('edit-disabled').value = user.IsDisabled ? "true" : "false";
     document.getElementById('edit-expire').value = user.ExpireDate || '';
-    document.getElementById('edit-password').value = ''; // 重置密码框
+    document.getElementById('edit-password').value = ''; 
+    
+    // 初始化头像状态 (如果有头像，显示头像；没有则显示 DiceBear 占位)
+    currentAvatarUrl = "";
+    currentAvatarFile = null;
+    
+    const preview = document.getElementById('edit-avatar-preview');
+    if (user.PrimaryImageTag) {
+        preview.src = `/api/user/image/${uid}`;
+    } else {
+        // 如果没有头像，生成一个基于用户名的随机头像作为默认
+        preview.src = `https://api.dicebear.com/9.x/notionists/png?seed=${user.Name}`;
+    }
     
     const modal = document.getElementById('edit-user-modal');
     modal.classList.remove('hidden');
@@ -358,12 +397,75 @@ function closeEditUserModal() {
     modal.classList.add('hidden');
 }
 
+// 头像逻辑: 随机生成
+function generateRandomAvatar() {
+    const styles = ['notionists', 'bottts', 'adventurer', 'avataaars', 'big-smile'];
+    const style = styles[Math.floor(Math.random() * styles.length)];
+    const seed = Math.random().toString(36).substring(7);
+    const url = `https://api.dicebear.com/9.x/${style}/png?seed=${seed}`;
+    
+    currentAvatarUrl = url;
+    currentAvatarFile = null; // 清除文件选择
+    document.getElementById('edit-avatar-preview').src = url;
+}
+
+// 头像逻辑: 预设
+function setAvatarPreset(style) {
+    const seed = Math.random().toString(36).substring(7);
+    const url = `https://api.dicebear.com/9.x/${style}/png?seed=${seed}`;
+    currentAvatarUrl = url;
+    currentAvatarFile = null;
+    document.getElementById('edit-avatar-preview').src = url;
+}
+
+// 头像逻辑: 文件预览
+function previewFileAvatar() {
+    const fileInput = document.getElementById('edit-avatar-file');
+    if (fileInput.files && fileInput.files[0]) {
+        currentAvatarFile = fileInput.files[0];
+        currentAvatarUrl = ""; // 清除 URL 模式
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('edit-avatar-preview').src = e.target.result;
+        }
+        reader.readAsDataURL(fileInput.files[0]);
+    }
+}
+
 async function submitEditUser() {
+    const btn = document.getElementById('save-user-btn');
+    const btnText = document.getElementById('save-user-text');
     const uid = document.getElementById('edit-userid').value;
     const isDisabled = document.getElementById('edit-disabled').value === "true";
     const expire = document.getElementById('edit-expire').value;
     const pass = document.getElementById('edit-password').value; 
     
+    btn.disabled = true;
+    btnText.textContent = "保存中...";
+
+    // 1. 如果有新头像，先上传头像
+    if (currentAvatarUrl || currentAvatarFile) {
+        const formData = new FormData();
+        formData.append('user_id', uid);
+        
+        if (currentAvatarFile) {
+            formData.append('file', currentAvatarFile);
+        } else {
+            formData.append('url', currentAvatarUrl);
+        }
+        
+        try {
+            await fetch('/api/manage/user/image', {
+                method: 'POST',
+                body: formData
+            });
+        } catch (e) {
+            console.error("头像上传失败", e);
+        }
+    }
+    
+    // 2. 更新其他信息
     const res = await fetch('/api/manage/user/update', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -377,12 +479,14 @@ async function submitEditUser() {
     
     const json = await res.json();
     if (json.status === 'success') {
-        alert(json.message);
         closeEditUserModal();
         loadUsers();
     } else {
         alert(json.message);
     }
+    
+    btn.disabled = false;
+    btnText.textContent = "保存修改";
 }
 
 async function deleteUser(uid) {
