@@ -25,8 +25,6 @@ class CalendarService:
     def get_weekly_calendar(self, force_refresh=False, week_offset=0):
         """
         获取周历
-        :param force_refresh: 强制刷新
-        :param week_offset: 周偏移量 (0=本周, 1=下周, -1=上周)
         """
         now = time.time()
         
@@ -72,42 +70,56 @@ class CalendarService:
                 except Exception as e:
                     logger.error(f"Calendar Task Error: {e}")
 
-        # 🔥 新增步骤：合并同一天的同一部剧 (Episode 13, 14 -> 13-14)
+        # 🔥 5. 核心修复：智能合并与去重
         for i in range(7):
             raw_items = week_data[i]
             if not raw_items: continue
 
-            # 按 series_id 分组
+            # 关键点：按 (tmdb_id, season) 分组
+            # 这样即使 Emby 里有多个重复的剧集条目，只要是同一部剧，就会被归到一组
             grouped = {}
             for item in raw_items:
-                sid = item['series_id']
-                if sid not in grouped:
-                    grouped[sid] = []
-                grouped[sid].append(item)
+                # 优先使用 tmdb_id，没有则回退到 series_id
+                key = (item.get('tmdb_id') or item['series_id'], item['season'])
+                if key not in grouped:
+                    grouped[key] = []
+                grouped[key].append(item)
             
             # 执行合并
             merged_items = []
-            for sid, group in grouped.items():
-                if len(group) == 1:
-                    merged_items.append(group[0])
+            for key, group in grouped.items():
+                # 第一步：组内去重 (防止出现 [13集, 13集, 14集])
+                unique_eps = {}
+                for x in group:
+                    # 以集数为 Key，后面的覆盖前面的，确保唯一
+                    unique_eps[x['episode']] = x
+                
+                # 排序
+                sorted_eps = sorted(unique_eps.values(), key=lambda x: x['episode'])
+                
+                if not sorted_eps: continue
+
+                # 第二步：生成最终显示的卡片
+                if len(sorted_eps) == 1:
+                    # 只有一集，直接添加
+                    merged_items.append(sorted_eps[0])
                 else:
-                    # 排序，确保是 13, 14 而不是 14, 13
-                    group.sort(key=lambda x: x['episode'])
-                    first = group[0]
-                    last = group[-1]
+                    # 有多集，需要合并
+                    first = sorted_eps[0]
+                    last = sorted_eps[-1]
                     
-                    # 复制一份作为合并后的对象
                     merged = first.copy()
                     
-                    # 1. 合并集数: "13-14"
+                    # 1. 合并集数显示: "13-14"
                     merged['episode'] = f"{first['episode']}-{last['episode']}"
                     
-                    # 2. 合并单集标题 (可选，太长就省略)
-                    # merged['ep_name'] = f"{first['ep_name']} ..." 
-
+                    # 2. 🔥 移除单集标题介绍
+                    # 如果显示 "Episode 13"，用户会觉得奇怪，因为它代表了 13-14
+                    # 设为 None 后，前端会回退显示 "Episode 13-14"，非常直观
+                    merged['ep_name'] = None 
+                    
                     # 3. 合并状态 (优先级: 缺失 > 已入库 > 待播)
-                    # 逻辑: 只要有一集缺失，整体就算缺失(提醒去补); 否则只要有一集入了，就算入了
-                    statuses = [x['status'] for x in group]
+                    statuses = [x['status'] for x in sorted_eps]
                     if 'missing' in statuses:
                         merged['status'] = 'missing'
                     elif 'ready' in statuses:
@@ -117,16 +129,14 @@ class CalendarService:
                     
                     merged_items.append(merged)
             
-            # 将合并后的列表放回
             week_data[i] = merged_items
 
-        # 5. 排序与格式化
+        # 6. 排序与格式化
         final_days = []
         week_dates = [start_of_week + datetime.timedelta(days=i) for i in range(7)]
         today_real = datetime.date.today()
         
         for i in range(7):
-            # 按开播时间排序
             items = sorted(week_data[i], key=lambda x: x['air_date'])
             final_days.append({
                 "date": week_dates[i].strftime("%Y-%m-%d"),
@@ -177,6 +187,7 @@ class CalendarService:
         return []
 
     def _fetch_series_status(self, series, api_key, start_date, end_date, proxies):
+        """查询 TMDB 并比对本地库存"""
         tmdb_id = series.get("ProviderIds", {}).get("Tmdb")
         if not tmdb_id: return []
 
@@ -188,6 +199,7 @@ class CalendarService:
             data_series = res_series.json()
             target_seasons = set()
             
+            # 确定要查哪些季
             if data_series.get("last_episode_to_air"):
                 target_seasons.add(data_series["last_episode_to_air"].get("season_number"))
             if data_series.get("next_episode_to_air"):
@@ -237,9 +249,10 @@ class CalendarService:
                             "data": {
                                 "series_name": series.get("Name"),
                                 "series_id": series.get("Id"),
+                                "tmdb_id": tmdb_id, # 🔥 关键：带上 TMDB ID 用于后续分组去重
                                 "ep_name": ep.get("name"),
                                 "season": season_val,
-                                "episode": ep_val, # 这里还是数字，后面聚合时会变成字符串 "13-14"
+                                "episode": ep_val,
                                 "air_date": ep.get("air_date"),
                                 "poster_path": data_series.get("poster_path"),
                                 "status": status,
