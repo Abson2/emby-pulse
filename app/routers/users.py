@@ -49,7 +49,7 @@ def api_manage_users(request: Request):
     
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     
-    # 🔥 获取公开地址，用于前端显示头像
+    # 获取公开地址，用于前端显示头像
     public_host = cfg.get("emby_public_host") or host
     if public_host.endswith('/'): public_host = public_host[:-1]
     
@@ -108,7 +108,7 @@ def get_user_avatar(user_id: str):
     except:
         return Response(status_code=404)
 
-# 🔥 修改用户头像接口 (支持 URL 或 文件)
+# 🔥🔥🔥 核心修复：修改用户头像接口
 @router.post("/api/manage/user/image")
 async def api_update_user_image(
     request: Request,
@@ -119,39 +119,58 @@ async def api_update_user_image(
     if not request.session.get("user"): return {"status": "error", "message": "Unauthorized"}
     
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
-    emby_url = f"{host}/emby/Users/{user_id}/Images/Primary?api_key={key}"
+    # 上传地址
+    post_url = f"{host}/emby/Users/{user_id}/Images/Primary?api_key={key}"
+    # 删除地址 (用于清理旧头像)
+    delete_url = f"{host}/emby/Users/{user_id}/Images/Primary?api_key={key}"
     
     image_data = None
+    content_type = "image/png" # 默认值
     
     try:
+        # 1. 准备数据
         # 情况 A: 传的是 URL (DiceBear)
         if url:
             print(f"🖼️ Downloading avatar from: {url}")
-            # 后端代下载图片
             down_res = requests.get(url, timeout=10)
             if down_res.status_code == 200:
                 image_data = down_res.content
+                # 尝试从响应头获取真实的 Content-Type
+                if 'Content-Type' in down_res.headers:
+                    content_type = down_res.headers['Content-Type']
             else:
                 return {"status": "error", "message": "无法下载该头像"}
         
         # 情况 B: 传的是文件
         elif file:
-            print(f"📂 Receiving file upload: {file.filename}")
+            print(f"📂 Receiving file upload: {file.filename}, Type: {file.content_type}")
             image_data = await file.read()
+            content_type = file.content_type or "image/jpeg" # 如果识别不到，默认 jpg
             
-        if not image_data:
-            return {"status": "error", "message": "未提供有效图片"}
+        if not image_data or len(image_data) == 0:
+            return {"status": "error", "message": "图片数据为空"}
 
-        # 上传到 Emby
-        headers = {"Content-Type": "image/png"} 
-        up_res = requests.post(emby_url, data=image_data, headers=headers)
+        print(f"🚀 Uploading to Emby... Size: {len(image_data)} bytes, Type: {content_type}")
+
+        # 2. 先删除旧头像 (防止 Emby 缓存不更新)
+        try:
+            requests.delete(delete_url)
+        except: pass # 如果本来就没头像，这里可能会 404，忽略
+
+        # 3. 上传新头像
+        # 关键修复：使用正确的 Content-Type
+        headers = {"Content-Type": content_type}
+        up_res = requests.post(post_url, data=image_data, headers=headers)
         
-        if up_res.status_code == 204:
+        if up_res.status_code in [200, 204]:
+            print("✅ Avatar updated successfully.")
             return {"status": "success"}
         else:
+            print(f"❌ Emby Upload Failed: {up_res.status_code} - {up_res.text}")
             return {"status": "error", "message": f"Emby 返回错误: {up_res.status_code}"}
 
     except Exception as e:
+        print(f"❌ Exception: {e}")
         return {"status": "error", "message": str(e)}
 
 # 生成邀请码接口 (保留功能)
