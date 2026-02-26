@@ -48,6 +48,11 @@ def api_manage_users(request: Request):
     check_expired_users()
     
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
+    
+    # 🔥 获取公开地址，用于前端显示头像
+    public_host = cfg.get("emby_public_host") or host
+    if public_host.endswith('/'): public_host = public_host[:-1]
+    
     try:
         res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=5)
         if res.status_code != 200: return {"status": "error", "message": "Emby API Error"}
@@ -70,9 +75,14 @@ def api_manage_users(request: Request):
                 "IsAdmin": policy.get('IsAdministrator', False),
                 "ExpireDate": meta.get('expire_date'), 
                 "Note": meta.get('note'), 
-                "PrimaryImageTag": u.get('PrimaryImageTag')
+                "PrimaryImageTag": u.get('PrimaryImageTag') # 确保这个字段被传递
             })
-        return {"status": "success", "data": final_list}
+            
+        return {
+            "status": "success", 
+            "data": final_list, 
+            "emby_url": public_host # 🔥 返回给前端
+        }
     except Exception as e: return {"status": "error", "message": str(e)}
 
 # 生成邀请码接口 (保留功能)
@@ -109,7 +119,7 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
             if exist: query_db("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (expire_val, data.user_id))
             else: query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (data.user_id, expire_val, datetime.datetime.now().isoformat()))
         
-        # 2. 🔥 修改密码 (新增功能)
+        # 2. 修改密码
         if data.password:
             print(f"🔐 Resetting Password for {data.user_id}")
             pwd_res = requests.post(f"{host}/emby/Users/{data.user_id}/Password?api_key={key}", 

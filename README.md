@@ -5,7 +5,7 @@
   <br/>
   <h3>Emby 服务器的高级伴侣：数据洞察、报表生成与自动化助手</h3>
   <br/>
-  <a href="https://t.me/Emby_Pluse">
+  <a href="https://t.me/Emby_Pulse">
     <img src="https://img.shields.io/badge/Telegram-加入交流群-2CA5E0?style=for-the-badge&logo=telegram" alt="Telegram Group">
   </a>
   <br/>

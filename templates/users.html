@@ -134,6 +134,7 @@
 
 <script>
 let users = [];
+let embyUrl = ""; // 🔥 新增：存储 Emby 地址
 let selectedDuration = 30; 
 
 document.addEventListener('DOMContentLoaded', loadUsers);
@@ -143,19 +144,32 @@ async function loadUsers() {
     const json = await res.json();
     if (json.status === 'success') {
         users = json.data;
+        embyUrl = json.emby_url || ""; // 获取后端传来的 URL
         renderUsers();
     }
 }
 
 function renderUsers() {
     const tbody = document.getElementById('user-list-body');
-    tbody.innerHTML = users.map(u => `
+    tbody.innerHTML = users.map(u => {
+        // 🔥 头像显示逻辑
+        let avatarHtml = '';
+        if (u.PrimaryImageTag) {
+            const imgUrl = `${embyUrl}/emby/Users/${u.Id}/Images/Primary?tag=${u.PrimaryImageTag}&quality=90`;
+            avatarHtml = `<img src="${imgUrl}" class="w-8 h-8 rounded-full object-cover">`;
+        } else {
+            avatarHtml = `
+                <div class="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs">
+                    ${u.Name[0].toUpperCase()}
+                </div>
+            `;
+        }
+
+        return `
         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
             <td class="px-6 py-4">
                 <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold">
-                        ${u.Name[0].toUpperCase()}
-                    </div>
+                    ${avatarHtml}
                     <div>
                         <div class="font-medium text-gray-900 dark:text-white">${u.Name}</div>
                         ${u.IsAdmin ? '<span class="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">管理员</span>' : ''}
@@ -178,7 +192,7 @@ function renderUsers() {
                 <button onclick="deleteUser('${u.Id}')" class="text-red-500 hover:text-red-700 text-sm">删除</button>
             </td>
         </tr>
-    `).join('');
+    `}).join('');
 }
 
 // --- 邀请相关 ---
@@ -272,7 +286,7 @@ async function submitNewUser() {
     }
 }
 
-// --- 🔥 编辑用户相关 ---
+// --- 编辑用户相关 ---
 function openEditUserModal(uid) {
     const user = users.find(u => u.Id === uid);
     if(!user) return;
@@ -298,7 +312,7 @@ async function submitEditUser() {
     const uid = document.getElementById('edit-userid').value;
     const isDisabled = document.getElementById('edit-disabled').value === "true";
     const expire = document.getElementById('edit-expire').value;
-    const pass = document.getElementById('edit-password').value; // 获取密码
+    const pass = document.getElementById('edit-password').value; 
     
     const res = await fetch('/api/manage/user/update', {
         method: 'POST',
@@ -307,7 +321,7 @@ async function submitEditUser() {
             user_id: uid, 
             is_disabled: isDisabled,
             expire_date: expire || "",
-            password: pass || null // 如果为空，传null
+            password: pass || null 
         })
     });
     
