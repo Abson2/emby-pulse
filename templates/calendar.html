@@ -76,6 +76,8 @@
 
 <script>
 let currentOffset = 0;
+// 🔥 核心修改：接收后端注入的公网地址
+const embyPublicUrl = "{{ emby_public_url }}";
 const DEFAULT_EMBY_URL = "http://192.168.31.2:8096";
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -87,16 +89,14 @@ function changeWeek(offset) {
     fetchCalendar(false);
 }
 
-// 🔥 新增：修改缓存时间
+// 修改缓存时间
 async function updateTTL(val) {
     try {
-        // 1. 保存配置
         await fetch('/api/calendar/config', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ ttl: parseInt(val) })
         });
-        // 2. 强制刷新数据
         fetchCalendar(true);
     } catch (e) {
         alert("配置保存失败");
@@ -141,12 +141,13 @@ async function fetchCalendar(forceRefresh = false) {
             dateRangeEl.textContent = label;
         }
 
-        // 🔥 回显当前 TTL 配置
+        // 回显当前 TTL 配置
         if (data.current_ttl) {
             ttlSelect.value = data.current_ttl;
         }
 
-        renderCalendar(data.days, data.emby_url);
+        // 这里不再用后端传回来的 emby_url，而是优先用 embyPublicUrl
+        renderCalendar(data.days);
         loadingEl.classList.add('hidden');
         gridEl.classList.remove('hidden');
 
@@ -159,10 +160,12 @@ async function fetchCalendar(forceRefresh = false) {
     }
 }
 
-function renderCalendar(days, embyUrlFromApi) {
+function renderCalendar(days) {
     const container = document.getElementById('calendar-grid');
     container.innerHTML = '';
-    const embyBaseUrl = embyUrlFromApi || DEFAULT_EMBY_URL;
+    
+    // 🔥 优先使用公网地址，没有则用默认内网
+    const embyBaseUrl = embyPublicUrl || DEFAULT_EMBY_URL;
     const imgBase = "https://image.tmdb.org/t/p/w300";
 
     days.forEach(day => {
