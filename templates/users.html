@@ -36,7 +36,7 @@
     </div>
 </div>
 
-<div id="new-user-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm">
+<div id="new-user-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-100">
         <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4">新建用户</h3>
         <div class="space-y-4">
@@ -59,9 +59,10 @@
     </div>
 </div>
 
-<div id="invite-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm">
+<div id="invite-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6">
         <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4">生成邀请链接</h3>
+        
         <div class="space-y-4" id="invite-form-step">
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">账号有效期 (到期自动禁用)</label>
@@ -76,17 +77,26 @@
                 </div>
             </div>
             <div class="flex justify-end gap-3 mt-6">
-                <button onclick="document.getElementById('invite-modal').classList.add('hidden')" class="px-4 py-2 text-gray-500">取消</button>
+                <button onclick="closeInviteModal()" class="px-4 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">取消</button>
                 <button onclick="generateInvite()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg">生成链接</button>
             </div>
         </div>
 
         <div id="invite-result-step" class="hidden text-center space-y-4">
-            <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg break-all font-mono text-sm text-gray-600 dark:text-gray-300 select-all" id="invite-link-box">
+            <div class="bg-green-50 dark:bg-green-900/20 p-4 rounded-full inline-flex items-center justify-center mb-2">
+                <i class="fa-solid fa-check text-3xl text-green-500"></i>
+            </div>
+            <h4 class="text-lg font-bold text-gray-900 dark:text-white">链接已生成</h4>
+            <p class="text-sm text-gray-500 dark:text-gray-400">将下方链接发送给好友，即可邀请注册。</p>
+            
+            <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg break-all font-mono text-sm text-gray-600 dark:text-gray-300 select-all border border-gray-100 dark:border-gray-700" id="invite-link-box">
                 ...
             </div>
-            <div class="flex justify-center gap-3">
-                <button onclick="copyInvite()" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">复制链接</button>
+            <div class="flex justify-center gap-3 mt-6">
+                <button onclick="closeInviteModal()" class="px-6 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">完成</button>
+                <button onclick="copyInvite()" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2">
+                    <i class="fa-regular fa-copy"></i> 复制链接
+                </button>
             </div>
         </div>
     </div>
@@ -140,13 +150,23 @@ function renderUsers() {
     `).join('');
 }
 
-// --- 🔥 新增：邀请相关逻辑 ---
+// --- 邀请相关逻辑 ---
 function openInviteModal() {
-    document.getElementById('invite-modal').classList.remove('hidden');
+    const modal = document.getElementById('invite-modal');
+    modal.classList.remove('hidden');
+    // 确保显示表单页，隐藏结果页
     document.getElementById('invite-form-step').classList.remove('hidden');
     document.getElementById('invite-result-step').classList.add('hidden');
     // 重置选中状态
-    selectDuration(30); 
+    selectDuration(30);
+    // 动画 hack: 先 remove hidden，再加 flex，确保居中生效
+    setTimeout(() => { modal.classList.add('flex'); }, 10);
+}
+
+function closeInviteModal() {
+    const modal = document.getElementById('invite-modal');
+    modal.classList.remove('flex');
+    modal.classList.add('hidden');
 }
 
 function selectDuration(days) {
@@ -158,7 +178,6 @@ function selectDuration(days) {
     // 找到对应按钮高亮
     const btns = document.querySelectorAll('.dur-btn');
     for (let btn of btns) {
-        // 根据 onclick 内容判断比较粗糙，但这里够用
         if (btn.getAttribute('onclick').includes(`selectDuration(${days})`)) {
             btn.classList.remove('border-gray-200', 'dark:border-gray-600');
             btn.classList.add('bg-indigo-50', 'border-indigo-500', 'text-indigo-600', 'dark:bg-indigo-900/50', 'dark:text-indigo-300');
@@ -190,8 +209,16 @@ function copyInvite() {
 }
 
 // --- 原有：新建用户逻辑 ---
-function openNewUserModal() { document.getElementById('new-user-modal').classList.remove('hidden'); }
-function closeNewUserModal() { document.getElementById('new-user-modal').classList.add('hidden'); }
+function openNewUserModal() { 
+    const modal = document.getElementById('new-user-modal');
+    modal.classList.remove('hidden');
+    setTimeout(() => { modal.classList.add('flex'); }, 10);
+}
+function closeNewUserModal() { 
+    const modal = document.getElementById('new-user-modal');
+    modal.classList.remove('flex');
+    modal.classList.add('hidden');
+}
 
 async function submitNewUser() {
     const name = document.getElementById('new-username').value;
