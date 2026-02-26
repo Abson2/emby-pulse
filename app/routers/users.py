@@ -5,6 +5,7 @@ from app.core.database import query_db
 import requests
 import datetime
 import secrets
+import base64  # 🔥 引入 base64
 
 router = APIRouter()
 
@@ -108,7 +109,7 @@ def get_user_avatar(user_id: str):
     except:
         return Response(status_code=404)
 
-# 🔥🔥🔥 核心修复：修改用户头像接口
+# 🔥🔥🔥 核心修复：修改用户头像接口 (Base64 转码)
 @router.post("/api/manage/user/image")
 async def api_update_user_image(
     request: Request,
@@ -135,7 +136,6 @@ async def api_update_user_image(
             down_res = requests.get(url, timeout=10)
             if down_res.status_code == 200:
                 image_data = down_res.content
-                # 尝试从响应头获取真实的 Content-Type
                 if 'Content-Type' in down_res.headers:
                     content_type = down_res.headers['Content-Type']
             else:
@@ -145,22 +145,25 @@ async def api_update_user_image(
         elif file:
             print(f"📂 Receiving file upload: {file.filename}, Type: {file.content_type}")
             image_data = await file.read()
-            content_type = file.content_type or "image/jpeg" # 如果识别不到，默认 jpg
+            content_type = file.content_type or "image/jpeg"
             
         if not image_data or len(image_data) == 0:
             return {"status": "error", "message": "图片数据为空"}
 
-        print(f"🚀 Uploading to Emby... Size: {len(image_data)} bytes, Type: {content_type}")
+        # 🔥 关键修复：Emby 要求 Body 必须是 Base64 字符串
+        b64_data = base64.b64encode(image_data)
+        
+        print(f"🚀 Uploading to Emby (Base64)... Original Size: {len(image_data)} bytes")
 
         # 2. 先删除旧头像 (防止 Emby 缓存不更新)
         try:
             requests.delete(delete_url)
-        except: pass # 如果本来就没头像，这里可能会 404，忽略
+        except: pass 
 
         # 3. 上传新头像
-        # 关键修复：使用正确的 Content-Type
+        # 虽然 Body 是 Base64，但 Content-Type 依然建议传图片类型，或者 application/octet-stream
         headers = {"Content-Type": content_type}
-        up_res = requests.post(post_url, data=image_data, headers=headers)
+        up_res = requests.post(post_url, data=b64_data, headers=headers)
         
         if up_res.status_code in [200, 204]:
             print("✅ Avatar updated successfully.")
