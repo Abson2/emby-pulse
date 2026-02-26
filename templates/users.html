@@ -45,11 +45,12 @@
                 <input type="text" id="new-username" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
             <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">密码 (可选)</label>
+                <input type="password" id="new-password" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="留空则无密码">
+            </div>
+            <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">有效期 (留空为永久)</label>
                 <input type="date" id="new-expire" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
-            </div>
-            <div class="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg text-xs text-yellow-700 dark:text-yellow-400">
-                ⚠️ 注意：Emby 接口限制，新建用户密码默认为空。请创建后通知用户登录并修改密码。
             </div>
             <div class="flex justify-end gap-3 mt-6">
                 <button onclick="closeNewUserModal()" class="px-4 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">取消</button>
@@ -59,10 +60,37 @@
     </div>
 </div>
 
+<div id="edit-user-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-100">
+        <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4">编辑用户</h3>
+        <input type="hidden" id="edit-userid">
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">当前用户</label>
+                <input type="text" id="edit-username" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-900/50 text-gray-500 cursor-not-allowed" disabled>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">账号状态</label>
+                <select id="edit-disabled" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <option value="false">✅ 正常启用</option>
+                    <option value="true">🚫 禁用账号</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">有效期 (留空为永久)</label>
+                <input type="date" id="edit-expire" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button onclick="closeEditUserModal()" class="px-4 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">取消</button>
+                <button onclick="submitEditUser()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">保存修改</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div id="invite-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6">
         <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4">生成邀请链接</h3>
-        
         <div class="space-y-4" id="invite-form-step">
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">账号有效期 (到期自动禁用)</label>
@@ -89,9 +117,7 @@
             <h4 class="text-lg font-bold text-gray-900 dark:text-white">链接已生成</h4>
             <p class="text-sm text-gray-500 dark:text-gray-400">将下方链接发送给好友，即可邀请注册。</p>
             
-            <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg break-all font-mono text-sm text-gray-600 dark:text-gray-300 select-all border border-gray-100 dark:border-gray-700" id="invite-link-box">
-                ...
-            </div>
+            <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg break-all font-mono text-sm text-gray-600 dark:text-gray-300 select-all border border-gray-100 dark:border-gray-700" id="invite-link-box">...</div>
             <div class="flex justify-center gap-3 mt-6">
                 <button onclick="closeInviteModal()" class="px-6 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">完成</button>
                 <button onclick="copyInvite()" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2">
@@ -104,7 +130,7 @@
 
 <script>
 let users = [];
-let selectedDuration = 30; // 默认选中30天
+let selectedDuration = 30; 
 
 document.addEventListener('DOMContentLoaded', loadUsers);
 
@@ -143,23 +169,21 @@ function renderUsers() {
             <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                 ${u.LastLoginDate ? new Date(u.LastLoginDate).toLocaleDateString() : '从未'}
             </td>
-            <td class="px-6 py-4 text-right">
+            <td class="px-6 py-4 text-right space-x-2">
+                <button onclick="openEditUserModal('${u.Id}')" class="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 text-sm">编辑</button>
                 <button onclick="deleteUser('${u.Id}')" class="text-red-500 hover:text-red-700 text-sm">删除</button>
             </td>
         </tr>
     `).join('');
 }
 
-// --- 邀请相关逻辑 ---
+// --- 邀请相关 ---
 function openInviteModal() {
     const modal = document.getElementById('invite-modal');
     modal.classList.remove('hidden');
-    // 确保显示表单页，隐藏结果页
     document.getElementById('invite-form-step').classList.remove('hidden');
     document.getElementById('invite-result-step').classList.add('hidden');
-    // 重置选中状态
     selectDuration(30);
-    // 动画 hack: 先 remove hidden，再加 flex，确保居中生效
     setTimeout(() => { modal.classList.add('flex'); }, 10);
 }
 
@@ -175,7 +199,6 @@ function selectDuration(days) {
         btn.classList.remove('bg-indigo-50', 'border-indigo-500', 'text-indigo-600', 'dark:bg-indigo-900/50', 'dark:text-indigo-300');
         btn.classList.add('border-gray-200', 'dark:border-gray-600');
     });
-    // 找到对应按钮高亮
     const btns = document.querySelectorAll('.dur-btn');
     for (let btn of btns) {
         if (btn.getAttribute('onclick').includes(`selectDuration(${days})`)) {
@@ -208,7 +231,7 @@ function copyInvite() {
     navigator.clipboard.writeText(text).then(() => alert('✅ 已复制到剪贴板'));
 }
 
-// --- 原有：新建用户逻辑 ---
+// --- 新建用户相关 ---
 function openNewUserModal() { 
     const modal = document.getElementById('new-user-modal');
     modal.classList.remove('hidden');
@@ -222,18 +245,65 @@ function closeNewUserModal() {
 
 async function submitNewUser() {
     const name = document.getElementById('new-username').value;
+    const pass = document.getElementById('new-password').value; // 获取密码
     const expire = document.getElementById('new-expire').value;
     if (!name) return alert("请输入用户名");
     
     const res = await fetch('/api/manage/user/new', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ name, expire_date: expire || null })
+        body: JSON.stringify({ name, password: pass, expire_date: expire || null })
     });
     const json = await res.json();
     if (json.status === 'success') {
         alert(json.message);
         closeNewUserModal();
+        loadUsers();
+    } else {
+        alert(json.message);
+    }
+}
+
+// --- 🔥 新增：编辑用户相关 ---
+function openEditUserModal(uid) {
+    const user = users.find(u => u.Id === uid);
+    if(!user) return;
+    
+    document.getElementById('edit-userid').value = uid;
+    document.getElementById('edit-username').value = user.Name;
+    document.getElementById('edit-disabled').value = user.IsDisabled ? "true" : "false";
+    document.getElementById('edit-expire').value = user.ExpireDate || '';
+    
+    const modal = document.getElementById('edit-user-modal');
+    modal.classList.remove('hidden');
+    setTimeout(() => { modal.classList.add('flex'); }, 10);
+}
+
+function closeEditUserModal() {
+    const modal = document.getElementById('edit-user-modal');
+    modal.classList.remove('flex');
+    modal.classList.add('hidden');
+}
+
+async function submitEditUser() {
+    const uid = document.getElementById('edit-userid').value;
+    const isDisabled = document.getElementById('edit-disabled').value === "true";
+    const expire = document.getElementById('edit-expire').value;
+    
+    const res = await fetch('/api/manage/user/update', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ 
+            user_id: uid, 
+            is_disabled: isDisabled,
+            expire_date: expire || "" // 传空字符串会被后端转为 Null (永久)
+        })
+    });
+    
+    const json = await res.json();
+    if (json.status === 'success') {
+        alert(json.message);
+        closeEditUserModal();
         loadUsers();
     } else {
         alert(json.message);

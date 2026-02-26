@@ -8,7 +8,7 @@ import secrets
 
 router = APIRouter()
 
-# 🔥 新增：自动检查过期用户并禁用
+# 🔥 自动检查过期用户并禁用
 def check_expired_users():
     try:
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -44,7 +44,7 @@ def api_manage_users(request: Request):
     """
     if not request.session.get("user"): return {"status": "error"}
     
-    # 🔥 每次获取列表时，顺手检查一下过期状态
+    # 每次获取列表时，顺手检查一下过期状态
     check_expired_users()
     
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -75,12 +75,12 @@ def api_manage_users(request: Request):
         return {"status": "success", "data": final_list}
     except Exception as e: return {"status": "error", "message": str(e)}
 
-# 🔥 新增：生成邀请码接口
+# 生成邀请码接口
 @router.post("/api/manage/invite/gen")
 def api_gen_invite(data: InviteGenModel, request: Request):
     if not request.session.get("user"): return {"status": "error"}
     try:
-        # 生成 6 位随机码 (例如 a1b2c3)
+        # 生成 6 位随机码
         code = secrets.token_hex(3) 
         created_at = datetime.datetime.now().isoformat()
         
@@ -94,7 +94,6 @@ def api_gen_invite(data: InviteGenModel, request: Request):
 def api_manage_user_update(data: UserUpdateModel, request: Request):
     """
     更新用户：只处理 停用/启用 和 过期时间
-    已移除密码修改功能
     """
     if not request.session.get("user"): return {"status": "error"}
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -103,9 +102,12 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
     try:
         # 1. 更新数据库有效期 (本地业务)
         if data.expire_date is not None:
+            # 如果传的是空字符串，转为 None 存入数据库（表示永久）
+            expire_val = data.expire_date if data.expire_date else None
+            
             exist = query_db("SELECT 1 FROM users_meta WHERE user_id = ?", (data.user_id,), one=True)
-            if exist: query_db("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (data.expire_date, data.user_id))
-            else: query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (data.user_id, data.expire_date, datetime.datetime.now().isoformat()))
+            if exist: query_db("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (expire_val, data.user_id))
+            else: query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (data.user_id, expire_val, datetime.datetime.now().isoformat()))
         
         # 2. 刷新策略 (仅处理 停用/启用)
         if data.is_disabled is not None:
@@ -122,7 +124,7 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
                 if r.status_code != 204:
                     print(f"⚠️ Policy Update Warning: {r.status_code}")
 
-        return {"status": "success", "message": "设置已更新 (密码修改功能已禁用)"}
+        return {"status": "success", "message": "设置已更新"}
     except Exception as e: 
         print(f"❌ Error: {e}")
         return {"status": "error", "message": str(e)}
@@ -130,8 +132,7 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
 @router.post("/api/manage/user/new")
 def api_manage_user_new(data: NewUserModel, request: Request):
     """
-    新建用户：创建用户 + 初始化策略 + 设置过期时间
-    不设置密码，返回提示信息
+    新建用户：创建用户 + 设置密码 + 初始化策略 + 设置过期时间
     """
     if not request.session.get("user"): return {"status": "error"}
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -142,16 +143,20 @@ def api_manage_user_new(data: NewUserModel, request: Request):
         if res.status_code != 200: return {"status": "error", "message": f"创建失败: {res.text}"}
         new_id = res.json()['Id']
         
-        # 2. 立即初始化策略 (防止默认被禁用)
+        # 2. 🔥 设置密码 (如果提供了)
+        if data.password:
+            pwd_res = requests.post(f"{host}/emby/Users/{new_id}/Password?api_key={key}", json={"Id": new_id, "NewPw": data.password})
+            if pwd_res.status_code not in [200, 204]:
+                print(f"⚠️ Set Password Failed: {pwd_res.status_code}")
+        
+        # 3. 立即初始化策略 (防止默认被禁用)
         requests.post(f"{host}/emby/Users/{new_id}/Policy?api_key={key}", json={"IsDisabled": False, "LoginAttemptsBeforeLockout": -1})
         
-        # 3. 记录有效期
+        # 4. 记录有效期
         if data.expire_date:
             query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (new_id, data.expire_date, datetime.datetime.now().isoformat()))
             
-        # 🔥 修改提示语：明确告知密码为空
-        msg = "用户创建成功！当前账号密码为空，如需修改密码，请通知用户前往 Emby 客户端自行设置。"
-        return {"status": "success", "message": msg}
+        return {"status": "success", "message": "用户创建成功"}
 
     except Exception as e: return {"status": "error", "message": str(e)}
 
