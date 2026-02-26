@@ -85,7 +85,7 @@ def api_manage_users(request: Request):
         }
     except Exception as e: return {"status": "error", "message": str(e)}
 
-# 🔥 用户头像代理接口 (解决头像裂开问题)
+# 🔥 用户头像代理接口 (增加缓存控制)
 @router.get("/api/user/image/{user_id}")
 def get_user_avatar(user_id: str):
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -97,14 +97,18 @@ def get_user_avatar(user_id: str):
         res = requests.get(img_url, timeout=5)
         
         if res.status_code == 200:
-            return Response(content=res.content, media_type="image/jpeg")
+            # 🔥 增加 Cache-Control 头，防止浏览器缓存旧头像
+            return Response(
+                content=res.content, 
+                media_type="image/jpeg",
+                headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+            )
         else:
-            # 如果没有头像，返回 404，前端会显示默认圆圈
             return Response(status_code=404)
     except:
         return Response(status_code=404)
 
-# 🔥🔥🔥 新增：修改用户头像接口 (支持 URL 或 文件)
+# 🔥 修改用户头像接口 (支持 URL 或 文件)
 @router.post("/api/manage/user/image")
 async def api_update_user_image(
     request: Request,
@@ -139,8 +143,7 @@ async def api_update_user_image(
             return {"status": "error", "message": "未提供有效图片"}
 
         # 上传到 Emby
-        # Emby API 接收二进制 Body，Content-Type 设为 image/*
-        headers = {"Content-Type": "image/png"} # DiceBear 默认png，通用性较好
+        headers = {"Content-Type": "image/png"} 
         up_res = requests.post(emby_url, data=image_data, headers=headers)
         
         if up_res.status_code == 204:

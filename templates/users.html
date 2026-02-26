@@ -74,20 +74,25 @@
                 <input type="file" id="edit-avatar-file" accept="image/*" class="hidden" onchange="previewFileAvatar()">
             </div>
             
-            <div class="flex gap-2 mb-3">
+            <div class="flex gap-2 mb-4">
                 <button onclick="generateRandomAvatar()" class="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-xs rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition">
-                    <i class="fa-solid fa-dice mr-1"></i> 换一换
+                    <i class="fa-solid fa-dice mr-1"></i> 随机生成
                 </button>
                 <button onclick="document.getElementById('edit-avatar-file').click()" class="px-3 py-1.5 bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition">
-                    <i class="fa-solid fa-upload mr-1"></i> 上传
+                    <i class="fa-solid fa-upload mr-1"></i> 上传图片
                 </button>
             </div>
 
-            <div class="flex gap-2">
-                <img onclick="setAvatarPreset('micah')" src="https://api.dicebear.com/9.x/micah/png?seed=Felix" class="w-8 h-8 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600">
-                <img onclick="setAvatarPreset('bottts')" src="https://api.dicebear.com/9.x/bottts/png?seed=Zoe" class="w-8 h-8 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600">
-                <img onclick="setAvatarPreset('avataaars')" src="https://api.dicebear.com/9.x/avataaars/png?seed=Jack" class="w-8 h-8 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600">
-                <img onclick="setAvatarPreset('notionists')" src="https://api.dicebear.com/9.x/notionists/png?seed=Abby" class="w-8 h-8 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600">
+            <div class="grid grid-cols-4 gap-3">
+                <img onclick="setAvatarPreset('micah')" src="https://api.dicebear.com/9.x/micah/png?seed=Felix" title="Micah" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600 bg-gray-50">
+                <img onclick="setAvatarPreset('bottts')" src="https://api.dicebear.com/9.x/bottts/png?seed=Zoe" title="Robots" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600 bg-gray-50">
+                <img onclick="setAvatarPreset('avataaars')" src="https://api.dicebear.com/9.x/avataaars/png?seed=Jack" title="Avatars" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600 bg-gray-50">
+                <img onclick="setAvatarPreset('notionists')" src="https://api.dicebear.com/9.x/notionists/png?seed=Abby" title="Notion" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600 bg-gray-50">
+                
+                <img onclick="setAvatarPreset('fun-emoji')" src="https://api.dicebear.com/9.x/fun-emoji/png?seed=Leo" title="Emoji" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600 bg-gray-50">
+                <img onclick="setAvatarPreset('lorelei')" src="https://api.dicebear.com/9.x/lorelei/png?seed=Sasha" title="Lorelei" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600 bg-gray-50">
+                <img onclick="setAvatarPreset('open-peeps')" src="https://api.dicebear.com/9.x/open-peeps/png?seed=Sam" title="Peeps" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600 bg-gray-50">
+                <img onclick="setAvatarPreset('adventurer')" src="https://api.dicebear.com/9.x/adventurer/png?seed=Max" title="Adventurer" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600 bg-gray-50">
             </div>
         </div>
 
@@ -168,7 +173,7 @@ let users = [];
 let embyUrl = ""; 
 let selectedDuration = 30; 
 
-// 🔥 头像管理状态
+// 头像管理状态
 let currentAvatarUrl = "";
 let currentAvatarFile = null;
 
@@ -189,7 +194,9 @@ function renderUsers() {
     const mobileBody = document.getElementById('user-list-body-mobile');
     
     const getAvatar = (u) => {
-        const proxyUrl = `/api/user/image/${u.Id}`;
+        // 🔥 核心修改：增加 ?v=Tag 来强制刷新缓存
+        const proxyUrl = `/api/user/image/${u.Id}?v=${u.PrimaryImageTag || new Date().getTime()}`;
+        
         const fallbackHtml = `
             <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs md:text-sm">
                 ${u.Name[0].toUpperCase()}
@@ -207,6 +214,7 @@ function renderUsers() {
         return fallbackHtml;
     };
 
+    // 渲染桌面表格
     desktopBody.innerHTML = users.map(u => `
         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
             <td class="px-6 py-4">
@@ -236,6 +244,7 @@ function renderUsers() {
         </tr>
     `).join('');
 
+    // 渲染移动端卡片
     mobileBody.innerHTML = users.map(u => `
         <div class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col gap-3">
             <div class="flex justify-between items-start">
@@ -363,7 +372,7 @@ async function submitNewUser() {
     }
 }
 
-// --- 🔥 编辑用户相关 (加强版) ---
+// --- 编辑用户相关 ---
 function openEditUserModal(uid) {
     const user = users.find(u => u.Id === uid);
     if(!user) return;
@@ -374,15 +383,14 @@ function openEditUserModal(uid) {
     document.getElementById('edit-expire').value = user.ExpireDate || '';
     document.getElementById('edit-password').value = ''; 
     
-    // 初始化头像状态 (如果有头像，显示头像；没有则显示 DiceBear 占位)
     currentAvatarUrl = "";
     currentAvatarFile = null;
     
     const preview = document.getElementById('edit-avatar-preview');
+    // 这里使用带时间戳的预览图，确保显示最新的
     if (user.PrimaryImageTag) {
-        preview.src = `/api/user/image/${uid}`;
+        preview.src = `/api/user/image/${uid}?t=${new Date().getTime()}`;
     } else {
-        // 如果没有头像，生成一个基于用户名的随机头像作为默认
         preview.src = `https://api.dicebear.com/9.x/notionists/png?seed=${user.Name}`;
     }
     
@@ -397,19 +405,17 @@ function closeEditUserModal() {
     modal.classList.add('hidden');
 }
 
-// 头像逻辑: 随机生成
 function generateRandomAvatar() {
-    const styles = ['notionists', 'bottts', 'adventurer', 'avataaars', 'big-smile'];
+    const styles = ['notionists', 'bottts', 'adventurer', 'avataaars', 'big-smile', 'fun-emoji', 'lorelei', 'open-peeps'];
     const style = styles[Math.floor(Math.random() * styles.length)];
     const seed = Math.random().toString(36).substring(7);
     const url = `https://api.dicebear.com/9.x/${style}/png?seed=${seed}`;
     
     currentAvatarUrl = url;
-    currentAvatarFile = null; // 清除文件选择
+    currentAvatarFile = null; 
     document.getElementById('edit-avatar-preview').src = url;
 }
 
-// 头像逻辑: 预设
 function setAvatarPreset(style) {
     const seed = Math.random().toString(36).substring(7);
     const url = `https://api.dicebear.com/9.x/${style}/png?seed=${seed}`;
@@ -418,12 +424,11 @@ function setAvatarPreset(style) {
     document.getElementById('edit-avatar-preview').src = url;
 }
 
-// 头像逻辑: 文件预览
 function previewFileAvatar() {
     const fileInput = document.getElementById('edit-avatar-file');
     if (fileInput.files && fileInput.files[0]) {
         currentAvatarFile = fileInput.files[0];
-        currentAvatarUrl = ""; // 清除 URL 模式
+        currentAvatarUrl = ""; 
         
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -444,7 +449,7 @@ async function submitEditUser() {
     btn.disabled = true;
     btnText.textContent = "保存中...";
 
-    // 1. 如果有新头像，先上传头像
+    // 1. 如果有新头像，先上传
     if (currentAvatarUrl || currentAvatarFile) {
         const formData = new FormData();
         formData.append('user_id', uid);
@@ -465,7 +470,7 @@ async function submitEditUser() {
         }
     }
     
-    // 2. 更新其他信息
+    // 2. 更新信息
     const res = await fetch('/api/manage/user/update', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
