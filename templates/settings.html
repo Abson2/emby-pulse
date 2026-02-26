@@ -1,179 +1,208 @@
 {% extends "layout.html" %}
-{% block title %}系统设置 - EmbyPulse{% endblock %}
+
 {% block content %}
-<div class="max-w-4xl mx-auto w-full px-4 md:px-8 py-8 pb-24">
-    
-    <div class="flex items-center justify-between mb-8">
-        <div>
-            <h1 class="text-2xl font-black text-gray-900 dark:text-white">系统设置</h1>
-            <p class="text-xs text-gray-500 mt-1">管理 Emby 连接、安全验证与数据展示规则</p>
+<div class="container mx-auto px-4 py-6 max-w-4xl">
+    <div class="flex items-center gap-3 mb-6">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white">系统设置</h1>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
+        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-server text-indigo-500"></i> Emby 连接 (Docker 内部)
+        </h3>
+        <div class="grid md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Emby 地址 (内网/Docker IP)</label>
+                <input type="text" id="emby_host" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="http://172.17.0.1:8096">
+                <p class="text-xs text-gray-400 mt-1">这是 EmbyPulse 后端连接 Emby Server 用的地址。</p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">API Key</label>
+                <input type="password" id="emby_api_key" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-indigo-500 outline-none">
+                <div class="flex justify-between mt-1">
+                    <p class="text-xs text-gray-400">在 Emby 后台 -> 高级 -> API 密钥 中生成。</p>
+                    <button onclick="toggleShow('emby_api_key')" class="text-xs text-indigo-500 hover:text-indigo-600">显示/隐藏</button>
+                </div>
+            </div>
         </div>
-        <button onclick="saveSettings()" id="save-btn" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-green-200 dark:shadow-none transition flex items-center">
-            <i class="fa-solid fa-save mr-2"></i> 保存配置
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
+        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-globe text-emerald-500"></i> 对外服务设置 (注册回显)
+        </h3>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Emby 公开访问地址 (用户使用)</label>
+                <input type="text" id="emby_public_url" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="https://emby.yourdomain.com">
+                <p class="text-xs text-gray-400 mt-1">此地址将显示在用户注册成功后的“入职卡片”上，方便用户复制登录。</p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">注册后提示语 (可选)</label>
+                <textarea id="welcome_message" rows="3" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="例：推荐使用 Infuse 客户端登录，请勿分享账号。"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
+        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-network-wired text-blue-500"></i> TMDB & 网络
+        </h3>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">TMDB API Key</label>
+                <input type="password" id="tmdb_api_key" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-blue-500 outline-none">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">HTTP 代理 (Proxy)</label>
+                <input type="text" id="proxy_url" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="http://127.0.0.1:7890">
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
+        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-shield-halved text-orange-500"></i> Webhook 安全
+        </h3>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">安全令牌 (Token)</label>
+            <input type="text" id="webhook_token" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-orange-500 outline-none">
+            <p class="text-xs text-gray-400 mt-2">
+                Webhook URL: <span class="font-mono bg-gray-100 dark:bg-gray-900 px-1 rounded select-all" id="webhook-url-preview">...</span>
+            </p>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 mb-6">
+        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-user-slash text-gray-500"></i> 忽略用户 (不统计)
+        </h3>
+        <div id="hidden-users-container" class="flex flex-wrap gap-2 mb-3">
+            </div>
+        <div class="flex gap-2">
+            <select id="user-selector" class="flex-1 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 outline-none">
+                <option value="">选择用户...</option>
+            </select>
+            <button onclick="addHiddenUser()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg text-sm font-medium transition">添加</button>
+        </div>
+    </div>
+
+    <div class="flex justify-end pb-10">
+        <button onclick="saveSettings()" class="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none transition transform hover:scale-105">
+            保存全部设置
         </button>
     </div>
-
-    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6 mb-6">
-        <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider mb-4 flex items-center">
-            <i class="fa-solid fa-server text-blue-500 mr-2"></i> Emby & 安全连接
-        </h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">Emby 服务器地址</label>
-                <input type="text" id="emby_host" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition" placeholder="http://192.168.1.x:8096">
-                <p class="text-[10px] text-gray-400 mt-1">请包含 http:// 或 https://，末尾不要加斜杠</p>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">Emby API Key</label>
-                <input type="password" id="emby_api_key" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition" placeholder="在此输入 API 密钥">
-                <p class="text-[10px] text-gray-400 mt-1">用于获取媒体库信息与用户列表</p>
-            </div>
-            <div class="md:col-span-2 border-t dark:border-gray-700 pt-4 mt-2">
-                <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">Webhook 验证 Token (安全验证)</label>
-                <input type="text" id="webhook_token" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm font-mono text-purple-600 dark:text-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition" placeholder="例如: symedia">
-                <p class="text-[10px] text-gray-400 mt-1">设置后，Webhook URL 必须携带此 Token 才能成功推送消息</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6 mb-6">
-        <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider mb-4 flex items-center">
-            <i class="fa-solid fa-image text-purple-500 mr-2"></i> 外部服务 & 网络
-        </h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">TMDB API Key (可选)</label>
-                <input type="text" id="tmdb_api_key" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition" placeholder="留空则使用内置精选壁纸库">
-                <p class="text-[10px] text-gray-400 mt-1">配置后，登录页将显示实时的热门电影海报</p>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">HTTP 代理 (可选)</label>
-                <input type="text" id="proxy_url" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition" placeholder="http://127.0.0.1:7890">
-                <p class="text-[10px] text-gray-400 mt-1">用于加速访问 TMDB，不影响 Emby 局域网连接</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/50 flex justify-between items-center">
-            <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider flex items-center">
-                <i class="fa-solid fa-users-slash text-red-500 mr-2"></i> 用户可见性管理
-            </h3>
-            <span class="text-xs text-gray-400">关闭开关以隐藏用户</span>
-        </div>
-        
-        <div id="users-list" class="divide-y divide-gray-100 dark:divide-gray-700 max-h-[400px] overflow-y-auto">
-            <div class="p-8 text-center text-gray-400 text-sm"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i> 加载用户列表中...</div>
-        </div>
-    </div>
-
 </div>
-{% endblock %}
 
-{% block scripts %}
 <script>
-    let hiddenUsers = new Set();
+let allUsers = [];
+let hiddenUsers = [];
 
-    async function init() {
-        await loadSettings();
-        await loadUsersList();
+document.addEventListener('DOMContentLoaded', async () => {
+    // 1. 加载所有用户用于下拉框
+    const uRes = await fetch('/api/users');
+    const uJson = await uRes.json();
+    if(uJson.status === 'success') {
+        allUsers = uJson.data;
+        const sel = document.getElementById('user-selector');
+        allUsers.forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.UserId;
+            opt.textContent = u.UserName;
+            sel.appendChild(opt);
+        });
     }
 
-    async function loadSettings() {
-        try {
-            const res = await fetch('/api/settings');
-            const json = await res.json();
-            if(json.status === 'success') {
-                const data = json.data;
-                document.getElementById('emby_host').value = data.emby_host || '';
-                document.getElementById('emby_api_key').value = data.emby_api_key || '';
-                document.getElementById('tmdb_api_key').value = data.tmdb_api_key || '';
-                document.getElementById('proxy_url').value = data.proxy_url || '';
-                document.getElementById('webhook_token').value = data.webhook_token || 'embypulse';
-                
-                if(data.hidden_users) {
-                    data.hidden_users.forEach(uid => hiddenUsers.add(uid));
-                }
-            }
-        } catch(e) { console.error(e); }
+    // 2. 加载设置
+    loadSettings();
+});
+
+async function loadSettings() {
+    const res = await fetch('/api/settings');
+    const json = await res.json();
+    if (json.status === 'success') {
+        const d = json.data;
+        document.getElementById('emby_host').value = d.emby_host || '';
+        document.getElementById('emby_api_key').value = d.emby_api_key || '';
+        document.getElementById('tmdb_api_key').value = d.tmdb_api_key || '';
+        document.getElementById('proxy_url').value = d.proxy_url || '';
+        document.getElementById('webhook_token').value = d.webhook_token || '';
+        
+        // 🔥 加载新字段
+        document.getElementById('emby_public_url').value = d.emby_public_url || '';
+        document.getElementById('welcome_message').value = d.welcome_message || '';
+
+        hiddenUsers = d.hidden_users || [];
+        renderHiddenUsers();
+        updateWebhookPreview();
     }
+}
 
-    async function loadUsersList() {
-        const container = document.getElementById('users-list');
-        try {
-            const res = await fetch('/api/users');
-            const json = await res.json();
-            
-            if(json.status === 'success' && json.data.length > 0) {
-                let html = '';
-                json.data.forEach(user => {
-                    const isHidden = hiddenUsers.has(user.UserId);
-                    const isChecked = !isHidden; 
-                    
-                    html += `
-                    <div class="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
-                        <div class="flex items-center">
-                            <div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-gray-500 dark:text-gray-300 text-xs font-bold mr-3">
-                                ${user.UserName[0].toUpperCase()}
-                            </div>
-                            <div>
-                                <p class="text-sm font-bold text-gray-800 dark:text-gray-200">${user.UserName}</p>
-                                <p class="text-[10px] text-gray-400 font-mono">${user.UserId}</p>
-                            </div>
-                        </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" class="sr-only peer" onchange="toggleUser('${user.UserId}', this.checked)" ${isChecked ? 'checked' : ''}>
-                            <div class="w-11 h-6 bg-gray-200 dark:bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
-                            <span class="ml-3 text-xs font-medium text-gray-500 w-12 text-right">${isChecked ? '显示' : '隐藏'}</span>
-                        </label>
-                    </div>`;
-                });
-                container.innerHTML = html;
-            } else {
-                container.innerHTML = '<div class="p-6 text-center text-sm text-gray-400">暂无用户数据</div>';
-            }
-        } catch(e) { container.innerHTML = '<div class="p-6 text-center text-sm text-red-400">加载失败</div>'; }
+function renderHiddenUsers() {
+    const container = document.getElementById('hidden-users-container');
+    container.innerHTML = '';
+    hiddenUsers.forEach(uid => {
+        const user = allUsers.find(u => u.UserId === uid);
+        const name = user ? user.UserName : uid;
+        
+        const tag = document.createElement('div');
+        tag.className = 'flex items-center gap-2 px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm text-gray-700 dark:text-gray-300';
+        tag.innerHTML = `
+            <span>${name}</span>
+            <button onclick="removeHiddenUser('${uid}')" class="text-gray-400 hover:text-red-500"><i class="fa-solid fa-xmark"></i></button>
+        `;
+        container.appendChild(tag);
+    });
+}
+
+function addHiddenUser() {
+    const sel = document.getElementById('user-selector');
+    const uid = sel.value;
+    if (uid && !hiddenUsers.includes(uid)) {
+        hiddenUsers.push(uid);
+        renderHiddenUsers();
     }
+    sel.value = '';
+}
 
-    function toggleUser(uid, isVisible) {
-        if (isVisible) hiddenUsers.delete(uid);
-        else hiddenUsers.add(uid);
-        event.target.parentElement.querySelector('span').innerText = isVisible ? '显示' : '隐藏';
-    }
+function removeHiddenUser(uid) {
+    hiddenUsers = hiddenUsers.filter(id => id !== uid);
+    renderHiddenUsers();
+}
 
-    async function saveSettings() {
-        const btn = document.getElementById('save-btn');
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-2"></i> 保存中...';
-        btn.disabled = true;
+function updateWebhookPreview() {
+    const token = document.getElementById('webhook_token').value;
+    const host = window.location.origin;
+    document.getElementById('webhook-url-preview').textContent = `${host}/api/v1/webhook?token=${token}`;
+}
 
-        const payload = {
-            emby_host: document.getElementById('emby_host').value,
-            emby_api_key: document.getElementById('emby_api_key').value,
-            tmdb_api_key: document.getElementById('tmdb_api_key').value,
-            proxy_url: document.getElementById('proxy_url').value,
-            webhook_token: document.getElementById('webhook_token').value,
-            hidden_users: Array.from(hiddenUsers)
-        };
+document.getElementById('webhook_token').addEventListener('input', updateWebhookPreview);
 
-        try {
-            const res = await fetch('/api/settings', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(payload)
-            });
-            const json = await res.json();
-            
-            if(json.status === 'success') {
-                alert('✅ 配置已保存');
-                window.location.reload(); 
-            } else {
-                alert('❌ 保存失败: ' + json.message);
-            }
-        } catch(e) { alert('❌ 网络错误'); } 
-        finally { btn.innerHTML = originalText; btn.disabled = false; }
-    }
+async function saveSettings() {
+    const data = {
+        emby_host: document.getElementById('emby_host').value,
+        emby_api_key: document.getElementById('emby_api_key').value,
+        tmdb_api_key: document.getElementById('tmdb_api_key').value,
+        proxy_url: document.getElementById('proxy_url').value,
+        webhook_token: document.getElementById('webhook_token').value,
+        hidden_users: hiddenUsers,
+        // 🔥 保存新字段
+        emby_public_url: document.getElementById('emby_public_url').value,
+        welcome_message: document.getElementById('welcome_message').value
+    };
 
-    init();
+    const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    });
+    const json = await res.json();
+    alert(json.message);
+}
+
+function toggleShow(id) {
+    const input = document.getElementById(id);
+    input.type = input.type === 'password' ? 'text' : 'password';
+}
 </script>
 {% endblock %}

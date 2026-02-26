@@ -10,8 +10,11 @@ class SettingsModel(BaseModel):
     emby_api_key: str
     tmdb_api_key: Optional[str] = ""
     proxy_url: Optional[str] = ""
-    webhook_token: Optional[str] = "embypulse" # 🔥 新增
+    webhook_token: Optional[str] = "embypulse"
     hidden_users: List[str] = []
+    # 🔥 新增配置项
+    emby_public_url: Optional[str] = ""  # 给用户看的公网地址
+    welcome_message: Optional[str] = ""  # 注册后的欢迎/提示语
 
 class BotSettingsModel(BaseModel):
     tg_bot_token: str
@@ -41,13 +44,9 @@ class NewUserModel(BaseModel):
     password: Optional[str] = None 
     expire_date: Optional[str] = None
 
-# 🔥🔥 以下是本次新增的模型 🔥🔥
-
-# 新增：生成邀请码参数
 class InviteGenModel(BaseModel):
-    days: int  # -1=永久, 1, 7, 30...
+    days: int 
 
-# 新增：用户注册参数
 class UserRegisterModel(BaseModel):
     code: str
     username: str

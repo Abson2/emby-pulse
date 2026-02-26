@@ -8,7 +8,7 @@ import datetime
 
 router = APIRouter()
 
-# 🔥 新增：用户自助注册接口
+# 🔥 用户自助注册接口
 @router.post("/api/register")
 async def api_register(data: UserRegisterModel):
     try:
@@ -54,7 +54,15 @@ async def api_register(data: UserRegisterModel):
         # 7. 标记邀请码已用
         query_db("UPDATE invitations SET used_count = used_count + 1 WHERE code = ?", (data.code,))
 
-        return JSONResponse(content={"status": "success"})
+        # 🔥 获取公网地址和欢迎语
+        public_url = cfg.get("emby_public_url") or host # 如果没配公网，回退到内网地址
+        welcome_msg = cfg.get("welcome_message") or "请妥善保管您的账号密码。"
+
+        return JSONResponse(content={
+            "status": "success",
+            "server_url": public_url,
+            "welcome_message": welcome_msg
+        })
 
     except Exception as e:
         return JSONResponse(content={"status": "error", "message": str(e)})
@@ -92,7 +100,7 @@ async def api_login(data: LoginModel, request: Request):
                 "id": user_info.get("Id"),
                 "name": user_info.get("Name"),
                 "is_admin": True,
-                "server_id": res.json().get("ServerId") # 存一下 ServerId 备用
+                "server_id": res.json().get("ServerId") 
             }
             return JSONResponse(content={"status": "success"})
         
@@ -106,7 +114,5 @@ async def api_login(data: LoginModel, request: Request):
 
 @router.get("/logout")
 async def api_logout(request: Request):
-    # 彻底清空 Session
     request.session.clear()
-    # 跳转回登录页
     return RedirectResponse("/login", status_code=302)
