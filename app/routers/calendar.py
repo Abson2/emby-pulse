@@ -9,7 +9,8 @@ async def calendar_page(request: Request):
     """
     返回日历的前端页面 HTML
     """
-    return templates.TemplateResponse("calendar.html", {"request": request, "page": "calendar"})
+    # 统一使用 active_page
+    return templates.TemplateResponse("calendar.html", {"request": request, "active_page": "calendar"})
 
 @router.get("/api/calendar/weekly")
 async def get_weekly_calendar(refresh: bool = False, offset: int = 0): # <--- 增加 offset
