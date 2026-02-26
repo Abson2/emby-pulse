@@ -8,16 +8,16 @@
             用户管理
         </h1>
         <div class="flex gap-2">
-            <button onclick="openInviteModal()" class="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition shadow-sm font-medium">
-                <i class="fa-solid fa-link"></i> 邀请链接
+            <button onclick="openInviteModal()" class="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 text-sm md:px-4 md:py-2 rounded-lg transition shadow-sm font-medium">
+                <i class="fa-solid fa-link"></i> <span class="hidden md:inline">邀请链接</span><span class="md:hidden">邀请</span>
             </button>
-            <button onclick="openNewUserModal()" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition shadow-sm font-medium">
-                <i class="fa-solid fa-user-plus"></i> 新建用户
+            <button onclick="openNewUserModal()" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-sm md:px-4 md:py-2 rounded-lg transition shadow-sm font-medium">
+                <i class="fa-solid fa-user-plus"></i> <span class="hidden md:inline">新建用户</span><span class="md:hidden">新建</span>
             </button>
         </div>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+    <div class="hidden md:block bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-left text-sm text-gray-600 dark:text-gray-300">
                 <thead class="bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-gray-100 font-medium border-b border-gray-100 dark:border-gray-700">
@@ -29,11 +29,14 @@
                         <th class="px-6 py-4 text-right">操作</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100 dark:divide-gray-700" id="user-list-body">
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700" id="user-list-body-desktop">
                     </tbody>
             </table>
         </div>
     </div>
+
+    <div class="grid grid-cols-1 gap-4 md:hidden" id="user-list-body-mobile">
+        </div>
 </div>
 
 <div id="new-user-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4">
@@ -134,7 +137,6 @@
 
 <script>
 let users = [];
-let embyUrl = ""; // 🔥 新增：存储 Emby 地址
 let selectedDuration = 30; 
 
 document.addEventListener('DOMContentLoaded', loadUsers);
@@ -144,32 +146,43 @@ async function loadUsers() {
     const json = await res.json();
     if (json.status === 'success') {
         users = json.data;
-        embyUrl = json.emby_url || ""; // 获取后端传来的 URL
         renderUsers();
     }
 }
 
 function renderUsers() {
-    const tbody = document.getElementById('user-list-body');
-    tbody.innerHTML = users.map(u => {
-        // 🔥 头像显示逻辑
-        let avatarHtml = '';
+    const desktopBody = document.getElementById('user-list-body-desktop');
+    const mobileBody = document.getElementById('user-list-body-mobile');
+    
+    // 生成头像 HTML 的辅助函数
+    const getAvatar = (u) => {
+        // 使用新的代理接口，带上 onerror 回退
+        const proxyUrl = `/api/user/image/${u.Id}`;
+        const fallbackHtml = `
+            <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs md:text-sm">
+                ${u.Name[0].toUpperCase()}
+            </div>`;
+            
         if (u.PrimaryImageTag) {
-            const imgUrl = `${embyUrl}/emby/Users/${u.Id}/Images/Primary?tag=${u.PrimaryImageTag}&quality=90`;
-            avatarHtml = `<img src="${imgUrl}" class="w-8 h-8 rounded-full object-cover">`;
-        } else {
-            avatarHtml = `
-                <div class="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs">
+            return `
+            <div class="relative w-8 h-8 md:w-10 md:h-10">
+                <img src="${proxyUrl}" 
+                     class="w-full h-full rounded-full object-cover absolute inset-0"
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+                <div class="w-full h-full rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs md:text-sm hidden">
                     ${u.Name[0].toUpperCase()}
                 </div>
-            `;
+            </div>`;
         }
+        return fallbackHtml;
+    };
 
-        return `
+    // 1. 渲染桌面端表格
+    desktopBody.innerHTML = users.map(u => `
         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
             <td class="px-6 py-4">
                 <div class="flex items-center gap-3">
-                    ${avatarHtml}
+                    ${getAvatar(u)}
                     <div>
                         <div class="font-medium text-gray-900 dark:text-white">${u.Name}</div>
                         ${u.IsAdmin ? '<span class="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">管理员</span>' : ''}
@@ -192,7 +205,44 @@ function renderUsers() {
                 <button onclick="deleteUser('${u.Id}')" class="text-red-500 hover:text-red-700 text-sm">删除</button>
             </td>
         </tr>
-    `}).join('');
+    `).join('');
+
+    // 2. 渲染移动端卡片
+    mobileBody.innerHTML = users.map(u => `
+        <div class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col gap-3">
+            <div class="flex justify-between items-start">
+                <div class="flex items-center gap-3">
+                    ${getAvatar(u)}
+                    <div>
+                        <div class="font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            ${u.Name}
+                            ${u.IsAdmin ? '<span class="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">Admin</span>' : ''}
+                        </div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            ${u.LastLoginDate ? '上次登录: ' + new Date(u.LastLoginDate).toLocaleDateString() : '从未登录'}
+                        </div>
+                    </div>
+                </div>
+                ${u.IsDisabled 
+                    ? '<span class="px-2 py-1 rounded text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">已禁用</span>' 
+                    : '<span class="px-2 py-1 rounded text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">正常</span>'}
+            </div>
+            
+            <div class="flex items-center justify-between bg-gray-50 dark:bg-gray-700/30 p-2 rounded-lg">
+                <span class="text-xs text-gray-500 dark:text-gray-400">有效期至</span>
+                <span class="text-xs font-mono font-medium text-gray-700 dark:text-gray-300">${u.ExpireDate || '永久有效'}</span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mt-1">
+                <button onclick="openEditUserModal('${u.Id}')" class="flex items-center justify-center gap-1 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
+                    编辑
+                </button>
+                <button onclick="deleteUser('${u.Id}')" class="flex items-center justify-center gap-1 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                    删除
+                </button>
+            </div>
+        </div>
+    `).join('');
 }
 
 // --- 邀请相关 ---

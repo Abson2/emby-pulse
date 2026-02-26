@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from app.schemas.models import UserUpdateModel, NewUserModel, InviteGenModel
 from app.core.config import cfg
 from app.core.database import query_db
@@ -81,9 +81,28 @@ def api_manage_users(request: Request):
         return {
             "status": "success", 
             "data": final_list, 
-            "emby_url": public_host # 🔥 返回给前端
+            "emby_url": public_host 
         }
     except Exception as e: return {"status": "error", "message": str(e)}
+
+# 🔥 新增：用户头像代理接口 (解决头像裂开问题)
+@router.get("/api/user/image/{user_id}")
+def get_user_avatar(user_id: str):
+    key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
+    if not key or not host: return Response(status_code=404)
+    
+    try:
+        # 尝试获取用户头像
+        img_url = f"{host}/emby/Users/{user_id}/Images/Primary?api_key={key}&quality=90"
+        res = requests.get(img_url, timeout=5)
+        
+        if res.status_code == 200:
+            return Response(content=res.content, media_type="image/jpeg")
+        else:
+            # 如果没有头像，返回 404，前端会显示默认圆圈
+            return Response(status_code=404)
+    except:
+        return Response(status_code=404)
 
 # 生成邀请码接口 (保留功能)
 @router.post("/api/manage/invite/gen")
