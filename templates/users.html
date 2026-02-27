@@ -29,14 +29,12 @@
                         <th class="px-6 py-4 text-right">操作</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100 dark:divide-gray-700" id="user-list-body-desktop">
-                </tbody>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700" id="user-list-body-desktop"></tbody>
             </table>
         </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-4 md:hidden" id="user-list-body-mobile">
-    </div>
+    <div class="grid grid-cols-1 gap-4 md:hidden" id="user-list-body-mobile"></div>
 </div>
 
 <div id="new-user-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4">
@@ -163,7 +161,9 @@
 
         <div class="p-6 pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3 shrink-0">
             <button onclick="closeEditUserModal()" class="px-4 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-medium">取消</button>
-            <button onclick="submitEditUser()" id="save-user-btn" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition font-bold shadow-sm">保存修改</button>
+            <button onclick="submitEditUser()" id="save-user-btn" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition font-bold shadow-sm flex items-center">
+                <span id="save-user-text">保存修改</span>
+            </button>
         </div>
     </div>
 </div>
@@ -213,7 +213,7 @@
 
 <script>
 let users = [];
-let allLibraries = []; // 存储所有媒体库数据
+let allLibraries = []; 
 let embyUrl = ""; 
 let selectedDuration = 30; 
 let currentAvatarUrl = "";
@@ -224,7 +224,6 @@ document.addEventListener('DOMContentLoaded', () => {
     loadLibraries();
 });
 
-// 🔥 新增：加载所有媒体库
 async function loadLibraries() {
     try {
         const res = await fetch('/api/manage/libraries');
@@ -370,11 +369,9 @@ async function submitNewUser() {
 // === 编辑逻辑 (带 Tabs) ===
 function switchEditTab(tabName) {
     const isBasic = tabName === 'basic';
-    // 容器切换
     document.getElementById('edit-tab-basic').style.display = isBasic ? 'block' : 'none';
     document.getElementById('edit-tab-library').style.display = isBasic ? 'none' : 'block';
     
-    // 按钮样式切换
     const btnBasic = document.getElementById('tab-btn-basic');
     const btnLib = document.getElementById('tab-btn-library');
     
@@ -391,10 +388,8 @@ function openEditUserModal(uid) {
     const user = users.find(u => u.Id === uid);
     if(!user) return;
     
-    // 重置 Tabs 到第一页
     switchEditTab('basic');
 
-    // 填充基础资料
     document.getElementById('edit-userid').value = uid;
     document.getElementById('edit-username').value = user.Name;
     document.getElementById('edit-disabled').value = user.IsDisabled ? "true" : "false";
@@ -405,7 +400,6 @@ function openEditUserModal(uid) {
     if (user.PrimaryImageTag) { preview.src = `/api/user/image/${uid}?t=${new Date().getTime()}`; } 
     else { preview.src = `https://api.dicebear.com/9.x/notionists/png?seed=${user.Name}`; }
     
-    // 填充媒体库权限
     renderLibraryCheckboxes(user);
     populateTemplates('edit-template-select', uid);
 
@@ -496,16 +490,20 @@ function previewFileAvatar() {
 
 async function submitEditUser() {
     const btn = document.getElementById('save-user-btn');
+    const btnText = document.getElementById('save-user-text');
     const uid = document.getElementById('edit-userid').value;
     const isDisabled = document.getElementById('edit-disabled').value === "true";
     const expire = document.getElementById('edit-expire').value;
     const pass = document.getElementById('edit-password').value; 
     
-    // 获取媒体库权限数据
     const enableAll = document.getElementById('edit-enable-all').checked;
-    const checkedLibs = Array.from(document.querySelectorAll('.lib-checkbox:checked')).map(cb => cb.value);
     
-    btn.disabled = true; btn.textContent = "保存中...";
+    // 🔥 核心防互斥修复：如果是允许全部，强制给后端传空数组
+    const checkedLibs = enableAll 
+        ? [] 
+        : Array.from(document.querySelectorAll('.lib-checkbox:checked')).map(cb => cb.value);
+    
+    btn.disabled = true; btnText.textContent = "保存中...";
 
     if (currentAvatarUrl || currentAvatarFile) {
         const formData = new FormData();
@@ -528,9 +526,13 @@ async function submitEditUser() {
     });
     
     const json = await res.json();
-    if (json.status === 'success') { closeEditUserModal(); loadUsers(); } 
-    else { alert(json.message); }
-    btn.disabled = false; btn.textContent = "保存修改";
+    if (json.status === 'success') { 
+        closeEditUserModal(); 
+        loadUsers(); 
+    } else { 
+        alert(json.message); 
+    }
+    btn.disabled = false; btnText.textContent = "保存修改";
 }
 
 async function deleteUser(uid) {

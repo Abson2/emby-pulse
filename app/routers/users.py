@@ -35,7 +35,6 @@ def check_expired_users():
     except Exception as e:
         print(f"Check Expire Error: {e}")
 
-# 🔥 新增：获取服务器所有媒体库列表
 @router.get("/api/manage/libraries")
 def api_get_libraries(request: Request):
     if not request.session.get("user"): return {"status": "error"}
@@ -79,7 +78,6 @@ def api_manage_users(request: Request):
                 "ExpireDate": meta.get('expire_date'), 
                 "Note": meta.get('note'), 
                 "PrimaryImageTag": u.get('PrimaryImageTag'),
-                # 🔥 新增：下发用户的媒体库权限数据
                 "EnableAllFolders": policy.get('EnableAllFolders', True),
                 "EnabledFolders": policy.get('EnabledFolders', [])
             })
@@ -99,50 +97,30 @@ def get_user_avatar(user_id: str):
     try:
         img_url = f"{host}/emby/Users/{user_id}/Images/Primary?api_key={key}&quality=90"
         res = requests.get(img_url, timeout=5)
-        
         if res.status_code == 200:
-            return Response(
-                content=res.content, 
-                media_type="image/jpeg",
-                headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
-            )
-        else:
-            return Response(status_code=404)
-    except:
-        return Response(status_code=404)
+            return Response(content=res.content, media_type="image/jpeg", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+        else: return Response(status_code=404)
+    except: return Response(status_code=404)
 
 @router.post("/api/manage/user/image")
-async def api_update_user_image(
-    request: Request,
-    user_id: str = Form(...),
-    url: str = Form(None),
-    file: UploadFile = File(None)
-):
+async def api_update_user_image(request: Request, user_id: str = Form(...), url: str = Form(None), file: UploadFile = File(None)):
     if not request.session.get("user"): return {"status": "error", "message": "Unauthorized"}
-    
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     post_url = f"{host}/emby/Users/{user_id}/Images/Primary?api_key={key}"
     delete_url = f"{host}/emby/Users/{user_id}/Images/Primary?api_key={key}"
-    
-    image_data = None
-    content_type = "image/png"
+    image_data = None; content_type = "image/png"
     
     try:
         if url:
             down_res = requests.get(url, timeout=10)
             if down_res.status_code == 200:
                 image_data = down_res.content
-                if 'Content-Type' in down_res.headers:
-                    content_type = down_res.headers['Content-Type']
-            else:
-                return {"status": "error", "message": "无法下载该头像"}
+                if 'Content-Type' in down_res.headers: content_type = down_res.headers['Content-Type']
+            else: return {"status": "error", "message": "无法下载该头像"}
         elif file:
-            image_data = await file.read()
-            content_type = file.content_type or "image/jpeg"
+            image_data = await file.read(); content_type = file.content_type or "image/jpeg"
             
-        if not image_data or len(image_data) == 0:
-            return {"status": "error", "message": "图片数据为空"}
-
+        if not image_data or len(image_data) == 0: return {"status": "error", "message": "图片数据为空"}
         b64_data = base64.b64encode(image_data)
         
         try: requests.delete(delete_url)
@@ -153,7 +131,6 @@ async def api_update_user_image(
         
         if up_res.status_code in [200, 204]: return {"status": "success"}
         else: return {"status": "error", "message": f"Emby 返回错误: {up_res.status_code}"}
-
     except Exception as e: return {"status": "error", "message": str(e)}
 
 @router.post("/api/manage/invite/gen")
@@ -162,10 +139,7 @@ def api_gen_invite(data: InviteGenModel, request: Request):
     try:
         code = secrets.token_hex(3) 
         created_at = datetime.datetime.now().isoformat()
-        
-        query_db("INSERT INTO invitations (code, days, created_at, template_user_id) VALUES (?, ?, ?, ?)", 
-                 (code, data.days, created_at, data.template_user_id))
-                 
+        query_db("INSERT INTO invitations (code, days, created_at, template_user_id) VALUES (?, ?, ?, ?)", (code, data.days, created_at, data.template_user_id))
         return {"status": "success", "code": code}
     except Exception as e: return {"status": "error", "message": str(e)}
 
@@ -175,41 +149,40 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     
     try:
-        # 更新本地有效期记录
         if data.expire_date is not None:
             expire_val = data.expire_date if data.expire_date else None
             exist = query_db("SELECT 1 FROM users_meta WHERE user_id = ?", (data.user_id,), one=True)
             if exist: query_db("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (expire_val, data.user_id))
             else: query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (data.user_id, expire_val, datetime.datetime.now().isoformat()))
         
-        # 修改密码
         if data.password:
-            pwd_res = requests.post(f"{host}/emby/Users/{data.user_id}/Password?api_key={key}", 
-                                  json={"Id": data.user_id, "NewPw": data.password})
-            if pwd_res.status_code not in [200, 204]:
-                return {"status": "error", "message": "密码修改失败，请检查日志"}
+            pwd_res = requests.post(f"{host}/emby/Users/{data.user_id}/Password?api_key={key}", json={"Id": data.user_id, "NewPw": data.password})
+            if pwd_res.status_code not in [200, 204]: return {"status": "error", "message": "密码修改失败，请检查日志"}
 
-        # 🔥 合并 Policy 更新 (包括账号状态和媒体库权限)
         if data.is_disabled is not None or data.enable_all_folders is not None or data.enabled_folders is not None:
             p_res = requests.get(f"{host}/emby/Users/{data.user_id}?api_key={key}")
             if p_res.status_code == 200:
                 policy = p_res.json().get('Policy', {})
                 
-                # 账号状态
                 if data.is_disabled is not None:
                     policy['IsDisabled'] = data.is_disabled
-                    if not data.is_disabled:
-                        policy['LoginAttemptsBeforeLockout'] = -1 
+                    if not data.is_disabled: policy['LoginAttemptsBeforeLockout'] = -1 
                 
-                # 全局媒体库开关
+                # 🔥 核心修复：纯净化逻辑与互斥处理
                 if data.enable_all_folders is not None:
                     policy['EnableAllFolders'] = data.enable_all_folders
+                    if data.enable_all_folders:
+                        policy['EnabledFolders'] = [] # 允许全部时，强制清空特定白名单，防冲突
+                    else:
+                        policy['EnabledFolders'] = data.enabled_folders if data.enabled_folders is not None else []
                 
-                # 白名单数组
-                if data.enabled_folders is not None:
-                    policy['EnabledFolders'] = data.enabled_folders
+                # 防御性清除可能引起报错的老版本字段
+                if 'BlockedMediaFolders' in policy: policy['BlockedMediaFolders'] = []
                 
-                requests.post(f"{host}/emby/Users/{data.user_id}/Policy?api_key={key}", json=policy)
+                # 🔥 增加严格拦截，暴露真实错误
+                up_res = requests.post(f"{host}/emby/Users/{data.user_id}/Policy?api_key={key}", json=policy)
+                if up_res.status_code not in [200, 204]:
+                    return {"status": "error", "message": f"Emby拒绝了权限更新 (HTTP {up_res.status_code}): {up_res.text}"}
 
         return {"status": "success", "message": "用户信息已更新"}
     except Exception as e: return {"status": "error", "message": str(e)}
@@ -220,21 +193,15 @@ def api_manage_user_new(data: NewUserModel, request: Request):
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     
     try:
-        # 1. 创建用户
         res = requests.post(f"{host}/emby/Users/New?api_key={key}", json={"Name": data.name})
         if res.status_code != 200: return {"status": "error", "message": f"创建失败: {res.text}"}
         new_id = res.json()['Id']
         
-        # 2. 设置密码
-        if data.password:
-            requests.post(f"{host}/emby/Users/{new_id}/Password?api_key={key}", json={"Id": new_id, "NewPw": data.password})
+        if data.password: requests.post(f"{host}/emby/Users/{new_id}/Password?api_key={key}", json={"Id": new_id, "NewPw": data.password})
         
-        # 3. 初始化策略 (并注入权限模板)
         p_res = requests.get(f"{host}/emby/Users/{new_id}?api_key={key}")
         policy = p_res.json().get('Policy', {}) if p_res.status_code == 200 else {}
-        
-        policy['IsDisabled'] = False
-        policy['LoginAttemptsBeforeLockout'] = -1
+        policy['IsDisabled'] = False; policy['LoginAttemptsBeforeLockout'] = -1
         
         if data.template_user_id:
             src_res = requests.get(f"{host}/emby/Users/{data.template_user_id}?api_key={key}", timeout=5)
@@ -244,13 +211,9 @@ def api_manage_user_new(data: NewUserModel, request: Request):
                 policy['EnabledFolders'] = src_policy.get('EnabledFolders', [])
         
         requests.post(f"{host}/emby/Users/{new_id}/Policy?api_key={key}", json=policy)
-        
-        # 4. 记录有效期
-        if data.expire_date:
-            query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (new_id, data.expire_date, datetime.datetime.now().isoformat()))
+        if data.expire_date: query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (new_id, data.expire_date, datetime.datetime.now().isoformat()))
             
         return {"status": "success", "message": "用户创建成功"}
-
     except Exception as e: return {"status": "error", "message": str(e)}
 
 @router.delete("/api/manage/user/{user_id}")
