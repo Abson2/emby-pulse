@@ -2,6 +2,7 @@
 
 {% block content %}
 <div class="container mx-auto px-2 md:px-4 py-4 md:py-6 pb-24">
+    
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 md:mb-6">
         <div>
             <h1 class="text-xl md:text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
@@ -28,13 +29,13 @@
             </div>
 
             <div class="flex items-center gap-2">
-                <select id="ttl-select" onchange="updateTTL(this.value)" class="appearance-none px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 shadow-sm outline-none">
+                <select id="ttl-select" onchange="updateTTL(this.value)" class="appearance-none px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 shadow-sm outline-none cursor-pointer hover:border-indigo-500 transition-all">
                     <option value="3600">1h</option>
                     <option value="43200">12h</option>
                     <option value="86400">1d</option>
                 </select>
-                <button onclick="fetchCalendar(true)" id="refresh-btn" class="p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-300 shadow-sm">
-                    <i class="fa-solid fa-arrows-rotate"></i>
+                <button onclick="fetchCalendar(true)" id="refresh-btn" class="p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-300 shadow-sm hover:text-indigo-500 transition-all group">
+                    <i class="fa-solid fa-arrows-rotate group-active:animate-spin"></i>
                 </button>
             </div>
         </div>
@@ -42,10 +43,10 @@
 
     <div class="flex flex-wrap gap-3 mb-4 px-1 md:hidden">
         <div class="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
-            <span class="w-2 h-2 rounded-full bg-green-500"></span> 已入库
+            <span class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.5)]"></span> 已入库
         </div>
         <div class="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
-            <span class="w-2 h-2 rounded-full bg-red-500"></span> 待补货
+            <span class="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.5)]"></span> 待补货
         </div>
         <div class="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
             <span class="w-2 h-2 rounded-full bg-blue-500"></span> 待播出
@@ -57,47 +58,55 @@
             <div class="absolute top-0 left-0 w-full h-full border-4 border-indigo-200 dark:border-indigo-900 rounded-full"></div>
             <div class="absolute top-0 left-0 w-full h-full border-4 border-indigo-600 dark:border-indigo-500 rounded-full animate-spin border-t-transparent"></div>
         </div>
+        <p class="mt-4 text-xs text-gray-400 animate-pulse">正在获取更新排期...</p>
     </div>
 
     <div id="error-msg" class="hidden mx-auto max-w-2xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
         <p id="error-text" class="text-red-600 dark:text-red-400 text-sm mb-4"></p>
-        <button onclick="fetchCalendar(true)" class="px-4 py-2 bg-white dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 rounded-lg text-sm">重试</button>
+        <button onclick="fetchCalendar(true)" class="px-4 py-2 bg-white dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 rounded-lg text-sm font-bold">重试</button>
     </div>
 
     <div id="calendar-grid" class="hidden grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3 md:gap-4"></div>
 </div>
 
-<div id="detail-drawer" class="fixed inset-0 z-[60] hidden">
-    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeDrawer()"></div>
+<div id="detail-modal" class="fixed inset-0 z-[60] hidden flex items-end md:items-center justify-center">
+    <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" onclick="closeDetails()"></div>
     
-    <div id="drawer-content" class="absolute transition-all duration-300 ease-out bg-white dark:bg-gray-900 shadow-2xl overflow-hidden
-        /* 手机端布局 */
-        bottom-0 inset-x-0 rounded-t-2xl translate-y-full p-5 pb-10
-        /* 电脑端响应式：居中 Modal */
-        md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:bottom-auto md:max-w-2xl md:w-full md:rounded-2xl md:scale-95 md:translate-y-0 md:p-8">
+    <div id="modal-container" class="relative w-full transition-all duration-300 ease-out bg-white dark:bg-gray-900 shadow-2xl overflow-hidden
+        /* 手机端样式：底部弹出 */
+        rounded-t-2xl translate-y-full p-5 pb-10
+        /* 电脑端样式：居中Modal */
+        md:rounded-2xl md:translate-y-0 md:max-w-2xl md:scale-95 md:opacity-0 md:p-8">
         
-        <button onclick="closeDrawer()" class="hidden md:block absolute top-4 right-4 text-gray-400 hover:text-indigo-500 transition-colors">
-            <i class="fa-solid fa-xmark text-xl"></i>
+        <button onclick="closeDetails()" class="hidden md:flex absolute top-4 right-4 w-8 h-8 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-indigo-500 transition-colors">
+            <i class="fa-solid fa-xmark"></i>
         </button>
         <div class="md:hidden w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-6"></div>
 
         <div class="flex flex-col md:flex-row gap-6">
-            <div class="w-28 h-40 md:w-44 md:h-64 flex-shrink-0 mx-auto md:mx-0">
-                <img id="drawer-img" src="" class="w-full h-full object-cover rounded-lg shadow-lg border border-gray-100 dark:border-gray-800">
+            <div class="w-32 h-48 md:w-52 md:h-80 flex-shrink-0 mx-auto md:mx-0 overflow-hidden rounded-xl shadow-lg border-2 border-white dark:border-gray-800">
+                <img id="m-poster" src="" class="w-full h-full object-cover" alt="Poster">
             </div>
-            <div class="flex-1 min-w-0">
-                <h3 id="drawer-title" class="text-xl md:text-2xl font-bold text-gray-900 dark:text-white truncate"></h3>
+
+            <div class="flex-1 min-w-0 flex flex-col">
+                <h3 id="m-title" class="text-xl md:text-2xl font-black text-gray-900 dark:text-white truncate"></h3>
+                
                 <div class="flex items-center gap-3 mt-2">
-                    <p id="drawer-episode" class="text-indigo-600 dark:text-indigo-400 font-mono font-bold text-base md:text-lg"></p>
-                    <div id="drawer-status-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"></div>
-                </div>
-                <p id="drawer-date" class="text-xs text-gray-500 mt-2 font-mono"></p>
-                
-                <div class="mt-4 overflow-y-auto max-h-[150px] md:max-h-[200px] pr-2 custom-scroll">
-                    <p id="drawer-overview" class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed"></p>
+                    <span id="m-episode-label" class="text-indigo-600 dark:text-indigo-400 font-mono font-bold text-lg"></span>
+                    <span id="m-status-badge" class="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest"></span>
                 </div>
                 
-                <div class="mt-6 flex gap-3" id="drawer-actions">
+                <p id="m-air-date" class="text-xs text-gray-500 mt-2 font-mono flex items-center gap-1">
+                    <i class="fa-regular fa-calendar"></i>
+                    播出日期: <span id="m-date-val"></span>
+                </p>
+                
+                <div class="mt-4 flex-1 overflow-y-auto max-h-[140px] md:max-h-[220px] pr-2 custom-scroll">
+                    <div class="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-tighter mb-1">剧情简介</div>
+                    <p id="m-description" class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed"></p>
+                </div>
+                
+                <div id="m-actions" class="mt-6 flex gap-3">
                     </div>
             </div>
         </div>
@@ -108,9 +117,11 @@
 let currentOffset = 0;
 let currentServerId = ""; 
 let currentEmbyUrl = "";
-const imgBase = "https://image.tmdb.org/t/p/w500";
+const imgBase = "https://image.tmdb.org/t/p/w500"; // 使用更高清的图片用于弹窗
 
-document.addEventListener('DOMContentLoaded', () => fetchCalendar(false));
+document.addEventListener('DOMContentLoaded', () => {
+    fetchCalendar(false);
+});
 
 function changeWeek(offset) {
     currentOffset += offset;
@@ -125,7 +136,7 @@ async function updateTTL(val) {
             body: JSON.stringify({ ttl: parseInt(val) })
         });
         fetchCalendar(true);
-    } catch (e) { alert("保存失败"); }
+    } catch (e) { console.error("配置保存失败", e); }
 }
 
 async function fetchCalendar(forceRefresh = false) {
@@ -139,25 +150,37 @@ async function fetchCalendar(forceRefresh = false) {
 
     try {
         const res = await fetch(`/api/calendar/weekly?refresh=${forceRefresh}&offset=${currentOffset}`);
+        if (!res.ok) throw new Error("服务器响应异常");
+        
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
-        document.getElementById('date-range-display').textContent = 
-            (currentOffset === 1 ? "下周 " : currentOffset === -1 ? "上周 " : "") + data.date_range;
+        // 更新日期显示范围
+        const rangeEl = document.getElementById('date-range-display');
+        let rangeText = data.date_range;
+        if (currentOffset === 1) rangeText = "下周 " + rangeText;
+        else if (currentOffset === -1) rangeText = "上周 " + rangeText;
+        rangeEl.textContent = rangeText;
         
+        // 更新缓存时长选择器状态
+        if (data.current_ttl) document.getElementById('ttl-select').value = data.current_ttl;
+
         currentServerId = data.server_id || ""; 
         currentEmbyUrl = data.emby_url || "";
+        
         renderCalendar(data.days);
         
         loadingEl.classList.add('hidden');
         gridEl.classList.remove('hidden');
 
-        // 🔥 自动定位到今天
+        // 自动定位到“今天”
         if (currentOffset === 0) {
             setTimeout(() => {
-                const todayEl = document.querySelector('.is-today-column');
-                if (todayEl) todayEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 300);
+                const todayCol = document.querySelector('.is-today-column');
+                if (todayCol) {
+                    todayCol.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 350);
         }
 
     } catch (e) {
@@ -173,19 +196,21 @@ function renderCalendar(days) {
     
     days.forEach(day => {
         const isToday = day.is_today;
-        const colClass = isToday ? 'is-today-column ring-2 ring-indigo-500 bg-indigo-50/30 dark:bg-indigo-900/10' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700';
+        const colClass = isToday 
+            ? 'is-today-column ring-2 ring-indigo-500 bg-indigo-50/50 dark:bg-indigo-900/10' 
+            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700';
         
         let html = `
             <div class="flex flex-col rounded-xl p-2 md:p-3 ${colClass} shadow-sm transition-all h-full">
                 <div class="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700 mb-2 md:mb-3">
-                    <span class="font-bold text-sm md:text-base ${isToday ? 'text-indigo-600' : 'text-gray-700 dark:text-gray-300'}">${day.weekday_cn}</span>
-                    <span class="text-[9px] font-mono opacity-60">${day.date.slice(5)}</span>
+                    <span class="font-black text-sm md:text-base ${isToday ? 'text-indigo-600' : 'text-gray-700 dark:text-gray-300'}">${day.weekday_cn}</span>
+                    <span class="text-[9px] font-mono opacity-50">${day.date.slice(5)}</span>
                 </div>
-                <div class="grid grid-cols-1 gap-2">
+                <div class="flex flex-col gap-2">
         `;
 
         if (day.items.length === 0) {
-            html += `<div class="py-6 text-center text-[10px] text-gray-400 opacity-50"><i class="fa-solid fa-bed block text-lg mb-1"></i>休息</div>`;
+            html += `<div class="py-8 text-center text-[10px] text-gray-400 italic">无更新</div>`;
         } else {
             day.items.forEach(item => {
                 const statusMap = {
@@ -197,17 +222,16 @@ function renderCalendar(days) {
                 const s = statusMap[item.status] || { color: 'bg-gray-400', text: '未知' };
                 const poster = item.poster_path ? (imgBase + item.poster_path) : 'https://via.placeholder.com/300x450?text=No+Img';
 
-                // PC 端和手机端统一点击触发详情
                 html += `
                     <div onclick='showDetails(${JSON.stringify(item).replace(/'/g, "&apos;")})' 
-                         class="group relative flex flex-row md:flex-col gap-2 p-1.5 rounded-lg bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700 active:scale-95 transition-all cursor-pointer">
+                         class="group relative flex flex-row md:flex-col gap-2 p-1.5 rounded-lg bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700 active:scale-95 transition-all cursor-pointer hover:border-indigo-500/50">
                         <div class="relative w-10 h-14 md:w-full md:aspect-[2/3] flex-shrink-0 rounded-md overflow-hidden bg-gray-800">
-                             <img src="${poster}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy">
-                             <div class="absolute top-0 right-0 w-2.5 h-2.5 ${s.color} rounded-bl shadow-sm"></div>
+                             <img src="${poster}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" loading="lazy">
+                             <div class="absolute top-0 right-0 w-2.5 h-2.5 ${s.color} rounded-bl shadow-sm border-l border-b border-white/10"></div>
                         </div>
-                        <div class="flex flex-col justify-center min-w-0 flex-1">
+                        <div class="flex flex-col justify-center min-w-0 flex-1 px-0.5">
                             <h4 class="text-[10px] md:text-xs font-bold text-gray-800 dark:text-gray-200 truncate leading-tight">${item.series_name}</h4>
-                            <div class="flex items-center gap-1 mt-1">
+                            <div class="flex items-center gap-1 mt-0.5">
                                 <span class="text-[9px] font-mono text-indigo-500 font-bold">S${String(item.season).padStart(2,'0')}E${String(item.episode).padStart(2,'0')}</span>
                             </div>
                         </div>
@@ -220,84 +244,99 @@ function renderCalendar(days) {
 }
 
 function showDetails(item) {
-    const drawer = document.getElementById('detail-drawer');
-    const content = document.getElementById('drawer-content');
+    const modal = document.getElementById('detail-modal');
+    const container = document.getElementById('modal-container');
     
-    document.getElementById('drawer-title').textContent = item.series_name;
-    document.getElementById('drawer-episode').textContent = `第 ${item.season} 季 · 第 ${item.episode} 集`;
-    document.getElementById('drawer-img').src = item.poster_path ? (imgBase + item.poster_path) : '';
-    document.getElementById('drawer-date').textContent = `📅 播出日期: ${item.air_date}`;
+    // 注入基本信息
+    document.getElementById('m-title').textContent = item.series_name;
+    document.getElementById('m-episode-label').textContent = `S${String(item.season).padStart(2,'0')}E${String(item.episode).padStart(2,'0')}`;
+    document.getElementById('m-poster').src = item.poster_path ? (imgBase + item.poster_path) : '';
+    document.getElementById('m-date-val').textContent = item.air_date;
     
-    // 🔥 简介三级兜底逻辑：单集简介 -> 剧集总简介 -> 暂无简介
-    document.getElementById('drawer-overview').textContent = item.overview || item.series_overview || "该剧集暂无详细简介内容。";
+    // 🔥 简介处理：强制显示剧集总简介 (series_overview)
+    const overviewText = item.series_overview || item.overview || "该剧集暂无详细介绍...";
+    document.getElementById('m-description').textContent = overviewText;
 
-    const badge = document.getElementById('drawer-status-badge');
-    const actions = document.getElementById('drawer-actions');
+    const badge = document.getElementById('m-status-badge');
+    const actions = document.getElementById('m-actions');
     actions.innerHTML = '';
     
     const isReady = item.status === 'ready';
     const isMissing = item.status === 'missing' || item.status === 'today';
     
     badge.textContent = isReady ? "已入库" : isMissing ? "待补货" : "待播出";
-    const badgeClass = isReady ? "bg-green-100 text-green-700" : isMissing ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700";
-    badge.className = `px-2 py-0.5 rounded text-[10px] font-bold ${badgeClass}`;
+    const badgeClass = isReady ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" 
+                             : isMissing ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" 
+                             : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400";
+    badge.className = `px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${badgeClass}`;
 
+    // 动态注入操作按钮
     if (isReady) {
         actions.innerHTML = `
-            <button onclick="playItem('${item.series_id}')" class="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 active:scale-95 transition-all">
-                <i class="fa-solid fa-play mr-2"></i> 立即观看
+            <button onclick="playItem('${item.series_id}')" class="flex-1 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black shadow-lg shadow-indigo-500/30 active:scale-95 transition-all flex items-center justify-center gap-2">
+                <i class="fa-solid fa-play"></i> 立即观看
             </button>
         `;
     } else {
-        const copyText = `${item.series_name} S${String(item.season).padStart(2,'0')}E${String(item.episode).padStart(2,'0')}`;
+        const copyTxt = `${item.series_name} S${String(item.season).padStart(2,'0')}E${String(item.episode).padStart(2,'0')}`;
         actions.innerHTML = `
-            <button onclick="copyToClipboard('${copyText}')" class="flex-1 py-3 bg-gray-800 dark:bg-gray-700 text-white rounded-xl font-bold hover:bg-gray-700 active:scale-95 transition-all">
-                <i class="fa-solid fa-copy mr-2"></i> 复制补货信息
+            <button onclick="copyToClipboard('${copyTxt}')" class="flex-1 py-3.5 bg-gray-800 dark:bg-gray-700 hover:bg-gray-700 dark:hover:bg-gray-600 text-white rounded-xl font-black active:scale-95 transition-all flex items-center justify-center gap-2">
+                <i class="fa-solid fa-copy"></i> 复制补货信息
             </button>
         `;
     }
 
-    drawer.classList.remove('hidden');
+    // 显示逻辑
+    modal.classList.remove('hidden');
+    // 强制回流以触发动画
+    container.offsetHeight; 
+    container.classList.remove('translate-y-full', 'md:scale-95', 'md:opacity-0');
+    container.classList.add('translate-y-0', 'md:scale-100', 'md:opacity-100');
+}
+
+function closeDetails() {
+    const modal = document.getElementById('detail-modal');
+    const container = document.getElementById('modal-container');
+    
+    container.classList.add('translate-y-full', 'md:scale-95', 'md:opacity-0');
+    container.classList.remove('translate-y-0', 'md:scale-100', 'md:opacity-100');
+    
     setTimeout(() => {
-        content.classList.remove('translate-y-full', 'md:scale-95');
-        content.classList.add('translate-y-0', 'md:scale-100');
-    }, 10);
+        modal.classList.add('hidden');
+    }, 300);
 }
 
-function closeDrawer() {
-    const content = document.getElementById('drawer-content');
-    content.classList.add('translate-y-full', 'md:scale-95');
-    setTimeout(() => document.getElementById('detail-drawer').classList.add('hidden'), 300);
-}
-
-function playItem(seriesId) {
-    const playUrl = `${currentEmbyUrl}/web/index.html#!/item?id=${seriesId}&serverId=${currentServerId}`;
+function playItem(id) {
+    const playUrl = `${currentEmbyUrl}/web/index.html#!/item?id=${id}&serverId=${currentServerId}`;
     window.open(playUrl, '_blank');
 }
 
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
-        const btn = document.querySelector('#drawer-actions button');
-        const oldHtml = btn.innerHTML;
-        btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>已复制';
+        const btn = document.querySelector('#m-actions button');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> 复制成功';
         setTimeout(() => {
-            btn.innerHTML = oldHtml;
-            closeDrawer();
+            btn.innerHTML = originalHtml;
+            closeDetails();
         }, 1200);
+    }).catch(err => {
+        alert("复制失败，请手动选择文字");
     });
 }
 </script>
 
 <style>
-    /* 滚动条美化 */
-    .custom-scroll::-webkit-scrollbar { width: 4px; }
-    .custom-scroll::-webkit-scrollbar-thumb { background: #4f46e5; border-radius: 10px; }
-    .dark .custom-scroll::-webkit-scrollbar-thumb { background: #334155; }
+    /* 定制滚动条：纤细且不占空间 */
+    .custom-scroll::-webkit-scrollbar { width: 3px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #6366f1; border-radius: 20px; }
+    .dark .custom-scroll::-webkit-scrollbar-thumb { background: #4338ca; }
     
+    /* PC端 Modal 动画效果：贝塞尔曲线确保顺滑 */
     @media (min-width: 768px) {
-        #drawer-content { 
-            opacity: 1;
-            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        #modal-container { 
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
     }
 </style>
