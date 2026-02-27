@@ -1,88 +1,98 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-6">
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+<div class="container mx-auto px-2 md:px-4 py-4 md:py-6 pb-24">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 md:mb-6">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
+            <h1 class="text-xl md:text-2xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
                 <i class="fa-solid fa-calendar-days text-indigo-500"></i>
                 追剧日历
-                <span class="text-xs font-normal text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full border border-indigo-100 dark:border-indigo-500/30">Beta</span>
+                <span class="text-[10px] md:text-xs font-normal text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full border border-indigo-100 dark:border-indigo-500/30">Beta</span>
             </h1>
-            <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">
+            <p class="hidden md:block text-gray-500 dark:text-gray-400 text-sm mt-1">
                 本周更新排期 · 基于 TMDB 数据实时同步
             </p>
         </div>
         
-        <div class="flex items-center bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-1">
-            <button onclick="changeWeek(-1)" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md text-gray-500 transition-colors" title="上一周">
-                <i class="fa-solid fa-chevron-left"></i>
-            </button>
-            
-            <div class="px-4 text-sm font-mono font-bold text-gray-700 dark:text-gray-200 min-w-[100px] text-center" id="date-range-display">
-                加载中...
+        <div class="flex items-center justify-between md:justify-start gap-2">
+            <div class="flex items-center bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-1">
+                <button onclick="changeWeek(-1)" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md text-gray-500 transition-colors">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+                <div class="px-2 md:px-4 text-xs md:text-sm font-mono font-bold text-gray-700 dark:text-gray-200 min-w-[80px] md:min-w-[100px] text-center" id="date-range-display">
+                    加载中...
+                </div>
+                <button onclick="changeWeek(1)" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md text-gray-500 transition-colors">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
             </div>
-            
-            <button onclick="changeWeek(1)" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md text-gray-500 transition-colors" title="下一周">
-                <i class="fa-solid fa-chevron-right"></i>
-            </button>
-        </div>
 
-        <div class="flex items-center gap-3">
-            
-            <div class="relative group">
-                <select id="ttl-select" onchange="updateTTL(this.value)" class="appearance-none pl-8 pr-8 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 transition-all shadow-sm cursor-pointer outline-none focus:ring-2 focus:ring-indigo-500/20">
-                    <option value="3600">1 小时</option>
-                    <option value="21600">6 小时</option>
-                    <option value="43200">12 小时</option>
-                    <option value="86400">1 天</option>
-                    <option value="259200">3 天</option>
-                    <option value="604800">7 天</option>
+            <div class="flex items-center gap-2">
+                <select id="ttl-select" onchange="updateTTL(this.value)" class="appearance-none px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 shadow-sm outline-none">
+                    <option value="3600">1h</option>
+                    <option value="43200">12h</option>
+                    <option value="86400">1d</option>
                 </select>
-                <div class="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-                    <i class="fa-solid fa-clock text-[10px]"></i>
-                </div>
-                <div class="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-                    <i class="fa-solid fa-caret-down text-[10px]"></i>
-                </div>
+                <button onclick="fetchCalendar(true)" id="refresh-btn" class="p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-300 shadow-sm">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
             </div>
+        </div>
+    </div>
 
-            <button onclick="fetchCalendar(true)" id="refresh-btn" class="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-300 transition-all shadow-sm group">
-                <i class="fa-solid fa-arrows-rotate group-hover:animate-spin"></i>
-                <span class="hidden sm:inline">刷新</span>
-            </button>
+    <div class="flex flex-wrap gap-3 mb-4 px-1 md:hidden">
+        <div class="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
+            <span class="w-2 h-2 rounded-full bg-green-500"></span> 已入库
+        </div>
+        <div class="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
+            <span class="w-2 h-2 rounded-full bg-red-500"></span> 待补货
+        </div>
+        <div class="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
+            <span class="w-2 h-2 rounded-full bg-blue-500"></span> 待播出
         </div>
     </div>
 
     <div id="loading" class="flex flex-col items-center justify-center py-24">
-        <div class="relative w-16 h-16">
+        <div class="relative w-12 h-12">
             <div class="absolute top-0 left-0 w-full h-full border-4 border-indigo-200 dark:border-indigo-900 rounded-full"></div>
             <div class="absolute top-0 left-0 w-full h-full border-4 border-indigo-600 dark:border-indigo-500 rounded-full animate-spin border-t-transparent"></div>
         </div>
-        <p class="mt-4 text-gray-500 dark:text-gray-400 font-medium animate-pulse">正在同步数据...</p>
     </div>
 
     <div id="error-msg" class="hidden mx-auto max-w-2xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
-        <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-800 text-red-600 dark:text-red-200 mb-3">
-            <i class="fa-solid fa-triangle-exclamation text-xl"></i>
-        </div>
-        <h3 class="text-lg font-semibold text-red-800 dark:text-red-300 mb-1">加载失败</h3>
-        <p id="error-text" class="text-red-600 dark:text-red-400 text-sm"></p>
-        <button onclick="fetchCalendar(true)" class="mt-4 px-4 py-2 bg-white dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 rounded-lg text-sm font-medium hover:bg-red-50 dark:hover:bg-red-800/50 transition-colors">重试</button>
+        <p id="error-text" class="text-red-600 dark:text-red-400 text-sm mb-4"></p>
+        <button onclick="fetchCalendar(true)" class="px-4 py-2 bg-white dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 rounded-lg text-sm">重试</button>
     </div>
 
     <div id="calendar-grid" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4"></div>
 </div>
 
+<div id="detail-drawer" class="fixed inset-0 z-[60] hidden">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeDrawer()"></div>
+    <div class="absolute bottom-0 inset-x-0 bg-white dark:bg-gray-900 rounded-t-2xl shadow-2xl transform translate-y-full transition-transform duration-300 ease-out p-5 pb-10" id="drawer-content">
+        <div class="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-6"></div>
+        <div class="flex gap-4 mb-6">
+            <img id="drawer-img" src="" class="w-24 h-36 object-cover rounded-lg shadow-md">
+            <div class="flex-1 min-w-0">
+                <h3 id="drawer-title" class="text-lg font-bold text-gray-900 dark:text-white truncate"></h3>
+                <p id="drawer-episode" class="text-indigo-600 dark:text-indigo-400 font-mono font-bold mt-1"></p>
+                <div id="drawer-status-badge" class="inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider"></div>
+                <p id="drawer-date" class="text-xs text-gray-500 mt-2"></p>
+            </div>
+        </div>
+        <p id="drawer-overview" class="text-sm text-gray-600 dark:text-gray-400 leading-relaxed mb-6 line-clamp-4"></p>
+        <div class="grid grid-cols-2 gap-3" id="drawer-actions">
+            </div>
+    </div>
+</div>
+
 <script>
 let currentOffset = 0;
-// 🔥 新增：用于存储从 API 获取的 ServerId
 let currentServerId = ""; 
-const DEFAULT_EMBY_URL = "http://192.168.31.2:8096";
+let currentEmbyUrl = "";
+const imgBase = "https://image.tmdb.org/t/p/w300";
 
-document.addEventListener('DOMContentLoaded', function() {
-    fetchCalendar(false);
-});
+document.addEventListener('DOMContentLoaded', () => fetchCalendar(false));
 
 function changeWeek(offset) {
     currentOffset += offset;
@@ -97,148 +107,164 @@ async function updateTTL(val) {
             body: JSON.stringify({ ttl: parseInt(val) })
         });
         fetchCalendar(true);
-    } catch (e) {
-        alert("配置保存失败");
-    }
+    } catch (e) { alert("保存失败"); }
 }
 
 async function fetchCalendar(forceRefresh = false) {
     const loadingEl = document.getElementById('loading');
     const errorEl = document.getElementById('error-msg');
     const gridEl = document.getElementById('calendar-grid');
-    const refreshBtn = document.getElementById('refresh-btn');
-    const dateRangeEl = document.getElementById('date-range-display');
-    const ttlSelect = document.getElementById('ttl-select');
-
+    
     gridEl.classList.add('hidden');
     loadingEl.classList.remove('hidden');
     errorEl.classList.add('hidden');
-    if(refreshBtn) refreshBtn.disabled = true;
 
     try {
-        const url = `/api/calendar/weekly?refresh=${forceRefresh}&offset=${currentOffset}`;
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        
+        const res = await fetch(`/api/calendar/weekly?refresh=${forceRefresh}&offset=${currentOffset}`);
         const data = await res.json();
-        
         if (data.error) throw new Error(data.error);
 
-        if (data.date_range) {
-            let label = data.date_range;
-            if (currentOffset === 1) label = "下周 " + label;
-            else if (currentOffset === -1) label = "上周 " + label;
-            dateRangeEl.textContent = label;
-        }
-
-        if (data.current_ttl) ttlSelect.value = data.current_ttl;
-
-        // 🔥 获取并保存 ServerId
+        document.getElementById('date-range-display').textContent = 
+            (currentOffset === 1 ? "下周 " : currentOffset === -1 ? "上周 " : "") + data.date_range;
+        
         currentServerId = data.server_id || ""; 
-        renderCalendar(data.days, data.emby_url);
+        currentEmbyUrl = data.emby_url || "";
+        renderCalendar(data.days);
         
         loadingEl.classList.add('hidden');
         gridEl.classList.remove('hidden');
 
+        // 🔥 自动定位到今天
+        if (currentOffset === 0) {
+            setTimeout(() => {
+                const todayEl = document.querySelector('.is-today-column');
+                if (todayEl) todayEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 300);
+        }
+
     } catch (e) {
         loadingEl.classList.add('hidden');
-        document.getElementById('error-text').textContent = e.message || "无法连接到服务器";
+        document.getElementById('error-text').textContent = e.message;
         errorEl.classList.remove('hidden');
-    } finally {
-        if(refreshBtn) refreshBtn.disabled = false;
     }
 }
 
-function renderCalendar(days, embyUrlFromApi) {
+function renderCalendar(days) {
     const container = document.getElementById('calendar-grid');
     container.innerHTML = '';
     
-    const embyBaseUrl = embyUrlFromApi || DEFAULT_EMBY_URL;
-    const imgBase = "https://image.tmdb.org/t/p/w300";
-
     days.forEach(day => {
         const isToday = day.is_today;
-        const colClass = isToday 
-            ? 'ring-2 ring-indigo-500 bg-indigo-50/50 dark:bg-indigo-900/20' 
-            : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700';
+        const colClass = isToday ? 'is-today-column ring-2 ring-indigo-500 bg-indigo-50/30 dark:bg-indigo-900/10' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700';
         
-        const headerClass = isToday
-            ? 'text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
-            : 'text-gray-700 dark:text-gray-300 border-gray-100 dark:border-gray-700';
-
         let html = `
-            <div class="flex flex-col h-full min-h-[160px] rounded-xl p-3 ${colClass} shadow-sm transition-all duration-300">
-                <div class="flex justify-between items-center pb-2 border-b ${headerClass} mb-3">
-                    <span class="font-bold text-lg">${day.weekday_cn}</span>
-                    <span class="text-xs font-mono opacity-80">${day.date.slice(5)}</span>
+            <div class="flex flex-col rounded-xl p-3 ${colClass} shadow-sm transition-all">
+                <div class="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700 mb-3">
+                    <span class="font-bold ${isToday ? 'text-indigo-600' : 'text-gray-700 dark:text-gray-300'}">${day.weekday_cn}</span>
+                    <span class="text-[10px] font-mono opacity-60">${day.date}</span>
                 </div>
-                <div class="flex flex-col gap-3 flex-1">
+                <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-1 gap-2">
         `;
 
         if (day.items.length === 0) {
-            html += `
-                <div class="flex-1 flex flex-col items-center justify-center text-gray-400 dark:text-gray-600 py-6 opacity-50">
-                    <i class="fa-solid fa-bed text-2xl mb-2"></i>
-                    <span class="text-xs">无更新</span>
-                </div>`;
+            html += `<div class="col-span-2 md:col-span-1 py-4 text-center text-[10px] text-gray-400">无更新</div>`;
         } else {
             day.items.forEach(item => {
-                let statusColor = 'bg-gray-400';
-                let cardHover = 'hover:border-gray-300 dark:hover:border-gray-600';
-                let clickAction = '';
-                let titleAttr = '待播出';
-
-                if (item.status === 'ready') {
-                    statusColor = 'bg-green-500';
-                    cardHover = 'cursor-pointer hover:border-green-400/50 hover:shadow-green-500/10 hover:shadow-lg hover:-translate-y-0.5';
-                    titleAttr = '已入库 - 点击播放';
-                    
-                    // 🔥 这里的播放链接现在带上了 serverId
-                    const playUrl = `${embyBaseUrl}/web/index.html#!/item?id=${item.series_id}&serverId=${currentServerId}`;
-                    clickAction = `window.open('${playUrl}', '_blank')`;
-                    
-                } else if (item.status === 'missing' || item.status === 'today') {
-                    statusColor = 'bg-red-500 animate-pulse';
-                    cardHover = 'cursor-copy border-red-300 dark:border-red-800 hover:shadow-red-500/10 hover:shadow-lg bg-red-50 dark:bg-red-900/10';
-                    titleAttr = '缺失 - 点击复制剧名';
-                    const copyText = `${item.series_name} S${String(item.season).padStart(2,'0')}E${String(item.episode).padStart(2,'0')}`;
-                    clickAction = `copyToClipboard('${copyText}')`;
-                } else {
-                    statusColor = 'bg-blue-500';
-                    cardHover = 'opacity-80 hover:opacity-100';
-                }
-
-                const posterUrl = item.poster_path ? (imgBase + item.poster_path) : 'https://via.placeholder.com/300x450?text=No+Img';
+                const statusMap = {
+                    'ready': { color: 'bg-green-500', text: '已入库', icon: 'fa-check' },
+                    'missing': { color: 'bg-red-500', text: '待补货', icon: 'fa-download' },
+                    'today': { color: 'bg-red-500 animate-pulse', text: '今日更新', icon: 'fa-clock' },
+                    'upcoming': { color: 'bg-blue-500', text: '待播出', icon: 'fa-calendar' }
+                };
+                const s = statusMap[item.status] || { color: 'bg-gray-400', text: '未知', icon: 'fa-question' };
+                const poster = item.poster_path ? (imgBase + item.poster_path) : 'https://via.placeholder.com/300x450?text=No+Img';
 
                 html += `
-                    <div onclick="${clickAction}" title="${titleAttr}" class="group relative flex gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 transition-all ${cardHover}">
-                        <div class="relative w-12 h-18 flex-shrink-0 rounded overflow-hidden bg-gray-200 dark:bg-gray-700">
-                             <img src="${posterUrl}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy">
-                             <div class="absolute bottom-0 inset-x-0 h-1 ${statusColor}"></div>
+                    <div onclick='showDetails(${JSON.stringify(item).replace(/'/g, "&apos;")})' 
+                         class="group relative flex flex-col md:flex-row gap-2 p-1.5 rounded-lg bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700 active:scale-95 transition-all cursor-pointer">
+                        <div class="relative aspect-[2/3] md:w-10 md:h-14 flex-shrink-0 rounded-md overflow-hidden">
+                             <img src="${poster}" class="w-full h-full object-cover" loading="lazy">
+                             <div class="absolute top-0 right-0 w-2 h-2 ${s.color} rounded-bl-md shadow-sm"></div>
                         </div>
-                        <div class="flex flex-col justify-center min-w-0 flex-1">
-                            <h4 class="text-xs font-bold text-gray-800 dark:text-gray-200 truncate leading-tight mb-1">
-                                ${item.series_name}
-                            </h4>
-                            <div class="flex items-center justify-between mt-1">
-                                <span class="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-[10px] text-gray-600 dark:text-gray-300 font-mono font-medium">
-                                    S${String(item.season).padStart(2, '0')}E${String(item.episode).padStart(2, '0')}
-                                </span>
+                        <div class="flex flex-col justify-center min-w-0 flex-1 px-0.5">
+                            <h4 class="text-[10px] md:text-xs font-bold text-gray-800 dark:text-gray-200 truncate leading-tight">${item.series_name}</h4>
+                            <div class="flex items-center gap-1 mt-1">
+                                <span class="text-[9px] font-mono text-indigo-500 font-bold">S${String(item.season).padStart(2,'0')}E${String(item.episode).padStart(2,'0')}</span>
+                                <span class="hidden md:inline text-[8px] px-1 py-0.5 rounded-sm ${s.color} text-white font-bold opacity-80">${s.text}</span>
                             </div>
                         </div>
                     </div>
                 `;
             });
         }
-        html += `   </div></div>`;
+        html += `</div></div>`;
         container.innerHTML += html;
     });
 }
 
+function showDetails(item) {
+    const drawer = document.getElementById('detail-drawer');
+    const content = document.getElementById('drawer-content');
+    
+    document.getElementById('drawer-title').textContent = item.series_name;
+    document.getElementById('drawer-episode').textContent = `第 ${item.season} 季 · 第 ${item.episode} 集`;
+    document.getElementById('drawer-img').src = item.poster_path ? (imgBase + item.poster_path) : '';
+    document.getElementById('drawer-overview').textContent = item.overview || "暂无简介内容...";
+    document.getElementById('drawer-date').textContent = `预计更新日期: ${item.air_date}`;
+
+    const badge = document.getElementById('drawer-status-badge');
+    const actions = document.getElementById('drawer-actions');
+    actions.innerHTML = '';
+    
+    let badgeClass = "bg-gray-100 text-gray-600";
+    if (item.status === 'ready') {
+        badgeClass = "bg-green-100 text-green-700";
+        badge.textContent = "已入库";
+        actions.innerHTML = `
+            <button onclick="playItem('${item.series_id}')" class="col-span-2 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-500/30 active:scale-95 transition-all">
+                <i class="fa-solid fa-play mr-2"></i> 立即观看
+            </button>
+        `;
+    } else {
+        const isMissing = item.status === 'missing' || item.status === 'today';
+        badge.textContent = isMissing ? "待补货" : "待播出";
+        badgeClass = isMissing ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700";
+        const copyText = `${item.series_name} S${String(item.season).padStart(2,'0')}E${String(item.episode).padStart(2,'0')}`;
+        actions.innerHTML = `
+            <button onclick="copyToClipboard('${copyText}')" class="col-span-2 py-3 bg-gray-800 text-white rounded-xl font-bold active:scale-95 transition-all">
+                <i class="fa-solid fa-copy mr-2"></i> 复制剧集信息补货
+            </button>
+        `;
+    }
+    badge.className = `inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-bold ${badgeClass}`;
+
+    drawer.classList.remove('hidden');
+    setTimeout(() => content.classList.remove('translate-y-full'), 10);
+}
+
+function closeDrawer() {
+    const content = document.getElementById('drawer-content');
+    content.classList.add('translate-y-full');
+    setTimeout(() => document.getElementById('detail-drawer').classList.add('hidden'), 300);
+}
+
+function playItem(seriesId) {
+    const playUrl = `${currentEmbyUrl}/web/index.html#!/item?id=${seriesId}&serverId=${currentServerId}`;
+    window.open(playUrl, '_blank');
+}
+
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
-        alert(`已复制到剪贴板：\n${text}`);
-    }).catch(err => { console.error('复制失败', err); });
+        alert("已复制剧集信息，请前往下载器添加任务");
+        closeDrawer();
+    });
 }
 </script>
+
+<style>
+    /* 自定义滚动条美化 */
+    #calendar-grid::-webkit-scrollbar { width: 4px; }
+    #calendar-grid::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+    .dark #calendar-grid::-webkit-scrollbar-thumb { background: #334155; }
+</style>
 {% endblock %}
