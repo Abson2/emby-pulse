@@ -32,7 +32,7 @@ def check_expired_users():
                         user = u_res.json()
                         policy = user.get('Policy', {})
                         if not policy.get('IsDisabled', False):
-                            print(f"🚫 账号已过期: {user.get('Name')} (有效期至: {row['expire_date']})")
+                            print(f"🚫 账号已过期: {user.get('Name')} (到期日: {row['expire_date']})")
                             policy['IsDisabled'] = True
                             requests.post(f"{host}/emby/Users/{uid}/Policy?api_key={key}", json=policy)
                 except Exception as e:
@@ -42,25 +42,25 @@ def check_expired_users():
 
 @router.get("/api/manage/libraries")
 def api_get_libraries(request: Request):
-    """ 获取媒体库，强制提取 GUID 解决权限失效问题 """
+    """ 获取媒体库，精准提取 GUID 解决权限失效问题 """
     if not request.session.get("user"):
         return {"status": "error"}
     key = cfg.get("emby_api_key")
     host = cfg.get("emby_host")
     try:
-        # 使用 VirtualFolders 获取，它包含 32 位 GUID
+        # 使用 VirtualFolders 接口获取，它包含 32 位 GUID (ItemId)
         res = requests.get(f"{host}/emby/Library/VirtualFolders?api_key={key}", timeout=5)
         if res.status_code == 200:
-            # 🔥 必须使用 Guid 字段，这是 Emby 权限控制的唯一真理
+            # 🔥 必须使用 Guid 字段，这是 Emby 权限控制唯一生效的 ID
             libs = [{"Id": item["Guid"], "Name": item["Name"]} for item in res.json() if "Guid" in item]
             return {"status": "success", "data": libs}
-        return {"status": "error", "message": "Emby API 响应异常"}
+        return {"status": "error", "message": "Emby API 返回异常"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 @router.get("/api/manage/users")
 def api_manage_users(request: Request):
-    """ 管理员视图下的全量用户列表 """
+    """ 管理员用户列表，包含所有 Policy 字段 """
     if not request.session.get("user"):
         return {"status": "error"}
     
@@ -73,7 +73,7 @@ def api_manage_users(request: Request):
     try:
         res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=5)
         if res.status_code != 200:
-            return {"status": "error", "message": "Emby 连接失败"}
+            return {"status": "error", "message": "Emby 无法连接"}
         
         emby_users = res.json()
         meta_rows = query_db("SELECT * FROM users_meta")
@@ -105,7 +105,7 @@ def api_manage_users(request: Request):
 
 @router.get("/api/manage/user/{user_id}")
 def api_get_single_user(user_id: str, request: Request):
-    """ 获取单个用户的实时权限状态 (解决列表接口缓存/阉割问题) """
+    """ 获取单个用户实时完整数据 (解决列表接口权限隐藏问题) """
     if not request.session.get("user"):
         return {"status": "error"}
     key = cfg.get("emby_api_key")
@@ -113,13 +113,13 @@ def api_get_single_user(user_id: str, request: Request):
     try:
         res = requests.get(f"{host}/emby/Users/{user_id}?api_key={key}", timeout=5)
         if res.status_code == 200:
-            u_data = res.json()
-            policy = u_data.get('Policy', {})
+            user_data = res.json()
+            policy = user_data.get('Policy', {})
             return {
                 "status": "success", 
                 "data": {
-                    "Id": u_data['Id'],
-                    "Name": u_data['Name'],
+                    "Id": user_data['Id'],
+                    "Name": user_data['Name'],
                     "EnableAllFolders": policy.get('EnableAllFolders', True),
                     "EnabledFolders": policy.get('EnabledFolders', []),
                     "ExcludedSubFolders": policy.get('ExcludedSubFolders', [])
@@ -131,9 +131,8 @@ def api_get_single_user(user_id: str, request: Request):
 
 @router.get("/api/user/image/{user_id}")
 def get_user_avatar(user_id: str):
-    """ 头像代理接口 """
-    key = cfg.get("emby_api_key")
-    host = cfg.get("emby_host")
+    """ 头像代理与缓存穿透 """
+    key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     try:
         res = requests.get(f"{host}/emby/Users/{user_id}/Images/Primary?api_key={key}&quality=90", timeout=5)
         if res.status_code == 200:
@@ -144,24 +143,24 @@ def get_user_avatar(user_id: str):
 
 @router.post("/api/manage/user/image")
 async def api_update_user_image(request: Request, user_id: str = Form(...), url: str = Form(None), file: UploadFile = File(None)):
-    """ 更新头像 (支持文件上传和 URL) """
+    """ 更新头像：支持 URL 下载和本地上传 """
     if not request.session.get("user"): return {"status": "error"}
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     try:
-        img_data = None; content_type = "image/png"
+        img_data = None; c_type = "image/png"
         if url:
             d_res = requests.get(url, timeout=10)
-            if d_res.status_code == 200:
+            if d_res.status_code == 200: 
                 img_data = d_res.content
-                content_type = d_res.headers.get('Content-Type', 'image/png')
+                c_type = d_res.headers.get('Content-Type', 'image/png')
         elif file:
             img_data = await file.read()
-            content_type = file.content_type or "image/jpeg"
+            c_type = file.content_type or "image/jpeg"
             
-        if not img_data: return {"status": "error", "message": "无图片"}
+        if not img_data: return {"status": "error", "message": "无图片数据"}
         b64 = base64.b64encode(img_data)
         requests.delete(f"{host}/emby/Users/{user_id}/Images/Primary?api_key={key}")
-        requests.post(f"{host}/emby/Users/{user_id}/Images/Primary?api_key={key}", data=b64, headers={"Content-Type": content_type})
+        requests.post(f"{host}/emby/Users/{user_id}/Images/Primary?api_key={key}", data=b64, headers={"Content-Type": c_type})
         return {"status": "success"}
     except Exception as e: return {"status": "error", "message": str(e)}
 
@@ -185,54 +184,58 @@ def api_gen_invite(data: InviteGenModel, request: Request):
 
 @router.post("/api/manage/user/update")
 def api_manage_user_update(data: UserUpdateModel, request: Request):
-    """ 用户资料与媒体库权限 (GUID & 子文件夹同步) """
+    """ 用户全量更新：密码、有效期、镜像同步库权限 """
     if not request.session.get("user"): return {"status": "error"}
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     try:
-        # 更新本地有效期
+        # 更新本地过期时间
         if data.expire_date is not None:
             v = data.expire_date if data.expire_date else None
             exist = query_db("SELECT 1 FROM users_meta WHERE user_id = ?", (data.user_id,), one=True)
             if exist: query_db("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (v, data.user_id))
             else: query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (data.user_id, v, datetime.datetime.now().isoformat()))
         
+        # 修改密码
         if data.password:
             requests.post(f"{host}/emby/Users/{data.user_id}/Password?api_key={key}", json={"Id": data.user_id, "NewPw": data.password})
 
+        # 同步 Policy
         p_res = requests.get(f"{host}/emby/Users/{data.user_id}?api_key={key}")
         if p_res.status_code == 200:
             p = p_res.json().get('Policy', {})
             if data.is_disabled is not None:
                 p['IsDisabled'] = data.is_disabled
                 if not data.is_disabled: p['LoginAttemptsBeforeLockout'] = -1
+            
             if data.enable_all_folders is not None:
                 p['EnableAllFolders'] = bool(data.enable_all_folders)
-                if p['EnableAllFolders']: p['EnabledFolders'] = []
-                else: p['EnabledFolders'] = [str(x) for x in data.enabled_folders] if data.enabled_folders is not None else []
+                p['EnabledFolders'] = [str(x) for x in data.enabled_folders] if not p['EnableAllFolders'] and data.enabled_folders is not None else []
             
-            # 🔥 关键修复：写入子文件夹黑名单
+            # 🔥 关键修复：同步子文件夹排除黑名单
             if data.excluded_sub_folders is not None:
                 p['ExcludedSubFolders'] = data.excluded_sub_folders
             
-            # 数据净化
+            # 数据净化，防止 Emby 拒绝保存
             for k in ['BlockedMediaFolders','BlockedChannels','EnableAllChannels','EnabledChannels','BlockedTags','AllowedTags']: p.pop(k, None)
-            
             requests.post(f"{host}/emby/Users/{data.user_id}/Policy?api_key={key}", json=p, headers={"Content-Type": "application/json", "X-Emby-Token": key})
             
-        return {"status": "success", "message": "用户信息已同步至 Emby"}
+        return {"status": "success", "message": "用户信息已更新"}
     except Exception as e: return {"status": "error", "message": str(e)}
 
 @router.post("/api/manage/user/new")
 def api_manage_user_new(data: NewUserModel, request: Request):
-    """ 创建新用户并镜像套用权限模板 """
+    """ 新建用户并完全镜像模板权限 """
     if not request.session.get("user"): return {"status": "error"}
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     try:
         res = requests.post(f"{host}/emby/Users/New?api_key={key}", json={"Name": data.name})
         if res.status_code != 200: return {"status": "error", "message": f"创建失败: {res.text}"}
         new_id = res.json()['Id']
-        if data.password: requests.post(f"{host}/emby/Users/{new_id}/Password?api_key={key}", json={"Id": new_id, "NewPw": data.password})
         
+        if data.password: 
+            requests.post(f"{host}/emby/Users/{new_id}/Password?api_key={key}", json={"Id": new_id, "NewPw": data.password})
+        
+        # 继承 Policy
         p = requests.get(f"{host}/emby/Users/{new_id}?api_key={key}").json().get('Policy', {})
         if data.template_user_id:
             src = requests.get(f"{host}/emby/Users/{data.template_user_id}?api_key={key}").json().get('Policy', {})
@@ -240,13 +243,12 @@ def api_manage_user_new(data: NewUserModel, request: Request):
             p['EnabledFolders'] = src.get('EnabledFolders', [])
             p['ExcludedSubFolders'] = src.get('ExcludedSubFolders', [])
             
-        junk = ['BlockedMediaFolders','BlockedChannels','EnableAllChannels','EnabledChannels']
-        for k in junk: p.pop(k, None)
+        for k in ['BlockedMediaFolders','BlockedChannels','EnableAllChannels','EnabledChannels']: p.pop(k, None)
         requests.post(f"{host}/emby/Users/{new_id}/Policy?api_key={key}", json=p, headers={"X-Emby-Token": key})
         
         if data.expire_date: 
             query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (new_id, data.expire_date, datetime.datetime.now().isoformat()))
-        return {"status": "success", "message": "创建成功"}
+        return {"status": "success", "message": "用户创建成功"}
     except Exception as e: return {"status": "error", "message": str(e)}
 
 @router.delete("/api/manage/user/{user_id}")
