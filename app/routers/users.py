@@ -89,6 +89,25 @@ def api_manage_users(request: Request):
         }
     except Exception as e: return {"status": "error", "message": str(e)}
 
+# 🔥 新增：专门获取单个用户的完整数据（防 Emby 列表阉割）
+@router.get("/api/manage/user/{user_id}")
+def api_get_single_user(user_id: str, request: Request):
+    if not request.session.get("user"): return {"status": "error"}
+    key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
+    try:
+        res = requests.get(f"{host}/emby/Users/{user_id}?api_key={key}", timeout=5)
+        if res.status_code == 200:
+            user_data = res.json()
+            policy = user_data.get('Policy', {})
+            return {"status": "success", "data": {
+                "Id": user_data['Id'],
+                "Name": user_data['Name'],
+                "EnableAllFolders": policy.get('EnableAllFolders', True),
+                "EnabledFolders": policy.get('EnabledFolders', [])
+            }}
+        return {"status": "error", "message": "获取用户详情失败"}
+    except Exception as e: return {"status": "error", "message": str(e)}
+
 @router.get("/api/user/image/{user_id}")
 def get_user_avatar(user_id: str):
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -173,28 +192,12 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
                     if policy['EnableAllFolders']:
                         policy['EnabledFolders'] = [] 
                     else:
-                        # 🔥 强制转为严格的字符串数组格式
                         policy['EnabledFolders'] = [str(x) for x in data.enabled_folders] if data.enabled_folders else []
                 
-                # 🔥🔥🔥 终极杀手锏：深度净化老用户的脏数据
-                junk_keys = [
-                    'BlockedMediaFolders', 
-                    'BlockedChannels', 
-                    'EnableAllChannels', 
-                    'EnabledChannels',
-                    'BlockedTags',
-                    'AllowedTags'
-                ]
-                for k in junk_keys:
-                    policy.pop(k, None)
+                junk_keys = ['BlockedMediaFolders', 'BlockedChannels', 'EnableAllChannels', 'EnabledChannels', 'BlockedTags', 'AllowedTags']
+                for k in junk_keys: policy.pop(k, None)
                 
-                print(f"🚀 [DEBUG] Cleaned Policy Update -> EnableAllFolders: {policy.get('EnableAllFolders')}, EnabledFolders: {policy.get('EnabledFolders')}")
-                
-                # 🔥 强制附加请求头，确保 Emby 的 JSON 解析器正确解析
-                headers = {
-                    "Content-Type": "application/json",
-                    "X-Emby-Token": key
-                }
+                headers = {"Content-Type": "application/json", "X-Emby-Token": key}
                 up_res = requests.post(f"{host}/emby/Users/{data.user_id}/Policy?api_key={key}", json=policy, headers=headers)
                 
                 if up_res.status_code not in [200, 204]:
@@ -226,7 +229,6 @@ def api_manage_user_new(data: NewUserModel, request: Request):
                 policy['EnableAllFolders'] = src_policy.get('EnableAllFolders', True)
                 policy['EnabledFolders'] = src_policy.get('EnabledFolders', [])
         
-        # 对于新用户也执行一遍净化
         junk_keys = ['BlockedMediaFolders', 'BlockedChannels', 'EnableAllChannels', 'EnabledChannels', 'BlockedTags', 'AllowedTags']
         for k in junk_keys: policy.pop(k, None)
 

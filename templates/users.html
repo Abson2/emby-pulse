@@ -285,7 +285,6 @@ function renderUsers() {
     `).join('');
 }
 
-// === 邀请逻辑 ===
 function openInviteModal() {
     const modal = document.getElementById('invite-modal');
     modal.classList.remove('hidden');
@@ -333,7 +332,6 @@ function copyInvite() {
     navigator.clipboard.writeText(text).then(() => alert('✅ 已复制到剪贴板'));
 }
 
-// === 新建逻辑 ===
 function openNewUserModal() { 
     const modal = document.getElementById('new-user-modal');
     modal.classList.remove('hidden');
@@ -366,7 +364,6 @@ async function submitNewUser() {
     else { alert(json.message); }
 }
 
-// === 编辑逻辑 (带 Tabs) ===
 function switchEditTab(tabName) {
     const isBasic = tabName === 'basic';
     document.getElementById('edit-tab-basic').style.display = isBasic ? 'block' : 'none';
@@ -384,7 +381,8 @@ function switchEditTab(tabName) {
     }
 }
 
-function openEditUserModal(uid) {
+// 🔥 核心改动：打开编辑时，去后端抓取单个用户的“真实完整权限”
+async function openEditUserModal(uid) {
     const user = users.find(u => u.Id === uid);
     if(!user) return;
     
@@ -400,12 +398,26 @@ function openEditUserModal(uid) {
     if (user.PrimaryImageTag) { preview.src = `/api/user/image/${uid}?t=${new Date().getTime()}`; } 
     else { preview.src = `https://api.dicebear.com/9.x/notionists/png?seed=${user.Name}`; }
     
-    renderLibraryCheckboxes(user);
-    populateTemplates('edit-template-select', uid);
-
+    // 显示弹窗
     const modal = document.getElementById('edit-user-modal');
     modal.classList.remove('hidden');
     setTimeout(() => { modal.classList.add('flex'); }, 10);
+
+    // 🔥 实时获取真实权限数据
+    try {
+        const res = await fetch(`/api/manage/user/${uid}`);
+        const json = await res.json();
+        if (json.status === 'success') {
+            user.EnableAllFolders = json.data.EnableAllFolders;
+            user.EnabledFolders = json.data.EnabledFolders;
+        }
+    } catch (e) {
+        console.error("获取用户真实权限失败", e);
+    }
+    
+    // 获取完真实数据后，再渲染复选框
+    renderLibraryCheckboxes(user);
+    populateTemplates('edit-template-select', uid);
 }
 
 function renderLibraryCheckboxes(user) {
@@ -437,25 +449,41 @@ function toggleLibraryCheckboxes() {
     container.style.pointerEvents = isAllEnabled ? 'none' : 'auto';
 }
 
-function applyEditTemplate() {
+// 🔥 核心改动：套用模板时，去后端抓取模板用户的“真实完整权限”
+async function applyEditTemplate() {
     const tid = document.getElementById('edit-template-select').value;
     if (!tid) return;
-    const tUser = users.find(u => u.Id === tid);
-    if (!tUser) return;
-    
-    document.getElementById('edit-enable-all').checked = tUser.EnableAllFolders;
-    const checkboxes = document.querySelectorAll('.lib-checkbox');
-    checkboxes.forEach(cb => { cb.checked = tUser.EnabledFolders.includes(cb.value); });
-    
-    toggleLibraryCheckboxes();
     
     const btn = document.getElementById('apply-template-btn');
     const oldText = btn.innerHTML;
-    btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> 已套用';
-    btn.classList.add('bg-green-600', 'hover:bg-green-700');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`/api/manage/user/${tid}`);
+        const json = await res.json();
+        
+        if (json.status === 'success') {
+            document.getElementById('edit-enable-all').checked = json.data.EnableAllFolders;
+            const checkboxes = document.querySelectorAll('.lib-checkbox');
+            checkboxes.forEach(cb => { cb.checked = json.data.EnabledFolders.includes(cb.value); });
+            
+            toggleLibraryCheckboxes();
+            
+            btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> 已套用';
+            btn.classList.add('bg-green-600', 'hover:bg-green-700');
+        } else {
+            alert('获取模板权限失败');
+            btn.innerHTML = oldText;
+        }
+    } catch(e) {
+        btn.innerHTML = oldText;
+    }
+
     setTimeout(() => { 
         btn.innerHTML = oldText; 
         btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+        btn.disabled = false;
     }, 1500);
 }
 
@@ -497,8 +525,6 @@ async function submitEditUser() {
     const pass = document.getElementById('edit-password').value; 
     
     const enableAll = document.getElementById('edit-enable-all').checked;
-    
-    // 🔥 核心防互斥修复：如果是允许全部，强制给后端传空数组
     const checkedLibs = enableAll 
         ? [] 
         : Array.from(document.querySelectorAll('.lib-checkbox:checked')).map(cb => cb.value);
