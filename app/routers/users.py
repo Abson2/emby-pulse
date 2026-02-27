@@ -35,19 +35,29 @@ def check_expired_users():
     except Exception as e:
         print(f"Check Expire Error: {e}")
 
-# 🔥🔥🔥 核心修复：改用 VirtualFolders 获取媒体库的 32 位 GUID (ItemId)
+# 🔥🔥🔥 终极修复：借用管理员的 Views 接口，获取 100% 真实的 32 位 GUID
 @router.get("/api/manage/libraries")
 def api_get_libraries(request: Request):
     if not request.session.get("user"): return {"status": "error"}
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     try:
-        # 换用 VirtualFolders 接口，它会返回完整的库配置，包含 32 位 GUID
-        res = requests.get(f"{host}/emby/Library/VirtualFolders?api_key={key}", timeout=5)
-        if res.status_code == 200:
-            # Emby 的 VirtualFolders 返回的是一个数组，里面有 ItemId
-            libs = [{"Id": item["ItemId"], "Name": item["Name"]} for item in res.json() if "ItemId" in item]
-            return {"status": "success", "data": libs}
-        return {"status": "error", "message": "获取媒体库失败"}
+        # 1. 揪出一个管理员账号 (Admin)
+        u_res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=5)
+        admin_id = None
+        if u_res.status_code == 200:
+            for u in u_res.json():
+                if u.get('Policy', {}).get('IsAdministrator'):
+                    admin_id = u['Id']
+                    break
+        
+        # 2. 用管理员视角拉取首页的所有“视图”，这里的 Id 就是纯正的 32 位 GUID！
+        if admin_id:
+            v_res = requests.get(f"{host}/emby/Users/{admin_id}/Views?api_key={key}", timeout=5)
+            if v_res.status_code == 200:
+                libs = [{"Id": item["Id"], "Name": item["Name"]} for item in v_res.json().get("Items", [])]
+                return {"status": "success", "data": libs}
+                
+        return {"status": "error", "message": "获取媒体库(Views)失败"}
     except Exception as e: return {"status": "error", "message": str(e)}
 
 @router.get("/api/manage/users")
