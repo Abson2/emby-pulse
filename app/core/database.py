@@ -38,6 +38,17 @@ def init_db():
         except:
             pass
 
+        # 3. 🔥 新增：追剧日历本地缓存表
+        c.execute('''CREATE TABLE IF NOT EXISTS tv_calendar_cache (
+                        id TEXT PRIMARY KEY,       -- 组合主键: seriesId_season_episode
+                        series_id TEXT,            -- Emby 剧集 ID，用于 Webhook 联动
+                        season INTEGER,
+                        episode INTEGER,
+                        air_date TEXT,             -- 播出日期 (YYYY-MM-DD)
+                        status TEXT,               -- 红绿灯状态: ready/missing/upcoming/today
+                        data_json TEXT             -- 完整数据的 JSON 文本
+                    )''')
+
         conn.commit()
         conn.close()
         print("✅ Database initialized (Plugin Read-Only Mode).")

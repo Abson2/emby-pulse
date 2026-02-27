@@ -3,8 +3,11 @@ import datetime
 import logging
 import threading
 import time
+import sqlite3
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.core.config import cfg
+from app.core.database import DB_PATH
 
 logger = logging.getLogger("uvicorn")
 
@@ -21,6 +24,24 @@ class CalendarService:
             return {"http": proxy, "https": proxy}
         return None
 
+    def mark_episode_ready(self, series_id, season, episode):
+        """Webhook 专用：新集入库时，将本地缓存状态点亮为已入库 (ready)"""
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute('''UPDATE tv_calendar_cache 
+                         SET status = 'ready' 
+                         WHERE series_id = ? AND season = ? AND episode = ?''', 
+                      (series_id, season, episode))
+            conn.commit()
+            conn.close()
+            # 清理内存缓存，确保下次刷新页面时读到最新绿灯
+            with self._cache_lock:
+                self._cache.clear()
+            logger.info(f"🟢 [日历联动] 剧集入库，红灯变绿灯: SeriesId={series_id} S{season}E{episode}")
+        except Exception as e:
+            logger.error(f"日历状态更新失败: {e}")
+
     def get_weekly_calendar(self, force_refresh=False, week_offset=0):
         """
         获取周历
@@ -30,7 +51,7 @@ class CalendarService:
         # 动态获取配置，默认 1 天 (86400秒)
         cache_ttl = int(cfg.get("calendar_cache_ttl") or 86400)
 
-        # 1. 检查对应周的缓存
+        # 1. 检查对应周的内存缓存
         if not force_refresh:
             with self._cache_lock:
                 cached_item = self._cache.get(week_offset)
@@ -51,28 +72,81 @@ class CalendarService:
         if not continuing_series:
             return {"days": []}
 
-        # 4. 并发查询 TMDB
+        # 4. 优化：先尝试从本地 SQLite 获取这一周的数据
         week_data = {i: [] for i in range(7)}
-        proxies = self._get_proxies()
+        start_date_str = start_of_week.strftime("%Y-%m-%d")
+        end_date_str = end_of_week.strftime("%Y-%m-%d")
         
-        with ThreadPoolExecutor(max_workers=20) as executor:
-            future_to_series = {
-                executor.submit(self._fetch_series_status, s, api_key, start_of_week, end_of_week, proxies): s 
-                for s in continuing_series
-            }
-            
-            for future in as_completed(future_to_series):
-                try:
-                    results = future.result()
-                    if results:
-                        for item in results:
-                            idx = item['day_index']
-                            if 0 <= idx <= 6:
-                                week_data[idx].append(item['data'])
-                except Exception as e:
-                    logger.error(f"Calendar Task Error: {e}")
+        has_db_data = False
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute("SELECT status, data_json FROM tv_calendar_cache WHERE air_date >= ? AND air_date <= ?", (start_date_str, end_date_str))
+            rows = c.fetchall()
+            if rows and not force_refresh:
+                has_db_data = True
+                for row in rows:
+                    db_status = row[0]
+                    data_dict = json.loads(row[1])
+                    data_dict["status"] = db_status # 🔥 关键：用 Webhook 更新后的最新状态覆盖
+                    
+                    try:
+                        air_date_obj = datetime.datetime.strptime(data_dict["air_date"], "%Y-%m-%d").date()
+                        day_index = (air_date_obj - start_of_week).days
+                        if 0 <= day_index <= 6:
+                            week_data[day_index].append(data_dict)
+                    except: pass
+            conn.close()
+        except Exception as e:
+            logger.error(f"DB Read Error: {e}")
 
-        # 5. 智能合并与去重
+        # 5. 如果本地没数据或强制刷新，才去并发查 TMDB 和 Emby
+        if not has_db_data or force_refresh:
+            # 清空刚才可能加载的不完整本地数据
+            week_data = {i: [] for i in range(7)}
+            proxies = self._get_proxies()
+            
+            with ThreadPoolExecutor(max_workers=20) as executor:
+                future_to_series = {
+                    executor.submit(self._fetch_series_status, s, api_key, start_of_week, end_of_week, proxies): s 
+                    for s in continuing_series
+                }
+                
+                for future in as_completed(future_to_series):
+                    try:
+                        results = future.result()
+                        if results:
+                            for item in results:
+                                idx = item['day_index']
+                                if 0 <= idx <= 6:
+                                    week_data[idx].append(item['data'])
+                    except Exception as e:
+                        logger.error(f"Calendar Task Error: {e}")
+            
+            # 🔥 新增：将查回来的全新数据落盘到本地数据库
+            try:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                for i in range(7):
+                    for data_dict in week_data[i]:
+                        series_id = data_dict.get("series_id")
+                        season = data_dict.get("season")
+                        episode = data_dict.get("episode")
+                        air_date = data_dict.get("air_date")
+                        status = data_dict.get("status")
+                        
+                        if series_id and season is not None and episode is not None:
+                            id_key = f"{series_id}_{season}_{episode}"
+                            c.execute('''INSERT OR REPLACE INTO tv_calendar_cache 
+                                         (id, series_id, season, episode, air_date, status, data_json) 
+                                         VALUES (?, ?, ?, ?, ?, ?, ?)''', 
+                                      (id_key, series_id, season, episode, air_date, status, json.dumps(data_dict)))
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                logger.error(f"DB Write Error: {e}")
+
+        # 6. 智能合并与去重
         for i in range(7):
             raw_items = week_data[i]
             if not raw_items: continue
@@ -112,7 +186,7 @@ class CalendarService:
             
             week_data[i] = merged_items
 
-        # 6. 排序与格式化
+        # 7. 排序与格式化
         final_days = []
         week_dates = [start_of_week + datetime.timedelta(days=i) for i in range(7)]
         today_real = datetime.date.today()
