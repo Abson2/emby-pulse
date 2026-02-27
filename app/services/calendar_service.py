@@ -16,6 +16,31 @@ class CalendarService:
         # 缓存结构: { offset: {'data': ..., 'time': timestamp} }
         self._cache = {} 
         self._cache_lock = threading.Lock()
+        
+        # 🔥 新增：启动后台定时同步任务
+        self._start_background_sync()
+
+    def _start_background_sync(self):
+        """后台独立线程：定时拉取 TMDB 排期并落盘，防止用户首次打开加载过慢"""
+        def sync_task():
+            # 延迟 60 秒启动，等 FastAPI 主服务和数据库都彻底跑起来
+            time.sleep(60)
+            while True:
+                try:
+                    logger.info("🔄 [定时任务] 开始在后台自动拉取并更新追剧日历...")
+                    # 强制刷新本周 (offset=0) 和 下周 (offset=1) 的数据写入本地 DB
+                    self.get_weekly_calendar(force_refresh=True, week_offset=0)
+                    self.get_weekly_calendar(force_refresh=True, week_offset=1)
+                    logger.info("✅ [定时任务] 追剧日历更新完毕，数据已落盘。")
+                except Exception as e:
+                    logger.error(f"后台更新日历失败: {e}")
+                
+                # 休眠 12 小时 (43200秒) 后再次执行
+                time.sleep(43200)
+        
+        # 设置 daemon=True，这样主进程结束时，这个线程也会自动销毁
+        t = threading.Thread(target=sync_task, daemon=True)
+        t.start()
 
     def _get_proxies(self):
         """获取全局代理配置"""
@@ -51,7 +76,7 @@ class CalendarService:
         # 动态获取配置，默认 1 天 (86400秒)
         cache_ttl = int(cfg.get("calendar_cache_ttl") or 86400)
 
-        # 1. 检查对应周的内存缓存
+        # 1. 检查对应周的内存缓存 (如果是前端普通请求，且没过期)
         if not force_refresh:
             with self._cache_lock:
                 cached_item = self._cache.get(week_offset)
