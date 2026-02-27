@@ -289,6 +289,8 @@ class CalendarService:
             if res_series.status_code != 200: return []
             
             data_series = res_series.json()
+            series_overview = data_series.get("overview") # 🔥 获取剧集总简介用于兜底
+            
             target_seasons = set()
             
             if data_series.get("last_episode_to_air"):
@@ -347,7 +349,8 @@ class CalendarService:
                                 "air_date": ep.get("air_date"),
                                 "poster_path": data_series.get("poster_path"),
                                 "status": status,
-                                "overview": ep.get("overview")
+                                "overview": ep.get("overview"),
+                                "series_overview": series_overview # 🔥 注入总简介
                             }
                         })
             
@@ -365,24 +368,18 @@ class CalendarService:
             "ParentId": series_id,
             "Recursive": "true",
             "IncludeItemTypes": "Episode",
-            # 🔥 撤销 Emby 端无效的季/集过滤，改为让它返回这部剧的所有集数
+            # 🔥 严格的物理校验：拉取所有集数并比对 Path
             "Fields": "Path,MediaSources,LocationType", 
             "api_key": key
         }
         try:
-            res = requests.get(url, params=params, timeout=5) # 稍微增加超时时间以防集数过多
+            res = requests.get(url, params=params, timeout=5)
             if res.status_code == 200:
                 items = res.json().get("Items", [])
-                
                 for item in items:
-                    # 🔥 核心防御：在 Python 内存中严格校验季号和集号
                     if item.get("ParentIndexNumber") == season and item.get("IndexNumber") == episode:
-                        
-                        # 必须不是虚拟集、不是缺失集
                         if item.get("LocationType", "") == "Virtual": continue
                         if item.get("IsMissing", False): continue
-                        
-                        # 且必须拥有真实的物理文件路径或媒体源
                         if item.get("Path") or item.get("MediaSources"):
                             return True
         except: pass
