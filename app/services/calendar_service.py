@@ -229,7 +229,7 @@ class CalendarService:
         emby_url = cfg.get("emby_public_url") or cfg.get("emby_public_host") or cfg.get("emby_host") or ""
         if emby_url.endswith('/'): emby_url = emby_url[:-1]
 
-        # 🔥 获取 Emby ServerId (解决跳转播放验证问题)
+        # 获取 Emby ServerId (解决跳转播放验证问题)
         server_id = ""
         try:
             key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -242,7 +242,7 @@ class CalendarService:
             "days": final_days, 
             "updated_at": datetime.datetime.now().strftime("%H:%M"),
             "emby_url": emby_url,
-            "server_id": server_id, # 🔥 返回 ServerId
+            "server_id": server_id,
             "date_range": f"{start_of_week.strftime('%m/%d')} - {end_of_week.strftime('%m/%d')}",
             "current_ttl": cache_ttl 
         }
@@ -365,25 +365,26 @@ class CalendarService:
             "ParentId": series_id,
             "Recursive": "true",
             "IncludeItemTypes": "Episode",
-            "ParentIndexNumber": season,
-            "IndexNumber": episode,
-            "IsMissing": "false",        # 🔥 过滤缺失集标记
-            "IsVirtualItem": "false",    # 🔥 过滤虚拟集标记
-            "Limit": 1,
-            "Fields": "Path,MediaSources,LocationType", # 🔥 请求物理路径和媒体源字段
+            # 🔥 撤销 Emby 端无效的季/集过滤，改为让它返回这部剧的所有集数
+            "Fields": "Path,MediaSources,LocationType", 
             "api_key": key
         }
         try:
-            res = requests.get(url, params=params, timeout=2)
+            res = requests.get(url, params=params, timeout=5) # 稍微增加超时时间以防集数过多
             if res.status_code == 200:
                 items = res.json().get("Items", [])
+                
                 for item in items:
-                    # 🔥 终极双重保险：不仅要判断标记，还必须有真实物理文件路径 (Path) 或媒体源
-                    if item.get("LocationType", "") == "Virtual": continue
-                    if item.get("IsMissing", False): continue
-                    
-                    if item.get("Path") or item.get("MediaSources"):
-                        return True
+                    # 🔥 核心防御：在 Python 内存中严格校验季号和集号
+                    if item.get("ParentIndexNumber") == season and item.get("IndexNumber") == episode:
+                        
+                        # 必须不是虚拟集、不是缺失集
+                        if item.get("LocationType", "") == "Virtual": continue
+                        if item.get("IsMissing", False): continue
+                        
+                        # 且必须拥有真实的物理文件路径或媒体源
+                        if item.get("Path") or item.get("MediaSources"):
+                            return True
         except: pass
         return False
 
