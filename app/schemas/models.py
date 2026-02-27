@@ -39,7 +39,7 @@ class UserUpdateModel(BaseModel):
     expire_date: Optional[str] = None 
     enable_all_folders: Optional[bool] = None
     enabled_folders: Optional[List[str]] = None
-    # 🔥 新增：用于彻底解决子文件夹同步问题的字段
+    # 🔥 关键：支持子文件夹黑名单同步
     excluded_sub_folders: Optional[List[str]] = None
 
 class NewUserModel(BaseModel):
@@ -51,6 +51,8 @@ class NewUserModel(BaseModel):
 class InviteGenModel(BaseModel):
     days: int 
     template_user_id: Optional[str] = None 
+    # 🔥 关键：支持批量生成的数量
+    count: Optional[int] = 1
 
 class UserRegisterModel(BaseModel):
     code: str

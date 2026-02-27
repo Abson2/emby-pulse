@@ -8,15 +8,11 @@
             用户管理
         </h1>
         <div class="flex gap-2">
-            <button onclick="openInviteModal()" class="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-2 text-sm md:px-4 md:py-2 rounded-lg transition shadow-sm font-medium">
-                <i class="fa-solid fa-link"></i>
-                <span class="hidden md:inline">邀请链接</span>
-                <span class="md:hidden">邀请</span>
+            <button onclick="openInviteModal()" class="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg transition shadow-sm font-medium">
+                <i class="fa-solid fa-link"></i> <span class="hidden md:inline">邀请链接</span><span class="md:hidden">邀请</span>
             </button>
-            <button onclick="openNewUserModal()" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 text-sm md:px-4 md:py-2 rounded-lg transition shadow-sm font-medium">
-                <i class="fa-solid fa-user-plus"></i>
-                <span class="hidden md:inline">新建用户</span>
-                <span class="md:hidden">新建</span>
+            <button onclick="openNewUserModal()" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition shadow-sm font-medium">
+                <i class="fa-solid fa-user-plus"></i> <span class="hidden md:inline">新建用户</span><span class="md:hidden">新建</span>
             </button>
         </div>
     </div>
@@ -26,11 +22,11 @@
             <table class="w-full text-left text-sm text-gray-600 dark:text-gray-300">
                 <thead class="bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-gray-100 font-medium border-b border-gray-100 dark:border-gray-700">
                     <tr>
-                        <th class="px-6 py-4">用户详情</th>
-                        <th class="px-6 py-4">账号状态</th>
+                        <th class="px-6 py-4">用户</th>
+                        <th class="px-6 py-4">状态</th>
                         <th class="px-6 py-4">有效期至</th>
                         <th class="px-6 py-4">最后登录</th>
-                        <th class="px-6 py-4 text-right">管理操作</th>
+                        <th class="px-6 py-4 text-right">操作</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-700" id="user-list-body-desktop">
@@ -43,29 +39,53 @@
         </div>
 </div>
 
-<div id="new-user-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4">
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-100">
-        <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4">创建 Emby 账号</h3>
-        <div class="space-y-4">
+<div id="invite-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all">
+        <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4">批量生成邀请码</h3>
+        
+        <div id="invite-form-step" class="space-y-4">
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">用户名</label>
-                <input type="text" id="new-username" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">有效期选项</label>
+                <div class="grid grid-cols-4 gap-2 mb-3">
+                    <button onclick="selectDuration(1)" class="dur-btn px-2 py-2 border rounded-lg text-xs hover:bg-indigo-50">1 天</button>
+                    <button onclick="selectDuration(7)" class="dur-btn px-2 py-2 border rounded-lg text-xs hover:bg-indigo-50">7 天</button>
+                    <button onclick="selectDuration(30)" class="dur-btn px-2 py-2 border border-indigo-500 bg-indigo-50 text-indigo-600 font-bold rounded-lg text-xs">30 天</button>
+                    <button onclick="selectDuration(90)" class="dur-btn px-2 py-2 border rounded-lg text-xs hover:bg-indigo-50">90 天</button>
+                    <button onclick="selectDuration(180)" class="dur-btn px-2 py-2 border rounded-lg text-xs hover:bg-indigo-50">180 天</button>
+                    <button onclick="selectDuration(365)" class="dur-btn px-2 py-2 border rounded-lg text-xs hover:bg-indigo-50">365 天</button>
+                    <button onclick="selectDuration(-1)" class="dur-btn px-2 py-2 border rounded-lg text-xs hover:bg-indigo-50 col-span-2">永久有效</button>
+                </div>
+                <div class="flex items-center gap-2 mt-2">
+                    <span class="text-xs text-gray-500">自定义天数:</span>
+                    <input type="number" id="custom-days" placeholder="输入天数" class="flex-1 px-3 py-1.5 border rounded-lg text-sm bg-gray-50 dark:bg-gray-700 outline-none" oninput="selectDuration(this.value)">
+                </div>
             </div>
+
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">初始密码 (可选)</label>
-                <input type="password" id="new-password" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="不填则无密码">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 caps">一次生成几条链接？</label>
+                <input type="number" id="invite-count" value="1" min="1" max="50" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 outline-none">
             </div>
+
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">到期时间 (留空为永久)</label>
-                <input type="date" id="new-expire" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 caps">权限模板 (继承谁的权限)</label>
+                <select id="invite-template" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 outline-none"></select>
             </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">权限模板 <span class="text-xs text-gray-400 font-normal">(镜像复制媒体库黑白名单)</span></label>
-                <select id="new-template" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none"></select>
-            </div>
+            
             <div class="flex justify-end gap-3 mt-6">
-                <button onclick="closeNewUserModal()" class="px-4 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-medium">取消</button>
-                <button onclick="submitNewUser()" id="new-user-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-sm">立即创建</button>
+                <button onclick="closeInviteModal()" class="px-4 py-2 text-gray-500 font-medium">取消</button>
+                <button onclick="generateInvite()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-bold shadow-sm">立即生成</button>
+            </div>
+        </div>
+
+        <div id="invite-result-step" class="hidden space-y-4">
+            <div class="text-center">
+                <div class="bg-green-50 p-3 rounded-full inline-flex items-center justify-center mb-2"><i class="fa-solid fa-check text-2xl text-green-500"></i></div>
+                <h4 class="text-lg font-bold text-gray-900 dark:text-white">邀请链接已生成</h4>
+            </div>
+            <div id="invite-links-container" class="space-y-2 max-h-64 overflow-y-auto custom-scrollbar p-1">
+                </div>
+            <div class="flex justify-center mt-6">
+                <button onclick="closeInviteModal()" class="px-8 py-2 bg-indigo-600 text-white rounded-lg font-bold">完成并关闭</button>
             </div>
         </div>
     </div>
@@ -73,696 +93,372 @@
 
 <div id="edit-user-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4 py-6">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md flex flex-col max-h-[95vh]">
-        <div class="p-6 pb-4 shrink-0">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold text-gray-900 dark:text-white">配置用户信息</h3>
-                <button onclick="closeEditUserModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
-            </div>
-            <div class="flex border-b border-gray-200 dark:border-gray-700 gap-6">
-                <button onclick="switchEditTab('basic')" id="tab-btn-basic" class="pb-2 text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 dark:text-indigo-400 dark:border-indigo-400 transition-colors">基础设置</button>
-                <button onclick="switchEditTab('library')" id="tab-btn-library" class="pb-2 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700 dark:text-gray-400 transition-colors">库权限管理</button>
+        <div class="p-6 pb-4 shrink-0 border-b border-gray-100 dark:border-gray-700">
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4">用户权限配置</h3>
+            <div class="flex gap-6">
+                <button onclick="switchEditTab('basic')" id="tab-btn-basic" class="pb-2 text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 transition-colors">基础资料</button>
+                <button onclick="switchEditTab('library')" id="tab-btn-library" class="pb-2 text-sm font-medium text-gray-500 border-b-2 border-transparent transition-colors">媒体库管理</button>
             </div>
         </div>
-        
         <input type="hidden" id="edit-userid">
-
-        <div class="p-6 pt-0 overflow-y-auto custom-scrollbar flex-1">
-            <div id="edit-tab-basic" class="block">
-                <div class="flex flex-col items-center mb-6 border-b border-gray-100 dark:border-gray-700 pb-6">
-                    <div class="relative mb-3">
-                        <img id="edit-avatar-preview" src="" class="w-20 h-20 rounded-full object-cover border-4 border-white dark:border-gray-700 shadow-md bg-indigo-50">
-                        <input type="file" id="edit-avatar-file" accept="image/*" class="hidden" onchange="previewFileAvatar()">
-                    </div>
-                    
-                    <div class="flex gap-2 mb-4">
-                        <button onclick="generateRandomAvatar()" class="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-xs rounded-lg hover:bg-indigo-100 transition"><i class="fa-solid fa-dice mr-1"></i> 随机生成</button>
-                        <button onclick="document.getElementById('edit-avatar-file').click()" class="px-3 py-1.5 bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs rounded-lg hover:bg-gray-100 transition"><i class="fa-solid fa-upload mr-1"></i> 本地上传</button>
-                    </div>
-
-                    <div class="grid grid-cols-4 gap-3">
-                        <img onclick="setAvatarPreset('micah')" src="https://api.dicebear.com/9.x/micah/png?seed=Felix" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200">
-                        <img onclick="setAvatarPreset('bottts')" src="https://api.dicebear.com/9.x/bottts/png?seed=Zoe" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200">
-                        <img onclick="setAvatarPreset('avataaars')" src="https://api.dicebear.com/9.x/avataaars/png?seed=Jack" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200">
-                        <img onclick="setAvatarPreset('open-peeps')" src="https://api.dicebear.com/9.x/open-peeps/png?seed=Sam" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200">
-                    </div>
-                </div>
-
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">用户标识</label>
-                        <input type="text" id="edit-username" class="w-full px-4 py-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed" disabled>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">修改密码 (不改请留空)</label>
-                        <input type="password" id="edit-password" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">账号状态</label>
-                            <select id="edit-disabled" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
-                                <option value="false">✅ 活跃中</option>
-                                <option value="true">🚫 已锁定</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">有效日期</label>
-                            <input type="date" id="edit-expire" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="edit-tab-library" class="hidden space-y-5">
-                <div class="bg-indigo-50/50 dark:bg-indigo-900/10 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800/30">
-                    <div class="flex items-center justify-between mb-2">
-                        <label class="block text-sm font-bold text-indigo-800 dark:text-indigo-300">一键镜像同步模板</label>
-                        <i class="fa-solid fa-wand-magic-sparkles text-indigo-400 text-xs"></i>
-                    </div>
+        <div class="p-6 pt-5 overflow-y-auto custom-scrollbar flex-1">
+            <div id="edit-tab-basic" class="block space-y-5">
+                <div class="flex flex-col items-center pb-5 border-b border-gray-50 dark:border-gray-700">
+                    <img id="edit-avatar-preview" src="" class="w-24 h-24 rounded-full border-4 border-white shadow-lg bg-indigo-50 mb-3">
+                    <input type="file" id="edit-avatar-file" class="hidden" onchange="previewFileAvatar()">
                     <div class="flex gap-2">
-                        <select id="edit-template-select" class="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none text-sm"></select>
-                        <button onclick="applyEditTemplate()" id="apply-template-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition shadow-sm whitespace-nowrap">套用</button>
+                        <button onclick="generateRandomAvatar()" class="text-xs bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded hover:bg-indigo-100 transition"><i class="fa-solid fa-dice"></i> 随机头像</button>
+                        <button onclick="document.getElementById('edit-avatar-file').click()" class="text-xs bg-gray-50 text-gray-600 px-3 py-1.5 rounded hover:bg-gray-100 transition"><i class="fa-solid fa-upload"></i> 上传图片</button>
                     </div>
                 </div>
-
-                <label class="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-xl cursor-pointer hover:bg-gray-50 transition-all">
-                    <div>
-                        <div class="text-sm font-bold text-gray-800 dark:text-gray-200">允许访问所有媒体库</div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">开启后，用户将无视下方列表获得全库权限</div>
+                <div class="space-y-4">
+                    <div><label class="block text-xs font-bold text-gray-400 mb-1 caps">当前账号</label><input type="text" id="edit-username" class="w-full px-4 py-2 border rounded-lg bg-gray-100 cursor-not-allowed" disabled></div>
+                    <div><label class="block text-xs font-bold text-gray-400 mb-1 caps">重置密码</label><input type="password" id="edit-password" class="w-full px-4 py-2 border rounded-lg bg-gray-50 dark:bg-gray-700 outline-none" placeholder="修改请在此输入新密码"></div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label class="block text-xs font-bold text-gray-400 mb-1">活跃状态</label><select id="edit-disabled" class="w-full px-4 py-2 border rounded-lg bg-gray-50 outline-none"><option value="false">✅ 正常活跃</option><option value="true">🚫 已被禁用</option></select></div>
+                        <div><label class="block text-xs font-bold text-gray-400 mb-1">有效日期</label><input type="date" id="edit-expire" class="w-full px-4 py-2 border rounded-lg bg-gray-50 outline-none"></div>
                     </div>
-                    <div class="relative">
-                        <input type="checkbox" id="edit-enable-all" class="sr-only peer" onchange="toggleLibraryCheckboxes()">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </div>
+            </div>
+            <div id="edit-tab-library" class="hidden space-y-5">
+                <div class="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
+                    <label class="block text-sm font-bold text-indigo-800 mb-2">一键镜像同步其他账号权限</label>
+                    <div class="flex gap-2">
+                        <select id="edit-template-select" class="flex-1 px-3 py-2 border border-gray-200 bg-white rounded-lg text-sm outline-none"></select>
+                        <button onclick="applyEditTemplate()" id="apply-template-btn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold transition whitespace-nowrap">同步套用</button>
                     </div>
+                </div>
+                <label class="flex items-center justify-between p-4 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition shadow-sm">
+                    <div><div class="text-sm font-bold">开通所有媒体库</div><div class="text-[10px] text-gray-400">开启后将获得服务器 100% 访问权限</div></div>
+                    <div class="relative"><input type="checkbox" id="edit-enable-all" class="sr-only peer" onchange="toggleLibraryCheckboxes()"><div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div></div>
                 </label>
-
                 <div>
-                    <div class="flex items-center justify-between mb-3">
-                        <label class="text-sm font-bold text-gray-700 dark:text-gray-300">配置可访问的媒体库 (白名单)</label>
-                        <button onclick="clearSubFolders()" id="clear-sub-btn" class="text-[10px] text-indigo-500 hover:text-indigo-700 border border-indigo-100 dark:border-indigo-800 px-2 py-1 rounded bg-indigo-50/50 dark:bg-indigo-900/20 transition-all">
-                            <i class="fa-solid fa-broom mr-1"></i>重置子文件夹黑名单
-                        </button>
-                    </div>
-                    <div id="edit-library-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700 max-h-48 overflow-y-auto custom-scrollbar">
-                        </div>
-                    <p class="text-[10px] text-gray-400 mt-2 leading-relaxed">
-                        <i class="fa-solid fa-circle-info mr-1"></i> 提示：若部分文件夹未勾选，请点击“重置子文件夹黑名单”并保存，即可让所选库恢复 100% 打勾可见。
-                    </p>
+                    <div class="flex items-center justify-between mb-3"><label class="text-xs font-bold text-gray-400Caps">指定权限白名单</label><button onclick="clearSubFolders()" id="clear-sub-btn" class="text-[10px] text-indigo-500 border border-indigo-100 px-2 py-1 rounded bg-indigo-50 transition-all font-bold"><i class="fa-solid fa-broom mr-1"></i>一键重置子黑名单</button></div>
+                    <div id="edit-library-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-gray-50 p-3 rounded-xl border border-gray-100 max-h-52 overflow-y-auto custom-scrollbar"></div>
+                    <p class="text-[10px] text-gray-400 mt-2 italic leading-relaxed">提示：如果勾选媒体库后发现部分内容不可见，请点击上方“重置子黑名单”并保存。</p>
                 </div>
             </div>
         </div>
-
-        <div class="p-6 pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3 shrink-0">
-            <button onclick="closeEditUserModal()" class="px-4 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-medium">取消</button>
-            <button onclick="submitEditUser()" id="save-user-btn" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition font-bold shadow-sm flex items-center">
-                <span id="save-user-text">确认保存修改</span>
-            </button>
-        </div>
-    </div>
-</div>
-
-<div id="invite-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4">
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6">
-        <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4">生成邀请注册链接</h3>
-        
-        <div id="invite-form-step" class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">注册后的有效天数</label>
-                <div class="grid grid-cols-3 gap-2">
-                    <button onclick="selectDuration(30)" class="dur-btn px-3 py-2 border rounded-lg text-sm bg-indigo-50 border-indigo-500 text-indigo-600 font-bold">30 天</button>
-                    <button onclick="selectDuration(90)" class="dur-btn px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/20">90 天</button>
-                    <button onclick="selectDuration(-1)" class="dur-btn px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm hover:bg-indigo-50 col-span-3">永久有效</button>
-                </div>
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">注册后的权限模板</label>
-                <select id="invite-template" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 outline-none"></select>
-            </div>
-            <div class="flex justify-end gap-3 mt-6">
-                <button onclick="closeInviteModal()" class="px-4 py-2 text-gray-500 font-medium">取消</button>
-                <button onclick="generateInvite()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-bold shadow-sm">立即生成</button>
-            </div>
-        </div>
-
-        <div id="invite-result-step" class="hidden text-center space-y-4">
-            <div class="bg-green-50 dark:bg-green-900/20 p-4 rounded-full inline-flex items-center justify-center mb-2">
-                <i class="fa-solid fa-check text-3xl text-green-500"></i>
-            </div>
-            <h4 class="text-lg font-bold text-gray-900 dark:text-white">邀请链接生成成功</h4>
-            <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg break-all font-mono text-sm text-gray-600 dark:text-gray-300 select-all border border-gray-100" id="invite-link-box"></div>
-            <div class="flex justify-center gap-3 mt-6">
-                <button onclick="closeInviteModal()" class="px-6 py-2 text-gray-500 font-medium">完成</button>
-                <button onclick="copyInvite()" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2 font-bold shadow-sm">
-                    <i class="fa-regular fa-copy"></i> 复制链接
-                </button>
-            </div>
+        <div class="p-6 pt-4 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+            <button onclick="closeEditUserModal()" class="px-5 py-2 text-gray-500 font-medium">取消操作</button>
+            <button onclick="submitEditUser()" id="save-user-btn" class="px-7 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-md"><span id="save-user-text">保存配置变更</span></button>
         </div>
     </div>
 </div>
 
 <script>
-/**
- * 全局变量定义
- */
-let users = [];
-let allLibraries = []; 
-let selectedDuration = 30; 
-let currentAvatarUrl = "";
-let currentAvatarFile = null;
-// 🔥 重要：存储当前编辑用户的子文件夹黑名单数据 (实现镜像套用及保存)
-let currentExcludedSubFolders = []; 
+/** 核心变量定义 **/
+let users = [], allLibraries = [], selectedDuration = 30, currentAvatarUrl = "", currentAvatarFile = null, currentExcludedSubFolders = []; 
 
-/**
- * 页面初始化
- */
+/** 页面加载初始化 **/
 document.addEventListener('DOMContentLoaded', function() {
     loadUsers();
     loadLibraries();
 });
 
-/**
- * 加载所有可用媒体库 (前端 ID 已对齐为 32位 GUID)
- */
 async function loadLibraries() {
     try {
         const res = await fetch('/api/manage/libraries');
         const json = await res.json();
-        if (json.status === 'success') {
-            allLibraries = json.data;
-        }
-    } catch (err) {
-        console.error("Fetch libraries error:", err);
-    }
+        if (json.status === 'success') allLibraries = json.data;
+    } catch (e) { console.error("库拉取失败", e); }
 }
 
-/**
- * 加载并渲染用户列表
- */
 async function loadUsers() {
     try {
         const res = await fetch('/api/manage/users');
         const json = await res.json();
-        if (json.status === 'success') {
-            users = json.data;
-            renderUsers();
-        }
-    } catch (err) {
-        console.error("Fetch users error:", err);
-    }
+        if (json.status === 'success') { users = json.data; renderUsers(); }
+    } catch (e) { console.error("用户拉取失败", e); }
 }
 
-/**
- * 下拉框模板填充
- */
-function populateTemplates(selectId, excludeUserId = null) {
-    const sel = document.getElementById(selectId);
-    sel.innerHTML = '<option value="">无模板 (默认开通全部库)</option>';
-    
-    for (let i = 0; i < users.length; i++) {
-        let u = users[i];
-        if (excludeUserId && u.Id === excludeUserId) continue;
-        
-        let opt = document.createElement('option');
-        opt.value = u.Id;
-        opt.textContent = "👤 " + u.Name;
-        sel.appendChild(opt);
-    }
-}
-
-/**
- * 渲染用户列表 (桌面端与移动端)
- */
+/** 渲染用户列表 (桌面端与移动端卡片) **/
 function renderUsers() {
-    const desktopBody = document.getElementById('user-list-body-desktop');
-    const mobileBody = document.getElementById('user-list-body-mobile');
+    const desktop = document.getElementById('user-list-body-desktop');
+    const mobile = document.getElementById('user-list-body-mobile');
+    let dHtml = "", mHtml = "";
     
-    // 初始化 HTML 内容
-    let desktopHtml = "";
-    let mobileHtml = "";
-
-    for (let i = 0; i < users.length; i++) {
-        let u = users[i];
+    for (let u of users) {
+        const avatar = `
+            <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold overflow-hidden shadow-sm">
+                ${u.PrimaryImageTag ? `<img src="/api/user/image/${u.Id}?v=${u.PrimaryImageTag}" class="w-full h-full object-cover">` : u.Name[0].toUpperCase()}
+            </div>
+        `;
+        const statusBadge = u.IsDisabled 
+            ? '<span class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">已禁用</span>' 
+            : '<span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">正常</span>';
         
-        // 头像 HTML 处理
-        const proxyUrl = "/api/user/image/" + u.Id + "?v=" + (u.PrimaryImageTag || Date.now());
-        let avatarTag = "";
-        if (u.PrimaryImageTag) {
-            avatarTag = `
-                <div class="relative w-10 h-10">
-                    <img src="${proxyUrl}" class="w-full h-full rounded-full object-cover absolute inset-0" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
-                    <div class="w-full h-full rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 font-bold hidden">
-                        ${u.Name[0].toUpperCase()}
-                    </div>
-                </div>
-            `;
-        } else {
-            avatarTag = `
-                <div class="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 font-bold">
-                    ${u.Name[0].toUpperCase()}
-                </div>
-            `;
-        }
-
-        // 状态 Label
-        const statusLabel = u.IsDisabled 
-            ? '<span class="px-2 py-1 rounded-full text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">已禁用</span>'
-            : '<span class="px-2 py-1 rounded-full text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">正常活跃</span>';
-
-        // 桌面行
-        desktopHtml += `
-            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                <td class="px-6 py-4">
-                    <div class="flex items-center gap-3">
-                        ${avatarTag}
-                        <div>
-                            <div class="font-medium text-gray-900 dark:text-white">${u.Name}</div>
-                            ${u.IsAdmin ? '<span class="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">超级管理</span>' : ''}
-                        </div>
+        // 渲染桌面表格行
+        dHtml += `
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-all border-b border-gray-50 dark:border-gray-700">
+                <td class="px-6 py-4 flex items-center gap-3">
+                    ${avatar}
+                    <div>
+                        <div class="font-bold text-gray-900 dark:text-white">${u.Name}</div>
+                        ${u.IsAdmin?'<span class="text-[9px] bg-yellow-100 text-yellow-800 px-1 rounded border border-yellow-200">管理</span>':''}
                     </div>
                 </td>
-                <td class="px-6 py-4">${statusLabel}</td>
-                <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">${u.ExpireDate || '永久有效'}</td>
-                <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">${u.LastLoginDate ? new Date(u.LastLoginDate).toLocaleDateString() : '尚未登录过'}</td>
+                <td class="px-6 py-4">${statusBadge}</td>
+                <td class="px-6 py-4 text-sm font-mono">${u.ExpireDate||'永久'}</td>
+                <td class="px-6 py-4 text-sm text-gray-500">${u.LastLoginDate?new Date(u.LastLoginDate).toLocaleDateString():'尚未登录'}</td>
                 <td class="px-6 py-4 text-right">
-                    <button onclick="openEditUserModal('${u.Id}')" class="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 font-medium">管理</button>
-                    <button onclick="deleteUser('${u.Id}')" class="text-red-500 hover:text-red-700 ml-3">注销</button>
+                    <button onclick="openEditUserModal('${u.Id}')" class="text-indigo-600 hover:text-indigo-800 font-bold">编辑</button>
+                    <button onclick="deleteUser('${u.Id}')" class="text-red-500 ml-4 hover:underline">删除</button>
                 </td>
             </tr>
         `;
-
-        // 移动端卡片
-        mobileHtml += `
-            <div class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700 shadow-sm">
-                <div class="flex justify-between items-start mb-3">
-                    <div class="flex items-center gap-3">
-                        ${avatarTag}
-                        <div>
-                            <div class="font-bold text-gray-900 dark:text-white">${u.Name}</div>
-                            <div class="text-[10px] text-gray-400">上次登录: ${u.LastLoginDate ? new Date(u.LastLoginDate).toLocaleDateString() : '从未'}</div>
-                        </div>
+        
+        // 渲染移动端卡片
+        mHtml += `
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm mb-3">
+                <div class="flex items-center gap-3 mb-3">
+                    ${avatar}
+                    <div>
+                        <div class="font-bold text-gray-900 dark:text-white text-lg">${u.Name}</div>
+                        <div class="text-[10px] text-gray-400">到期: ${u.ExpireDate||'永久'}</div>
                     </div>
-                    ${statusLabel}
+                    <div class="ml-auto">${statusBadge}</div>
                 </div>
-                <div class="flex items-center justify-between bg-gray-50 dark:bg-gray-700/30 p-2 rounded-lg mb-3">
-                    <span class="text-xs text-gray-500">有效期至</span>
-                    <span class="text-xs font-mono font-bold">${u.ExpireDate || '永久'}</span>
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <button onclick="openEditUserModal('${u.Id}')" class="flex items-center justify-center gap-1 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">编辑</button>
-                    <button onclick="deleteUser('${u.Id}')" class="flex items-center justify-center gap-1 py-2 text-sm font-medium text-red-600 bg-red-50 dark:bg-red-900/20 rounded-lg">删除</button>
+                <div class="grid grid-cols-2 gap-2 pt-2 border-t border-gray-50 dark:border-gray-700">
+                    <button onclick="openEditUserModal('${u.Id}')" class="py-2 text-sm font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 rounded-lg">修改资料</button>
+                    <button onclick="deleteUser('${u.Id}')" class="py-2 text-sm font-bold bg-red-50 dark:bg-red-900/30 text-red-600 rounded-lg">删除用户</button>
                 </div>
             </div>
         `;
     }
-    
-    desktopBody.innerHTML = desktopHtml;
-    mobileBody.innerHTML = mobileHtml;
+    desktop.innerHTML = dHtml; mobile.innerHTML = mHtml;
 }
 
-/**
- * 标签页切换
- */
-function switchEditTab(tabName) {
-    const isBasic = (tabName === 'basic');
-    document.getElementById('edit-tab-basic').style.display = isBasic ? 'block' : 'none';
-    document.getElementById('edit-tab-library').style.display = isBasic ? 'none' : 'block';
-    
-    const btnBasic = document.getElementById('tab-btn-basic');
-    const btnLib = document.getElementById('tab-btn-library');
-    
-    if (isBasic) {
-        btnBasic.className = "pb-2 text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 dark:text-indigo-400 dark:border-indigo-400 transition-colors";
-        btnLib.className = "pb-2 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700 transition-colors";
-    } else {
-        btnLib.className = "pb-2 text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 dark:text-indigo-400 dark:border-indigo-400 transition-colors";
-        btnBasic.className = "pb-2 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700 transition-colors";
+/** 邀请生成逻辑 (恢复全部天数按钮 + 自定义天数 + 批量处理) **/
+function selectDuration(d) {
+    selectedDuration = parseInt(d);
+    document.querySelectorAll('.dur-btn').forEach(b => {
+        b.className = "dur-btn px-2 py-2 border border-gray-100 dark:border-gray-700 rounded-lg text-xs hover:bg-indigo-50";
+    });
+    const target = Array.from(document.querySelectorAll('.dur-btn')).find(b => b.getAttribute('onclick').includes(`(${d})`));
+    if (target) {
+        target.className = "dur-btn px-2 py-2 border border-indigo-500 bg-indigo-50 text-indigo-600 font-bold rounded-lg text-xs shadow-sm";
     }
 }
 
-/**
- * 打开编辑弹窗 (实时加载最新 GUID 和 黑名单数据)
- */
-async function openEditUserModal(uid) {
-    const user = users.find(u => u.Id === uid);
-    if (!user) return;
+async function generateInvite() {
+    const count = parseInt(document.getElementById('invite-count').value) || 1;
+    const tid = document.getElementById('invite-template').value;
+    const btn = event.target;
+    btn.disabled = true; btn.textContent = "正在生成...";
     
-    switchEditTab('basic');
+    try {
+        const res = await fetch('/api/manage/invite/gen', {
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ days: selectedDuration, count: count, template_user_id: tid || null }) 
+        });
+        const json = await res.json();
+        if (json.status === 'success') {
+            const container = document.getElementById('invite-links-container');
+            container.innerHTML = json.codes.map(c => {
+                const link = window.location.origin + '/invite/' + c;
+                return `
+                    <div class="flex items-center gap-2 bg-gray-50 dark:bg-gray-700/50 p-2 rounded border border-gray-100 dark:border-gray-600 mb-1">
+                        <span class="flex-1 truncate font-mono text-[10px] select-all">${link}</span>
+                        <button onclick="copyToClipboard('${link}')" class="text-indigo-500 font-bold px-2 text-xs border-l border-gray-200">复制</button>
+                    </div>
+                `;
+            }).join('');
+            document.getElementById('invite-form-step').classList.add('hidden');
+            document.getElementById('invite-result-step').classList.remove('hidden');
+        }
+    } catch(e) { alert("生成失败"); }
+    btn.disabled = false; btn.textContent = "立即生成";
+}
 
-    // 填充基础字段
+function copyToClipboard(t) { navigator.clipboard.writeText(t).then(() => alert('✅ 已复制到剪贴板')); }
+
+/** 编辑逻辑：镜像同步与子黑名单一键重置 **/
+async function openEditUserModal(uid) {
+    const user = users.find(u => u.Id === uid); if(!user) return;
+    switchEditTab('basic');
     document.getElementById('edit-userid').value = uid;
     document.getElementById('edit-username').value = user.Name;
     document.getElementById('edit-disabled').value = String(user.IsDisabled);
     document.getElementById('edit-expire').value = user.ExpireDate || '';
-    document.getElementById('edit-password').value = ''; 
+    document.getElementById('edit-password').value = '';
     
-    currentAvatarUrl = ""; 
-    currentAvatarFile = null;
-    
-    const preview = document.getElementById('edit-avatar-preview');
-    if (user.PrimaryImageTag) {
-        preview.src = "/api/user/image/" + uid + "?t=" + Date.now();
-    } else {
-        preview.src = "https://api.dicebear.com/9.x/notionists/png?seed=" + user.Name;
-    }
-    
-    // 显示弹窗
-    const modal = document.getElementById('edit-user-modal');
-    modal.classList.remove('hidden');
-    setTimeout(() => { modal.classList.add('flex'); }, 10);
+    document.getElementById('edit-avatar-preview').src = user.PrimaryImageTag ? `/api/user/image/${uid}?t=${Date.now()}` : `https://api.dicebear.com/9.x/notionists/png?seed=${user.Name}`;
+    document.getElementById('edit-user-modal').classList.remove('hidden');
+    setTimeout(() => { document.getElementById('edit-user-modal').classList.add('flex'); }, 10);
 
-    // 🔥 核心逻辑：从后端重新请求该用户的完整、实时权限状态 (包括 ExcludedSubFolders)
+    // 关键：实时从后端请求最新的权限和黑名单数据
     try {
-        const res = await fetch("/api/manage/user/" + uid);
+        const res = await fetch(`/api/manage/user/${uid}`);
         const json = await res.json();
         if (json.status === 'success') {
             user.EnableAllFolders = json.data.EnableAllFolders;
             user.EnabledFolders = json.data.EnabledFolders;
-            // 记录当前的黑名单数据
             currentExcludedSubFolders = json.data.ExcludedSubFolders || [];
         }
-    } catch (err) {
-        console.error("Sync user data failed:", err);
-    }
+    } catch(e) {}
     
     renderLibraryCheckboxes(user);
     populateTemplates('edit-template-select', uid);
 }
 
-/**
- * 渲染媒体库复选框
- */
 function renderLibraryCheckboxes(user) {
-    const container = document.getElementById('edit-library-list');
-    container.innerHTML = "";
-    
-    if (allLibraries.length === 0) {
-        container.innerHTML = `<div class="col-span-2 text-sm text-gray-500 p-2 italic">未获取到媒体库，请点击设置检测服务器...</div>`;
-    } else {
-        for (let i = 0; i < allLibraries.length; i++) {
-            let lib = allLibraries[i];
-            let isChecked = user.EnabledFolders.includes(lib.Id) ? 'checked' : '';
-            
-            let label = document.createElement('label');
-            label.className = "flex items-center gap-3 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:border-indigo-300 transition";
-            label.innerHTML = `
-                <input type="checkbox" value="${lib.Id}" class="lib-checkbox w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700" ${isChecked}>
-                <span class="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">${lib.Name}</span>
-            `;
-            container.appendChild(label);
-        }
-    }
+    const list = document.getElementById('edit-library-list');
+    list.innerHTML = allLibraries.map(lib => {
+        const checked = user.EnabledFolders.includes(lib.Id) ? 'checked' : '';
+        return `
+            <label class="flex items-center gap-2 p-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg cursor-pointer hover:shadow-sm transition">
+                <input type="checkbox" value="${lib.Id}" class="lib-checkbox w-4 h-4 text-indigo-600 rounded" ${checked}>
+                <span class="text-xs truncate text-gray-700 dark:text-gray-300 font-medium">${lib.Name}</span>
+            </label>
+        `;
+    }).join('');
     document.getElementById('edit-enable-all').checked = user.EnableAllFolders;
     toggleLibraryCheckboxes();
 }
 
-/**
- * 勾选“全部媒体库”时的禁用逻辑
- */
 function toggleLibraryCheckboxes() {
     const isAll = document.getElementById('edit-enable-all').checked;
-    const container = document.getElementById('edit-library-list');
-    const boxes = document.querySelectorAll('.lib-checkbox');
-    
-    for (let i = 0; i < boxes.length; i++) {
-        boxes[i].disabled = isAll;
-    }
-    container.style.opacity = isAll ? '0.4' : '1';
-    container.style.pointerEvents = isAll ? 'none' : 'auto';
+    document.querySelectorAll('.lib-checkbox').forEach(cb => { cb.disabled = isAll; });
+    document.getElementById('edit-library-list').style.opacity = isAll ? '0.3' : '1';
+    document.getElementById('edit-library-list').style.pointerEvents = isAll ? 'none' : 'auto';
 }
 
-/**
- * 🔥 核心修复：重置子文件夹黑名单逻辑
- */
 function clearSubFolders() {
-    if (!confirm('确定要重置吗？这将清空该用户已勾选库中所有的“隐藏子目录”，使其恢复全量可见（即让所有文件夹打勾）。')) {
-        return;
+    if (confirm('该操作将清空该用户已勾选库中的所有子目录隐藏记录，使其恢复 100% 打勾可见。继续？')) {
+        currentExcludedSubFolders = [];
+        const btn = document.getElementById('clear-sub-btn');
+        btn.innerHTML = '✨ 黑名单已清空 (保存生效)'; 
+        btn.classList.replace('text-indigo-500', 'text-green-600');
     }
-    
-    // 清空本地存储的黑名单变量
-    currentExcludedSubFolders = [];
-    
-    const btn = document.getElementById('clear-sub-btn');
-    btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> 已重置黑名单（保存后生效）';
-    btn.classList.remove('text-indigo-500');
-    btn.classList.add('text-green-500', 'font-bold');
 }
 
-/**
- * 🔥 核心修复：镜像同步套用模板
- */
 async function applyEditTemplate() {
-    const tid = document.getElementById('edit-template-select').value;
-    if (!tid) return;
-    
-    const btn = document.getElementById('apply-template-btn');
-    const oldHtml = btn.innerHTML;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-    btn.disabled = true;
-
+    const tid = document.getElementById('edit-template-select').value; if(!tid) return;
+    const btn = document.getElementById('apply-template-btn'), old = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; btn.disabled = true;
     try {
-        // 请求模板用户的真实权限数据
-        const res = await fetch("/api/manage/user/" + tid);
+        const res = await fetch(`/api/manage/user/${tid}`);
         const json = await res.json();
-        
         if (json.status === 'success') {
-            const tData = json.data;
-            
-            // 1. 同步大类开关
-            document.getElementById('edit-enable-all').checked = tData.EnableAllFolders;
-            
-            // 2. 同步大类勾选 (GUID 对 GUID)
+            document.getElementById('edit-enable-all').checked = json.data.EnableAllFolders;
             const boxes = document.querySelectorAll('.lib-checkbox');
-            for (let i = 0; i < boxes.length; i++) {
-                boxes[i].checked = tData.EnabledFolders.includes(boxes[i].value);
-            }
-            
-            // 3. 🔥 重要：镜像同步子文件夹黑名单
-            currentExcludedSubFolders = tData.ExcludedSubFolders || [];
-            
+            boxes.forEach(cb => cb.checked = json.data.EnabledFolders.includes(cb.value));
+            // 🔥 完全镜像：抄袭子文件夹排除列表
+            currentExcludedSubFolders = json.data.ExcludedSubFolders || [];
             toggleLibraryCheckboxes();
-            
-            btn.innerHTML = '<i class="fa-solid fa-check"></i> 已完全镜像';
-            btn.classList.add('bg-green-600');
-        } else {
-            alert('获取模板权限失败');
+            btn.innerHTML = '✅ 已镜像镜像'; btn.classList.add('bg-green-600');
         }
-    } catch(err) {
-        console.error(err);
-    }
-
-    setTimeout(() => { 
-        btn.innerHTML = oldHtml; 
-        btn.classList.remove('bg-green-600');
-        btn.disabled = false;
-    }, 1500);
+    } catch(e) {}
+    setTimeout(() => { btn.innerHTML = old; btn.classList.remove('bg-green-600'); btn.disabled = false; }, 1500);
 }
 
-/**
- * 提交编辑内容
- */
 async function submitEditUser() {
-    const btn = document.getElementById('save-user-btn');
-    const uid = document.getElementById('edit-userid').value;
-    const isDisable = (document.getElementById('edit-disabled').value === "true");
-    const expireDate = document.getElementById('edit-expire').value;
-    const newPass = document.getElementById('edit-password').value;
+    const btn = document.getElementById('save-user-btn'), uid = document.getElementById('edit-userid').value;
     const enableAll = document.getElementById('edit-enable-all').checked;
+    const checked = Array.from(document.querySelectorAll('.lib-checkbox:checked')).map(cb => cb.value);
     
-    // 整理已勾选的 GUID 列表
-    const boxes = document.querySelectorAll('.lib-checkbox');
-    let checkedLibs = [];
-    if (!enableAll) {
-        for (let i = 0; i < boxes.length; i++) {
-            if (boxes[i].checked) checkedLibs.push(boxes[i].value);
-        }
-    }
-    
-    btn.disabled = true;
-    document.getElementById('save-user-text').textContent = "正在保存变更...";
+    btn.disabled = true; document.getElementById('save-user-text').textContent = "正在提交配置...";
 
-    // 如果有头像变动，先处理头像
+    // 并发处理头像
     if (currentAvatarUrl || currentAvatarFile) {
-        const fd = new FormData();
-        fd.append('user_id', uid);
-        if (currentAvatarFile) fd.append('file', currentAvatarFile);
-        else fd.append('url', currentAvatarUrl);
-        
-        try {
-            await fetch('/api/manage/user/image', { method: 'POST', body: fd });
-        } catch (err) {
-            console.error("Avatar update fail:", err);
-        }
+        const fd = new FormData(); fd.append('user_id', uid);
+        if (currentAvatarFile) fd.append('file', currentAvatarFile); else fd.append('url', currentAvatarUrl);
+        await fetch('/api/manage/user/image', { method: 'POST', body: fd });
     }
+
+    const res = await fetch('/api/manage/user/update', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ 
+            user_id: uid, is_disabled: document.getElementById('edit-disabled').value==="true", 
+            expire_date: document.getElementById('edit-expire').value||"", password: document.getElementById('edit-password').value||null,
+            enable_all_folders: enableAll, enabled_folders: enableAll ? [] : checked, 
+            excluded_sub_folders: currentExcludedSubFolders // 🔥 同步子文件夹
+        })
+    });
     
-    // 发送最终的 Policy 和资料更新
-    try {
-        const res = await fetch('/api/manage/user/update', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ 
-                user_id: uid, 
-                is_disabled: isDisable, 
-                expire_date: expireDate || "", 
-                password: newPass || null,
-                enable_all_folders: enableAll,
-                enabled_folders: checkedLibs,
-                // 🔥 关键：提交时包含子文件夹排除项 (实现镜像保存)
-                excluded_sub_folders: currentExcludedSubFolders 
-            })
-        });
-        
-        const result = await res.json();
-        if (result.status === 'success') {
-            closeEditUserModal();
-            loadUsers();
-        } else {
-            alert(result.message || "更新失败");
-        }
-    } catch (err) {
-        alert("网络连接错误");
-    } finally {
-        btn.disabled = false;
-        document.getElementById('save-user-text').textContent = "保存修改";
-    }
+    if ((await res.json()).status === 'success') { closeEditUserModal(); loadUsers(); } 
+    else { alert('更新配置失败'); }
+    btn.disabled = false; document.getElementById('save-user-text').textContent = "保存配置变更";
 }
 
-/**
- * 辅助逻辑：头像随机、文件预览、关闭弹窗、注销用户
- */
-function closeEditUserModal() {
-    const modal = document.getElementById('edit-user-modal');
-    modal.classList.remove('flex');
-    modal.classList.add('hidden');
+/** 通用 UI 辅助逻辑 **/
+function switchEditTab(tabName) {
+    const isB = (tabName === 'basic');
+    document.getElementById('edit-tab-basic').style.display = isB ? 'block' : 'none';
+    document.getElementById('edit-tab-library').style.display = isB ? 'none' : 'block';
+    const bB = document.getElementById('tab-btn-basic'), bL = document.getElementById('tab-btn-library');
+    if (isB) { bB.className = "pb-2 text-sm font-bold text-indigo-600 border-b-2 border-indigo-600"; bL.className = "pb-2 text-sm font-medium text-gray-500 border-b-2 border-transparent"; }
+    else { bL.className = "pb-2 text-sm font-bold text-indigo-600 border-b-2 border-indigo-600"; bB.className = "pb-2 text-sm font-medium text-gray-500 border-b-2 border-transparent"; }
 }
 
-function openInviteModal() {
-    const modal = document.getElementById('invite-modal');
-    modal.classList.remove('hidden');
+function openInviteModal() { 
+    document.getElementById('invite-modal').classList.remove('hidden'); 
+    setTimeout(()=>document.getElementById('invite-modal').classList.add('flex'),10);
+    selectDuration(30); 
+    populateTemplates('invite-template'); 
+}
+function closeInviteModal() { 
+    document.getElementById('invite-modal').classList.remove('flex'); 
+    document.getElementById('invite-modal').classList.add('hidden'); 
     document.getElementById('invite-form-step').classList.remove('hidden');
     document.getElementById('invite-result-step').classList.add('hidden');
-    selectDuration(30);
-    populateTemplates('invite-template');
-    setTimeout(() => { modal.classList.add('flex'); }, 10);
 }
 
-function closeInviteModal() {
-    const modal = document.getElementById('invite-modal');
-    modal.classList.remove('flex');
-    modal.classList.add('hidden');
-}
-
-function selectDuration(days) {
-    selectedDuration = days;
-    const btns = document.querySelectorAll('.dur-btn');
-    btns.forEach(b => {
-        b.className = "dur-btn px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/20 dark:text-gray-300";
-    });
-    // 粗略寻找匹配按钮并设为选中样式
-    const target = Array.from(btns).find(b => b.getAttribute('onclick').includes("(" + days + ")"));
-    if (target) {
-        target.className = "dur-btn px-3 py-2 border border-indigo-500 rounded-lg text-sm bg-indigo-50 text-indigo-600 font-bold";
-    }
-}
-
-async function generateInvite() {
-    const tid = document.getElementById('invite-template').value;
-    try {
-        const res = await fetch('/api/manage/invite/gen', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ days: selectedDuration, template_user_id: tid || null }) 
-        });
-        const json = await res.json();
-        if (json.status === 'success') {
-            document.getElementById('invite-link-box').textContent = window.location.origin + '/invite/' + json.code;
-            document.getElementById('invite-form-step').classList.add('hidden');
-            document.getElementById('invite-result-step').classList.remove('hidden');
-        }
-    } catch(err) { alert("生成失败"); }
-}
-
-function copyInvite() {
-    const txt = document.getElementById('invite-link-box').textContent;
-    navigator.clipboard.writeText(txt).then(() => alert('✅ 链接已复制到剪贴板'));
+function populateTemplates(id, exUid = null) {
+    const sel = document.getElementById(id); sel.innerHTML = '<option value="">默认全库权限</option>';
+    for (let u of users) { if(exUid && u.Id === exUid) continue; let o = document.createElement('option'); o.value = u.Id; o.textContent = "👤 " + u.Name; sel.appendChild(o); }
 }
 
 function openNewUserModal() { 
-    const modal = document.getElementById('new-user-modal');
-    modal.classList.remove('hidden');
-    document.getElementById('new-username').value = '';
-    document.getElementById('new-password').value = '';
-    document.getElementById('new-expire').value = '';
-    populateTemplates('new-template');
-    setTimeout(() => { modal.classList.add('flex'); }, 10);
+    document.getElementById('new-user-modal').classList.remove('hidden'); 
+    setTimeout(()=>document.getElementById('new-user-modal').classList.add('flex'),10); 
+    populateTemplates('new-template'); 
 }
-
-function closeNewUserModal() { 
-    const modal = document.getElementById('new-user-modal');
-    modal.classList.remove('flex');
-    modal.classList.add('hidden');
-}
+function closeNewUserModal() { document.getElementById('new-user-modal').classList.remove('flex'); document.getElementById('new-user-modal').classList.add('hidden'); }
 
 async function submitNewUser() {
-    const name = document.getElementById('new-username').value;
-    const pass = document.getElementById('new-password').value; 
-    const expire = document.getElementById('new-expire').value;
-    const tid = document.getElementById('new-template').value;
-    if (!name) return alert("用户名是必填项");
-    
-    try {
-        const res = await fetch('/api/manage/user/new', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ name: name, password: pass, expire_date: expire || null, template_user_id: tid || null })
-        });
-        const json = await res.json();
-        if (json.status === 'success') {
-            closeNewUserModal();
-            loadUsers();
-        } else { alert(json.message); }
-    } catch(err) { alert("创建请求失败"); }
+    const res = await fetch('/api/manage/user/new', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ 
+            name: document.getElementById('new-username').value, 
+            password: document.getElementById('new-password').value, 
+            expire_date: document.getElementById('new-expire').value || null, 
+            template_user_id: document.getElementById('new-template').value || null 
+        })
+    });
+    if ((await res.json()).status === 'success') { closeNewUserModal(); loadUsers(); }
 }
 
 function generateRandomAvatar() {
-    const style = ['micah', 'bottts', 'avataaars', 'notionists', 'lorelei'][Math.floor(Math.random() * 5)];
-    const seed = Math.random().toString(36).substring(7);
-    currentAvatarUrl = "https://api.dicebear.com/9.x/" + style + "/png?seed=" + seed;
-    currentAvatarFile = null;
-    document.getElementById('edit-avatar-preview').src = currentAvatarUrl;
+    currentAvatarUrl = `https://api.dicebear.com/9.x/notionists/png?seed=${Math.random().toString(36)}`;
+    currentAvatarFile = null; document.getElementById('edit-avatar-preview').src = currentAvatarUrl;
 }
-
-function setAvatarPreset(style) {
-    const seed = Math.random().toString(36).substring(7);
-    currentAvatarUrl = "https://api.dicebear.com/9.x/" + style + "/png?seed=" + seed;
-    currentAvatarFile = null;
-    document.getElementById('edit-avatar-preview').src = currentAvatarUrl;
+function setAvatarPreset(s) {
+    currentAvatarUrl = `https://api.dicebear.com/9.x/${s}/png?seed=${Math.random()}`;
+    currentAvatarFile = null; document.getElementById('edit-avatar-preview').src = currentAvatarUrl;
 }
-
 function previewFileAvatar() {
-    const file = document.getElementById('edit-avatar-file').files[0];
-    if (file) {
-        currentAvatarFile = file;
-        currentAvatarUrl = "";
-        const reader = new FileReader();
-        reader.onload = function(e) { document.getElementById('edit-avatar-preview').src = e.target.result; };
-        reader.readAsDataURL(file);
+    const f = document.getElementById('edit-avatar-file').files[0];
+    if(f) {
+        currentAvatarFile = f; currentAvatarUrl = "";
+        const r = new FileReader(); r.onload = e => document.getElementById('edit-avatar-preview').src = e.target.result;
+        r.readAsDataURL(f);
     }
 }
-
-async function deleteUser(uid) {
-    if (!confirm('危险操作：确定要彻底注销并删除该用户吗？')) return;
-    try {
-        const res = await fetch("/api/manage/user/" + uid, { method: 'DELETE' });
-        const json = await res.json();
-        if (json.status === 'success') {
-            loadUsers();
-        }
-    } catch(err) { alert("网络错误"); }
+async function deleteUser(uid) { 
+    if(confirm('危险操作：账号将被物理删除且无法恢复，确认？')) { 
+        await fetch(`/api/manage/user/${uid}`, {method:'DELETE'}); 
+        loadUsers(); 
+    } 
 }
+function closeEditUserModal() { document.getElementById('edit-user-modal').classList.remove('flex'); document.getElementById('edit-user-modal').classList.add('hidden'); }
 </script>
 
 <style>
-.custom-scrollbar::-webkit-scrollbar { width: 5px; }
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-.dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #4a5568; }
+.caps { font-variant: small-caps; text-transform: lowercase; font-weight: 800; }
 </style>
 {% endblock %}
