@@ -29,14 +29,12 @@
                         <th class="px-6 py-4 text-right">操作</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100 dark:divide-gray-700" id="user-list-body-desktop">
-                    </tbody>
+                <tbody class="divide-y divide-gray-100 dark:divide-gray-700" id="user-list-body-desktop"></tbody>
             </table>
         </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-4 md:hidden" id="user-list-body-mobile">
-        </div>
+    <div class="grid grid-cols-1 gap-4 md:hidden" id="user-list-body-mobile"></div>
 </div>
 
 <div id="new-user-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4">
@@ -55,9 +53,14 @@
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">有效期 (留空为永久)</label>
                 <input type="date" id="new-expire" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">权限模板 <span class="text-xs text-gray-400 font-normal">(复制媒体库权限)</span></label>
+                <select id="new-template" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </select>
+            </div>
             <div class="flex justify-end gap-3 mt-6">
                 <button onclick="closeNewUserModal()" class="px-4 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">取消</button>
-                <button onclick="submitNewUser()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">创建</button>
+                <button onclick="submitNewUser()" id="new-user-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">创建</button>
             </div>
         </div>
     </div>
@@ -75,12 +78,8 @@
             </div>
             
             <div class="flex gap-2 mb-4">
-                <button onclick="generateRandomAvatar()" class="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-xs rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition">
-                    <i class="fa-solid fa-dice mr-1"></i> 随机生成
-                </button>
-                <button onclick="document.getElementById('edit-avatar-file').click()" class="px-3 py-1.5 bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition">
-                    <i class="fa-solid fa-upload mr-1"></i> 上传图片
-                </button>
+                <button onclick="generateRandomAvatar()" class="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-xs rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition"><i class="fa-solid fa-dice mr-1"></i> 随机生成</button>
+                <button onclick="document.getElementById('edit-avatar-file').click()" class="px-3 py-1.5 bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition"><i class="fa-solid fa-upload mr-1"></i> 上传图片</button>
             </div>
 
             <div class="grid grid-cols-4 gap-3">
@@ -88,7 +87,6 @@
                 <img onclick="setAvatarPreset('bottts')" src="https://api.dicebear.com/9.x/bottts/png?seed=Zoe" title="Robots" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600 bg-gray-50">
                 <img onclick="setAvatarPreset('avataaars')" src="https://api.dicebear.com/9.x/avataaars/png?seed=Jack" title="Avatars" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600 bg-gray-50">
                 <img onclick="setAvatarPreset('notionists')" src="https://api.dicebear.com/9.x/notionists/png?seed=Abby" title="Notion" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600 bg-gray-50">
-                
                 <img onclick="setAvatarPreset('fun-emoji')" src="https://api.dicebear.com/9.x/fun-emoji/png?seed=Leo" title="Emoji" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600 bg-gray-50">
                 <img onclick="setAvatarPreset('lorelei')" src="https://api.dicebear.com/9.x/lorelei/png?seed=Sasha" title="Lorelei" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600 bg-gray-50">
                 <img onclick="setAvatarPreset('open-peeps')" src="https://api.dicebear.com/9.x/open-peeps/png?seed=Sam" title="Peeps" class="w-10 h-10 rounded-full cursor-pointer hover:scale-110 transition border border-gray-200 dark:border-gray-600 bg-gray-50">
@@ -144,6 +142,11 @@
                     <button onclick="selectDuration(-1)" class="dur-btn px-3 py-2 border rounded-lg text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border-gray-200 dark:border-gray-600 col-span-3">永久有效</button>
                 </div>
             </div>
+            <div class="mt-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">权限模板 <span class="text-xs text-gray-400 font-normal">(注册后继承该用户的库权限)</span></label>
+                <select id="invite-template" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </select>
+            </div>
             <div class="flex justify-end gap-3 mt-6">
                 <button onclick="closeInviteModal()" class="px-4 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">取消</button>
                 <button onclick="generateInvite()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg">生成链接</button>
@@ -151,18 +154,13 @@
         </div>
 
         <div id="invite-result-step" class="hidden text-center space-y-4">
-            <div class="bg-green-50 dark:bg-green-900/20 p-4 rounded-full inline-flex items-center justify-center mb-2">
-                <i class="fa-solid fa-check text-3xl text-green-500"></i>
-            </div>
+            <div class="bg-green-50 dark:bg-green-900/20 p-4 rounded-full inline-flex items-center justify-center mb-2"><i class="fa-solid fa-check text-3xl text-green-500"></i></div>
             <h4 class="text-lg font-bold text-gray-900 dark:text-white">链接已生成</h4>
             <p class="text-sm text-gray-500 dark:text-gray-400">将下方链接发送给好友，即可邀请注册。</p>
-            
             <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg break-all font-mono text-sm text-gray-600 dark:text-gray-300 select-all border border-gray-100 dark:border-gray-700" id="invite-link-box">...</div>
             <div class="flex justify-center gap-3 mt-6">
                 <button onclick="closeInviteModal()" class="px-6 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">完成</button>
-                <button onclick="copyInvite()" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2">
-                    <i class="fa-regular fa-copy"></i> 复制链接
-                </button>
+                <button onclick="copyInvite()" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-2"><i class="fa-regular fa-copy"></i> 复制链接</button>
             </div>
         </div>
     </div>
@@ -172,8 +170,6 @@
 let users = [];
 let embyUrl = ""; 
 let selectedDuration = 30; 
-
-// 头像管理状态
 let currentAvatarUrl = "";
 let currentAvatarFile = null;
 
@@ -189,106 +185,55 @@ async function loadUsers() {
     }
 }
 
+// 🔥 新增：动态填充模板下拉框
+function populateTemplates(selectId) {
+    const sel = document.getElementById(selectId);
+    sel.innerHTML = '<option value="">不使用模板 (默认全库权限)</option>';
+    // 排除自己(Admin)可能会好一点，但为了灵活先全部显示，用 👤 标记
+    users.forEach(u => {
+        sel.innerHTML += `<option value="${u.Id}">👤 ${u.Name}</option>`;
+    });
+}
+
 function renderUsers() {
     const desktopBody = document.getElementById('user-list-body-desktop');
     const mobileBody = document.getElementById('user-list-body-mobile');
     
     const getAvatar = (u) => {
-        // 🔥 核心修改：增加 ?v=Tag 来强制刷新缓存
         const proxyUrl = `/api/user/image/${u.Id}?v=${u.PrimaryImageTag || new Date().getTime()}`;
-        
-        const fallbackHtml = `
-            <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs md:text-sm">
-                ${u.Name[0].toUpperCase()}
-            </div>`;
-            
+        const fallbackHtml = `<div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs md:text-sm">${u.Name[0].toUpperCase()}</div>`;
         if (u.PrimaryImageTag) {
-            return `
-            <div class="relative w-8 h-8 md:w-10 md:h-10">
-                <img src="${proxyUrl}" class="w-full h-full rounded-full object-cover absolute inset-0" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
-                <div class="w-full h-full rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs md:text-sm hidden">
-                    ${u.Name[0].toUpperCase()}
-                </div>
-            </div>`;
+            return `<div class="relative w-8 h-8 md:w-10 md:h-10"><img src="${proxyUrl}" class="w-full h-full rounded-full object-cover absolute inset-0" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"><div class="w-full h-full rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs md:text-sm hidden">${u.Name[0].toUpperCase()}</div></div>`;
         }
         return fallbackHtml;
     };
 
-    // 渲染桌面表格
     desktopBody.innerHTML = users.map(u => `
         <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-            <td class="px-6 py-4">
-                <div class="flex items-center gap-3">
-                    ${getAvatar(u)}
-                    <div>
-                        <div class="font-medium text-gray-900 dark:text-white">${u.Name}</div>
-                        ${u.IsAdmin ? '<span class="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">管理员</span>' : ''}
-                    </div>
-                </div>
-            </td>
-            <td class="px-6 py-4">
-                ${u.IsDisabled 
-                    ? '<span class="px-2 py-1 rounded-full text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">已禁用</span>' 
-                    : '<span class="px-2 py-1 rounded-full text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">正常</span>'}
-            </td>
-            <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                ${u.ExpireDate || '永久'}
-            </td>
-            <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                ${u.LastLoginDate ? new Date(u.LastLoginDate).toLocaleDateString() : '从未'}
-            </td>
-            <td class="px-6 py-4 text-right space-x-2">
-                <button onclick="openEditUserModal('${u.Id}')" class="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 text-sm">编辑</button>
-                <button onclick="deleteUser('${u.Id}')" class="text-red-500 hover:text-red-700 text-sm">删除</button>
-            </td>
+            <td class="px-6 py-4"><div class="flex items-center gap-3">${getAvatar(u)}<div><div class="font-medium text-gray-900 dark:text-white">${u.Name}</div>${u.IsAdmin ? '<span class="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">管理员</span>' : ''}</div></div></td>
+            <td class="px-6 py-4">${u.IsDisabled ? '<span class="px-2 py-1 rounded-full text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">已禁用</span>' : '<span class="px-2 py-1 rounded-full text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">正常</span>'}</td>
+            <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">${u.ExpireDate || '永久'}</td>
+            <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">${u.LastLoginDate ? new Date(u.LastLoginDate).toLocaleDateString() : '从未'}</td>
+            <td class="px-6 py-4 text-right space-x-2"><button onclick="openEditUserModal('${u.Id}')" class="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 text-sm">编辑</button><button onclick="deleteUser('${u.Id}')" class="text-red-500 hover:text-red-700 text-sm">删除</button></td>
         </tr>
     `).join('');
 
-    // 渲染移动端卡片
     mobileBody.innerHTML = users.map(u => `
         <div class="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col gap-3">
-            <div class="flex justify-between items-start">
-                <div class="flex items-center gap-3">
-                    ${getAvatar(u)}
-                    <div>
-                        <div class="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            ${u.Name}
-                            ${u.IsAdmin ? '<span class="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">Admin</span>' : ''}
-                        </div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                            ${u.LastLoginDate ? '上次登录: ' + new Date(u.LastLoginDate).toLocaleDateString() : '从未登录'}
-                        </div>
-                    </div>
-                </div>
-                ${u.IsDisabled 
-                    ? '<span class="px-2 py-1 rounded text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">已禁用</span>' 
-                    : '<span class="px-2 py-1 rounded text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">正常</span>'}
-            </div>
-            
-            <div class="flex items-center justify-between bg-gray-50 dark:bg-gray-700/30 p-2 rounded-lg">
-                <span class="text-xs text-gray-500 dark:text-gray-400">有效期至</span>
-                <span class="text-xs font-mono font-medium text-gray-700 dark:text-gray-300">${u.ExpireDate || '永久有效'}</span>
-            </div>
-
-            <div class="grid grid-cols-2 gap-3 mt-1">
-                <button onclick="openEditUserModal('${u.Id}')" class="flex items-center justify-center gap-1 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
-                    编辑
-                </button>
-                <button onclick="deleteUser('${u.Id}')" class="flex items-center justify-center gap-1 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                    删除
-                </button>
-            </div>
+            <div class="flex justify-between items-start"><div class="flex items-center gap-3">${getAvatar(u)}<div><div class="font-bold text-gray-900 dark:text-white flex items-center gap-2">${u.Name}${u.IsAdmin ? '<span class="text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">Admin</span>' : ''}</div><div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${u.LastLoginDate ? '上次登录: ' + new Date(u.LastLoginDate).toLocaleDateString() : '从未登录'}</div></div></div>${u.IsDisabled ? '<span class="px-2 py-1 rounded text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">已禁用</span>' : '<span class="px-2 py-1 rounded text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">正常</span>'}</div>
+            <div class="flex items-center justify-between bg-gray-50 dark:bg-gray-700/30 p-2 rounded-lg"><span class="text-xs text-gray-500 dark:text-gray-400">有效期至</span><span class="text-xs font-mono font-medium text-gray-700 dark:text-gray-300">${u.ExpireDate || '永久有效'}</span></div>
+            <div class="grid grid-cols-2 gap-3 mt-1"><button onclick="openEditUserModal('${u.Id}')" class="flex items-center justify-center gap-1 py-2 text-sm font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">编辑</button><button onclick="deleteUser('${u.Id}')" class="flex items-center justify-center gap-1 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg">删除</button></div>
         </div>
     `).join('');
 }
 
-// --- 邀请相关 ---
 function openInviteModal() {
     const modal = document.getElementById('invite-modal');
     modal.classList.remove('hidden');
     document.getElementById('invite-form-step').classList.remove('hidden');
     document.getElementById('invite-result-step').classList.add('hidden');
     selectDuration(30);
+    populateTemplates('invite-template'); // 🔥 填充模板列表
     setTimeout(() => { modal.classList.add('flex'); }, 10);
 }
 
@@ -315,10 +260,12 @@ function selectDuration(days) {
 }
 
 async function generateInvite() {
+    const template_user_id = document.getElementById('invite-template').value;
     const res = await fetch('/api/manage/invite/gen', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ days: selectedDuration })
+        // 🔥 附带模板ID
+        body: JSON.stringify({ days: selectedDuration, template_user_id: template_user_id || null }) 
     });
     const json = await res.json();
     if (json.status === 'success') {
@@ -326,9 +273,7 @@ async function generateInvite() {
         document.getElementById('invite-link-box').textContent = link;
         document.getElementById('invite-form-step').classList.add('hidden');
         document.getElementById('invite-result-step').classList.remove('hidden');
-    } else {
-        alert('生成失败: ' + json.message);
-    }
+    } else { alert('生成失败: ' + json.message); }
 }
 
 function copyInvite() {
@@ -336,15 +281,16 @@ function copyInvite() {
     navigator.clipboard.writeText(text).then(() => alert('✅ 已复制到剪贴板'));
 }
 
-// --- 新建用户相关 ---
 function openNewUserModal() { 
     const modal = document.getElementById('new-user-modal');
     modal.classList.remove('hidden');
     document.getElementById('new-username').value = '';
     document.getElementById('new-password').value = '';
     document.getElementById('new-expire').value = '';
+    populateTemplates('new-template'); // 🔥 填充模板列表
     setTimeout(() => { modal.classList.add('flex'); }, 10);
 }
+
 function closeNewUserModal() { 
     const modal = document.getElementById('new-user-modal');
     modal.classList.remove('flex');
@@ -352,48 +298,43 @@ function closeNewUserModal() {
 }
 
 async function submitNewUser() {
+    const btn = document.getElementById('new-user-btn');
     const name = document.getElementById('new-username').value;
     const pass = document.getElementById('new-password').value; 
     const expire = document.getElementById('new-expire').value;
+    const template_user_id = document.getElementById('new-template').value;
+
     if (!name) return alert("请输入用户名");
     
+    btn.disabled = true; btn.textContent = "处理中...";
     const res = await fetch('/api/manage/user/new', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ name, password: pass, expire_date: expire || null })
+        body: JSON.stringify({ 
+            name, password: pass, expire_date: expire || null, 
+            template_user_id: template_user_id || null // 🔥 传给后端
+        })
     });
     const json = await res.json();
+    btn.disabled = false; btn.textContent = "创建";
+    
     if (json.status === 'success') {
-        alert(json.message);
-        closeNewUserModal();
-        loadUsers();
-    } else {
-        alert(json.message);
-    }
+        alert(json.message); closeNewUserModal(); loadUsers();
+    } else { alert(json.message); }
 }
 
-// --- 编辑用户相关 ---
 function openEditUserModal(uid) {
     const user = users.find(u => u.Id === uid);
     if(!user) return;
-    
     document.getElementById('edit-userid').value = uid;
     document.getElementById('edit-username').value = user.Name;
     document.getElementById('edit-disabled').value = user.IsDisabled ? "true" : "false";
     document.getElementById('edit-expire').value = user.ExpireDate || '';
     document.getElementById('edit-password').value = ''; 
-    
-    currentAvatarUrl = "";
-    currentAvatarFile = null;
-    
+    currentAvatarUrl = ""; currentAvatarFile = null;
     const preview = document.getElementById('edit-avatar-preview');
-    // 这里使用带时间戳的预览图，确保显示最新的
-    if (user.PrimaryImageTag) {
-        preview.src = `/api/user/image/${uid}?t=${new Date().getTime()}`;
-    } else {
-        preview.src = `https://api.dicebear.com/9.x/notionists/png?seed=${user.Name}`;
-    }
-    
+    if (user.PrimaryImageTag) { preview.src = `/api/user/image/${uid}?t=${new Date().getTime()}`; } 
+    else { preview.src = `https://api.dicebear.com/9.x/notionists/png?seed=${user.Name}`; }
     const modal = document.getElementById('edit-user-modal');
     modal.classList.remove('hidden');
     setTimeout(() => { modal.classList.add('flex'); }, 10);
@@ -401,8 +342,7 @@ function openEditUserModal(uid) {
 
 function closeEditUserModal() {
     const modal = document.getElementById('edit-user-modal');
-    modal.classList.remove('flex');
-    modal.classList.add('hidden');
+    modal.classList.remove('flex'); modal.classList.add('hidden');
 }
 
 function generateRandomAvatar() {
@@ -410,30 +350,23 @@ function generateRandomAvatar() {
     const style = styles[Math.floor(Math.random() * styles.length)];
     const seed = Math.random().toString(36).substring(7);
     const url = `https://api.dicebear.com/9.x/${style}/png?seed=${seed}`;
-    
-    currentAvatarUrl = url;
-    currentAvatarFile = null; 
+    currentAvatarUrl = url; currentAvatarFile = null; 
     document.getElementById('edit-avatar-preview').src = url;
 }
 
 function setAvatarPreset(style) {
     const seed = Math.random().toString(36).substring(7);
     const url = `https://api.dicebear.com/9.x/${style}/png?seed=${seed}`;
-    currentAvatarUrl = url;
-    currentAvatarFile = null;
+    currentAvatarUrl = url; currentAvatarFile = null;
     document.getElementById('edit-avatar-preview').src = url;
 }
 
 function previewFileAvatar() {
     const fileInput = document.getElementById('edit-avatar-file');
     if (fileInput.files && fileInput.files[0]) {
-        currentAvatarFile = fileInput.files[0];
-        currentAvatarUrl = ""; 
-        
+        currentAvatarFile = fileInput.files[0]; currentAvatarUrl = ""; 
         const reader = new FileReader();
-        reader.onload = function(e) {
-            document.getElementById('edit-avatar-preview').src = e.target.result;
-        }
+        reader.onload = function(e) { document.getElementById('edit-avatar-preview').src = e.target.result; }
         reader.readAsDataURL(fileInput.files[0]);
     }
 }
@@ -446,60 +379,32 @@ async function submitEditUser() {
     const expire = document.getElementById('edit-expire').value;
     const pass = document.getElementById('edit-password').value; 
     
-    btn.disabled = true;
-    btnText.textContent = "保存中...";
+    btn.disabled = true; btnText.textContent = "保存中...";
 
-    // 1. 如果有新头像，先上传
     if (currentAvatarUrl || currentAvatarFile) {
         const formData = new FormData();
         formData.append('user_id', uid);
-        
-        if (currentAvatarFile) {
-            formData.append('file', currentAvatarFile);
-        } else {
-            formData.append('url', currentAvatarUrl);
-        }
-        
-        try {
-            await fetch('/api/manage/user/image', {
-                method: 'POST',
-                body: formData
-            });
-        } catch (e) {
-            console.error("头像上传失败", e);
-        }
+        if (currentAvatarFile) { formData.append('file', currentAvatarFile); } 
+        else { formData.append('url', currentAvatarUrl); }
+        try { await fetch('/api/manage/user/image', { method: 'POST', body: formData }); } catch (e) { console.error(e); }
     }
     
-    // 2. 更新信息
     const res = await fetch('/api/manage/user/update', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ 
-            user_id: uid, 
-            is_disabled: isDisabled,
-            expire_date: expire || "",
-            password: pass || null 
-        })
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ user_id: uid, is_disabled: isDisabled, expire_date: expire || "", password: pass || null })
     });
     
     const json = await res.json();
-    if (json.status === 'success') {
-        closeEditUserModal();
-        loadUsers();
-    } else {
-        alert(json.message);
-    }
-    
-    btn.disabled = false;
-    btnText.textContent = "保存修改";
+    if (json.status === 'success') { closeEditUserModal(); loadUsers(); } 
+    else { alert(json.message); }
+    btn.disabled = false; btnText.textContent = "保存修改";
 }
 
 async function deleteUser(uid) {
     if (!confirm('确定要删除此用户吗？操作不可恢复！')) return;
     const res = await fetch(`/api/manage/user/${uid}`, { method: 'DELETE' });
     const json = await res.json();
-    if (json.status === 'success') loadUsers();
-    else alert(json.message);
+    if (json.status === 'success') loadUsers(); else alert(json.message);
 }
 </script>
 {% endblock %}

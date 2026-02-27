@@ -12,9 +12,8 @@ class SettingsModel(BaseModel):
     proxy_url: Optional[str] = ""
     webhook_token: Optional[str] = "embypulse"
     hidden_users: List[str] = []
-    # 🔥 新增配置项
-    emby_public_url: Optional[str] = ""  # 给用户看的公网地址
-    welcome_message: Optional[str] = ""  # 注册后的欢迎/提示语
+    emby_public_url: Optional[str] = ""  
+    welcome_message: Optional[str] = ""  
 
 class BotSettingsModel(BaseModel):
     tg_bot_token: str
@@ -43,9 +42,11 @@ class NewUserModel(BaseModel):
     name: str
     password: Optional[str] = None 
     expire_date: Optional[str] = None
+    template_user_id: Optional[str] = None # 🔥 新增权限模板
 
 class InviteGenModel(BaseModel):
     days: int 
+    template_user_id: Optional[str] = None # 🔥 新增权限模板
 
 class UserRegisterModel(BaseModel):
     code: str

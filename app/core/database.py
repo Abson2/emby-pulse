@@ -22,15 +22,22 @@ def init_db():
                         created_at TEXT
                     )''')
         
-        # 2. 🔥 新增：邀请码表
+        # 2. 🔥 新增/更新：邀请码表 (加入 template_user_id)
         c.execute('''CREATE TABLE IF NOT EXISTS invitations (
                         code TEXT PRIMARY KEY,
                         days INTEGER,        -- 有效期天数 (-1为永久)
                         used_count INTEGER DEFAULT 0,
                         max_uses INTEGER DEFAULT 1,
-                        created_at TEXT
+                        created_at TEXT,
+                        template_user_id TEXT -- 🔥 绑定的权限模板用户
                     )''')
         
+        # 🔥 兼容老版本数据库：尝试追加列 (如果列已存在会抛异常，忽略即可)
+        try:
+            c.execute("ALTER TABLE invitations ADD COLUMN template_user_id TEXT")
+        except:
+            pass
+
         conn.commit()
         conn.close()
         print("✅ Database initialized (Plugin Read-Only Mode).")
