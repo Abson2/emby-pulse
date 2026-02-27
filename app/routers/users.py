@@ -35,14 +35,17 @@ def check_expired_users():
     except Exception as e:
         print(f"Check Expire Error: {e}")
 
+# 🔥🔥🔥 核心修复：改用 VirtualFolders 获取媒体库的 32 位 GUID (ItemId)
 @router.get("/api/manage/libraries")
 def api_get_libraries(request: Request):
     if not request.session.get("user"): return {"status": "error"}
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     try:
-        res = requests.get(f"{host}/emby/Library/MediaFolders?api_key={key}", timeout=5)
+        # 换用 VirtualFolders 接口，它会返回完整的库配置，包含 32 位 GUID
+        res = requests.get(f"{host}/emby/Library/VirtualFolders?api_key={key}", timeout=5)
         if res.status_code == 200:
-            libs = [{"Id": item["Id"], "Name": item["Name"]} for item in res.json().get("Items", [])]
+            # Emby 的 VirtualFolders 返回的是一个数组，里面有 ItemId
+            libs = [{"Id": item["ItemId"], "Name": item["Name"]} for item in res.json() if "ItemId" in item]
             return {"status": "success", "data": libs}
         return {"status": "error", "message": "获取媒体库失败"}
     except Exception as e: return {"status": "error", "message": str(e)}
@@ -89,7 +92,6 @@ def api_manage_users(request: Request):
         }
     except Exception as e: return {"status": "error", "message": str(e)}
 
-# 🔥 新增：专门获取单个用户的完整数据（防 Emby 列表阉割）
 @router.get("/api/manage/user/{user_id}")
 def api_get_single_user(user_id: str, request: Request):
     if not request.session.get("user"): return {"status": "error"}
@@ -196,6 +198,9 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
                 
                 junk_keys = ['BlockedMediaFolders', 'BlockedChannels', 'EnableAllChannels', 'EnabledChannels', 'BlockedTags', 'AllowedTags']
                 for k in junk_keys: policy.pop(k, None)
+                
+                # 打印真正的发送负载以供确认
+                print(f"🚀 [DEBUG] Cleaned Policy Update -> EnableAllFolders: {policy.get('EnableAllFolders')}, EnabledFolders: {policy.get('EnabledFolders')}")
                 
                 headers = {"Content-Type": "application/json", "X-Emby-Token": key}
                 up_res = requests.post(f"{host}/emby/Users/{data.user_id}/Policy?api_key={key}", json=policy, headers=headers)
