@@ -20,6 +20,8 @@ def api_get_settings(request: Request):
             # 🔥 返回新字段
             "emby_public_url": cfg.get("emby_public_url", ""),
             "welcome_message": cfg.get("welcome_message", "")
+            # 🔥 新增返回字段
+            "client_download_url": cfg.get("client_download_url", "")
         }
     }
 
@@ -45,6 +47,8 @@ def api_update_settings(data: SettingsModel, request: Request):
     # 🔥 保存新字段
     cfg["emby_public_url"] = data.emby_public_url
     cfg["welcome_message"] = data.welcome_message
+    # 🔥 新增保存逻辑
+    cfg["client_download_url"] = data.client_download_url
     
     save_config()
     

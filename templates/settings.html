@@ -41,6 +41,11 @@
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">注册后提示语 (可选)</label>
                 <textarea id="welcome_message" rows="3" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="例：推荐使用 Infuse 客户端登录，请勿分享账号。"></textarea>
             </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">自定义客户端下载链接 (可选)</label>
+                <input type="text" id="client_download_url" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="默认官方: https://emby.media/download.html">
+                <p class="text-xs text-gray-400 mt-1">此链接将显示在邀请注册页底部。可修改为您推荐的网盘分享或第三方播放器（如 Infuse/Fileball）链接。</p>
+            </div>
         </div>
     </div>
 
@@ -78,7 +83,7 @@
             <i class="fa-solid fa-user-slash text-gray-500"></i> 忽略用户 (不统计)
         </h3>
         <div id="hidden-users-container" class="flex flex-wrap gap-2 mb-3">
-            </div>
+        </div>
         <div class="flex gap-2">
             <select id="user-selector" class="flex-1 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/50 outline-none">
                 <option value="">选择用户...</option>
@@ -128,9 +133,10 @@ async function loadSettings() {
         document.getElementById('proxy_url').value = d.proxy_url || '';
         document.getElementById('webhook_token').value = d.webhook_token || '';
         
-        // 🔥 加载新字段
         document.getElementById('emby_public_url').value = d.emby_public_url || '';
         document.getElementById('welcome_message').value = d.welcome_message || '';
+        // 🔥 加载下载链接配置
+        document.getElementById('client_download_url').value = d.client_download_url || '';
 
         hiddenUsers = d.hidden_users || [];
         renderHiddenUsers();
@@ -186,9 +192,10 @@ async function saveSettings() {
         proxy_url: document.getElementById('proxy_url').value,
         webhook_token: document.getElementById('webhook_token').value,
         hidden_users: hiddenUsers,
-        // 🔥 保存新字段
         emby_public_url: document.getElementById('emby_public_url').value,
-        welcome_message: document.getElementById('welcome_message').value
+        welcome_message: document.getElementById('welcome_message').value,
+        // 🔥 保存下载链接配置
+        client_download_url: document.getElementById('client_download_url').value
     };
 
     const res = await fetch('/api/settings', {

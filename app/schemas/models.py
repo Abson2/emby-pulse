@@ -58,3 +58,15 @@ class UserRegisterModel(BaseModel):
     code: str
     username: str
     password: str
+
+class SettingsModel(BaseModel):
+    emby_host: str
+    emby_api_key: str
+    tmdb_api_key: Optional[str] = ""
+    proxy_url: Optional[str] = ""
+    webhook_token: Optional[str] = "embypulse"
+    hidden_users: List[str] = []
+    emby_public_url: Optional[str] = ""  
+    welcome_message: Optional[str] = ""  
+    # 🔥 新增：自定义客户端下载链接
+    client_download_url: Optional[str] = ""
