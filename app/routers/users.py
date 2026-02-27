@@ -169,20 +169,34 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
                     if not data.is_disabled: policy['LoginAttemptsBeforeLockout'] = -1 
                 
                 if data.enable_all_folders is not None:
-                    policy['EnableAllFolders'] = data.enable_all_folders
-                    if data.enable_all_folders:
+                    policy['EnableAllFolders'] = bool(data.enable_all_folders)
+                    if policy['EnableAllFolders']:
                         policy['EnabledFolders'] = [] 
                     else:
-                        policy['EnabledFolders'] = data.enabled_folders if data.enabled_folders is not None else []
+                        # 🔥 强制转为严格的字符串数组格式
+                        policy['EnabledFolders'] = [str(x) for x in data.enabled_folders] if data.enabled_folders else []
                 
-                # 🔥 终极杀手锏：彻底剥离 Emby 老版本遗留的矛盾字段
-                policy.pop('BlockedMediaFolders', None)
-                policy.pop('BlockedChannels', None)
+                # 🔥🔥🔥 终极杀手锏：深度净化老用户的脏数据
+                junk_keys = [
+                    'BlockedMediaFolders', 
+                    'BlockedChannels', 
+                    'EnableAllChannels', 
+                    'EnabledChannels',
+                    'BlockedTags',
+                    'AllowedTags'
+                ]
+                for k in junk_keys:
+                    policy.pop(k, None)
                 
-                # 🔥 新增：在 Docker 日志中打印出真正发给 Emby 的数据，方便排错
-                print(f"🚀 [DEBUG] Sending Policy Update -> EnableAllFolders: {policy.get('EnableAllFolders')}, EnabledFolders: {policy.get('EnabledFolders')}")
+                print(f"🚀 [DEBUG] Cleaned Policy Update -> EnableAllFolders: {policy.get('EnableAllFolders')}, EnabledFolders: {policy.get('EnabledFolders')}")
                 
-                up_res = requests.post(f"{host}/emby/Users/{data.user_id}/Policy?api_key={key}", json=policy)
+                # 🔥 强制附加请求头，确保 Emby 的 JSON 解析器正确解析
+                headers = {
+                    "Content-Type": "application/json",
+                    "X-Emby-Token": key
+                }
+                up_res = requests.post(f"{host}/emby/Users/{data.user_id}/Policy?api_key={key}", json=policy, headers=headers)
+                
                 if up_res.status_code not in [200, 204]:
                     return {"status": "error", "message": f"Emby拒绝了权限更新 (HTTP {up_res.status_code}): {up_res.text}"}
 
@@ -212,7 +226,13 @@ def api_manage_user_new(data: NewUserModel, request: Request):
                 policy['EnableAllFolders'] = src_policy.get('EnableAllFolders', True)
                 policy['EnabledFolders'] = src_policy.get('EnabledFolders', [])
         
-        requests.post(f"{host}/emby/Users/{new_id}/Policy?api_key={key}", json=policy)
+        # 对于新用户也执行一遍净化
+        junk_keys = ['BlockedMediaFolders', 'BlockedChannels', 'EnableAllChannels', 'EnabledChannels', 'BlockedTags', 'AllowedTags']
+        for k in junk_keys: policy.pop(k, None)
+
+        headers = {"Content-Type": "application/json", "X-Emby-Token": key}
+        requests.post(f"{host}/emby/Users/{new_id}/Policy?api_key={key}", json=policy, headers=headers)
+        
         if data.expire_date: query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (new_id, data.expire_date, datetime.datetime.now().isoformat()))
             
         return {"status": "success", "message": "用户创建成功"}
