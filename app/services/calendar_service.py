@@ -17,7 +17,7 @@ class CalendarService:
         self._cache = {} 
         self._cache_lock = threading.Lock()
         
-        # 🔥 新增：启动后台定时同步任务
+        # 🔥 启动后台定时同步任务
         self._start_background_sync()
 
     def _start_background_sync(self):
@@ -367,14 +367,18 @@ class CalendarService:
             "IncludeItemTypes": "Episode",
             "ParentIndexNumber": season,
             "IndexNumber": episode,
+            "IsVirtual": "false",        # 🔥 核心修复 1：直接在 API 层面拒收虚拟占位符
             "Limit": 1,
-            "Fields": "Id", 
+            "Fields": "Id,LocationType", # 🔥 请求返回 LocationType 字段
             "api_key": key
         }
         try:
             res = requests.get(url, params=params, timeout=2)
             if res.status_code == 200:
-                return res.json().get("TotalRecordCount", 0) > 0
+                items = res.json().get("Items", [])
+                if items:
+                    # 🔥 核心修复 2：双重保险，确保它是一个真实的物理文件而不是刮削的空壳
+                    return items[0].get("LocationType", "") != "Virtual"
         except: pass
         return False
 
