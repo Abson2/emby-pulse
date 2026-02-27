@@ -35,29 +35,18 @@ def check_expired_users():
     except Exception as e:
         print(f"Check Expire Error: {e}")
 
-# 🔥🔥🔥 终极修复：借用管理员的 Views 接口，获取 100% 真实的 32 位 GUID
+# 🔥🔥🔥 终极修复：从 VirtualFolders 接口精准提取 Guid 字段 (32位长字符)
 @router.get("/api/manage/libraries")
 def api_get_libraries(request: Request):
     if not request.session.get("user"): return {"status": "error"}
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     try:
-        # 1. 揪出一个管理员账号 (Admin)
-        u_res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=5)
-        admin_id = None
-        if u_res.status_code == 200:
-            for u in u_res.json():
-                if u.get('Policy', {}).get('IsAdministrator'):
-                    admin_id = u['Id']
-                    break
-        
-        # 2. 用管理员视角拉取首页的所有“视图”，这里的 Id 就是纯正的 32 位 GUID！
-        if admin_id:
-            v_res = requests.get(f"{host}/emby/Users/{admin_id}/Views?api_key={key}", timeout=5)
-            if v_res.status_code == 200:
-                libs = [{"Id": item["Id"], "Name": item["Name"]} for item in v_res.json().get("Items", [])]
-                return {"status": "success", "data": libs}
-                
-        return {"status": "error", "message": "获取媒体库(Views)失败"}
+        res = requests.get(f"{host}/emby/Library/VirtualFolders?api_key={key}", timeout=5)
+        if res.status_code == 200:
+            # 关键改动：使用 item["Guid"] 而非 item["Id"] 或 item["ItemId"]
+            libs = [{"Id": item["Guid"], "Name": item["Name"]} for item in res.json() if "Guid" in item]
+            return {"status": "success", "data": libs}
+        return {"status": "error", "message": "获取媒体库失败"}
     except Exception as e: return {"status": "error", "message": str(e)}
 
 @router.get("/api/manage/users")
@@ -209,8 +198,8 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
                 junk_keys = ['BlockedMediaFolders', 'BlockedChannels', 'EnableAllChannels', 'EnabledChannels', 'BlockedTags', 'AllowedTags']
                 for k in junk_keys: policy.pop(k, None)
                 
-                # 打印真正的发送负载以供确认
-                print(f"🚀 [DEBUG] Cleaned Policy Update -> EnableAllFolders: {policy.get('EnableAllFolders')}, EnabledFolders: {policy.get('EnabledFolders')}")
+                # 🔥 确认此时打印出来的是否为 32位 GUID
+                print(f"🚀 [DEBUG] Final Policy Update -> EnableAllFolders: {policy.get('EnableAllFolders')}, EnabledFolders: {policy.get('EnabledFolders')}")
                 
                 headers = {"Content-Type": "application/json", "X-Emby-Token": key}
                 up_res = requests.post(f"{host}/emby/Users/{data.user_id}/Policy?api_key={key}", json=policy, headers=headers)

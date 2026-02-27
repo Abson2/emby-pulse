@@ -32,3 +32,6 @@ jobs:
           # 🔥 新增 2：告诉 Docker 同时打包 amd64 (普通电脑/NAS) 和 arm64 (树莓派/ARM NAS/Mac M系列)
           platforms: linux/amd64,linux/arm64
           tags: zeyu8023/emby-stats:latest
+          # 👇 加上这核心的两行开启缓存
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
