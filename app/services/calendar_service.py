@@ -367,18 +367,23 @@ class CalendarService:
             "IncludeItemTypes": "Episode",
             "ParentIndexNumber": season,
             "IndexNumber": episode,
-            "IsVirtual": "false",        # 🔥 核心修复 1：直接在 API 层面拒收虚拟占位符
+            "IsMissing": "false",        # 🔥 过滤缺失集标记
+            "IsVirtualItem": "false",    # 🔥 过滤虚拟集标记
             "Limit": 1,
-            "Fields": "Id,LocationType", # 🔥 请求返回 LocationType 字段
+            "Fields": "Path,MediaSources,LocationType", # 🔥 请求物理路径和媒体源字段
             "api_key": key
         }
         try:
             res = requests.get(url, params=params, timeout=2)
             if res.status_code == 200:
                 items = res.json().get("Items", [])
-                if items:
-                    # 🔥 核心修复 2：双重保险，确保它是一个真实的物理文件而不是刮削的空壳
-                    return items[0].get("LocationType", "") != "Virtual"
+                for item in items:
+                    # 🔥 终极双重保险：不仅要判断标记，还必须有真实物理文件路径 (Path) 或媒体源
+                    if item.get("LocationType", "") == "Virtual": continue
+                    if item.get("IsMissing", False): continue
+                    
+                    if item.get("Path") or item.get("MediaSources"):
+                        return True
         except: pass
         return False
 
