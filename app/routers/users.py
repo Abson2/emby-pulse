@@ -168,18 +168,20 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
                     policy['IsDisabled'] = data.is_disabled
                     if not data.is_disabled: policy['LoginAttemptsBeforeLockout'] = -1 
                 
-                # 🔥 核心修复：纯净化逻辑与互斥处理
                 if data.enable_all_folders is not None:
                     policy['EnableAllFolders'] = data.enable_all_folders
                     if data.enable_all_folders:
-                        policy['EnabledFolders'] = [] # 允许全部时，强制清空特定白名单，防冲突
+                        policy['EnabledFolders'] = [] 
                     else:
                         policy['EnabledFolders'] = data.enabled_folders if data.enabled_folders is not None else []
                 
-                # 防御性清除可能引起报错的老版本字段
-                if 'BlockedMediaFolders' in policy: policy['BlockedMediaFolders'] = []
+                # 🔥 终极杀手锏：彻底剥离 Emby 老版本遗留的矛盾字段
+                policy.pop('BlockedMediaFolders', None)
+                policy.pop('BlockedChannels', None)
                 
-                # 🔥 增加严格拦截，暴露真实错误
+                # 🔥 新增：在 Docker 日志中打印出真正发给 Emby 的数据，方便排错
+                print(f"🚀 [DEBUG] Sending Policy Update -> EnableAllFolders: {policy.get('EnableAllFolders')}, EnabledFolders: {policy.get('EnabledFolders')}")
+                
                 up_res = requests.post(f"{host}/emby/Users/{data.user_id}/Policy?api_key={key}", json=policy)
                 if up_res.status_code not in [200, 204]:
                     return {"status": "error", "message": f"Emby拒绝了权限更新 (HTTP {up_res.status_code}): {up_res.text}"}
