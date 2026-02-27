@@ -54,12 +54,12 @@
                 <input type="date" id="new-expire" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">权限模板 <span class="text-xs text-gray-400 font-normal">(复制媒体库权限)</span></label>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">权限模板 <span class="text-xs text-gray-400 font-normal">(复制媒体库及子文件夹权限)</span></label>
                 <select id="new-template" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none"></select>
             </div>
             <div class="flex justify-end gap-3 mt-6">
                 <button onclick="closeNewUserModal()" class="px-4 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">取消</button>
-                <button onclick="submitNewUser()" id="new-user-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">创建</button>
+                <button onclick="submitNewUser()" id="new-user-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold">创建</button>
             </div>
         </div>
     </div>
@@ -155,6 +155,7 @@
                     <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-3">指定可访问的媒体库 (白名单)</label>
                     <div id="edit-library-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700 max-h-48 overflow-y-auto custom-scrollbar">
                         </div>
+                    <p class="text-[10px] text-gray-400 mt-2 italic">* 子文件夹权限将随模板套用或保持 Emby 原始状态</p>
                 </div>
             </div>
         </div>
@@ -173,7 +174,7 @@
         <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4">生成邀请链接</h3>
         <div class="space-y-4" id="invite-form-step">
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">账号有效期 (到期自动禁用)</label>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">账号有效期</label>
                 <div class="grid grid-cols-3 gap-2">
                     <button onclick="selectDuration(1)" class="dur-btn px-3 py-2 border rounded-lg text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border-gray-200 dark:border-gray-600">1 天</button>
                     <button onclick="selectDuration(7)" class="dur-btn px-3 py-2 border rounded-lg text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border-gray-200 dark:border-gray-600">7 天</button>
@@ -185,12 +186,12 @@
                 </div>
             </div>
             <div class="mt-4">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">权限模板 <span class="text-xs text-gray-400 font-normal">(注册后继承该用户的库权限)</span></label>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">权限模板 <span class="text-xs text-gray-400 font-normal">(注册后完全继承权限)</span></label>
                 <select id="invite-template" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none"></select>
             </div>
             <div class="flex justify-end gap-3 mt-6">
                 <button onclick="closeInviteModal()" class="px-4 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">取消</button>
-                <button onclick="generateInvite()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg">生成链接</button>
+                <button onclick="generateInvite()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-bold">生成链接</button>
             </div>
         </div>
 
@@ -199,7 +200,6 @@
                 <i class="fa-solid fa-check text-3xl text-green-500"></i>
             </div>
             <h4 class="text-lg font-bold text-gray-900 dark:text-white">链接已生成</h4>
-            <p class="text-sm text-gray-500 dark:text-gray-400">将下方链接发送给好友，即可邀请注册。</p>
             <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg break-all font-mono text-sm text-gray-600 dark:text-gray-300 select-all border border-gray-100 dark:border-gray-700" id="invite-link-box">...</div>
             <div class="flex justify-center gap-3 mt-6">
                 <button onclick="closeInviteModal()" class="px-6 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">完成</button>
@@ -214,10 +214,11 @@
 <script>
 let users = [];
 let allLibraries = []; 
-let embyUrl = ""; 
 let selectedDuration = 30; 
 let currentAvatarUrl = "";
 let currentAvatarFile = null;
+// 🔥 核心全局变量：存储当前编辑用户的子文件夹黑名单
+let currentExcludedSubFolders = []; 
 
 document.addEventListener('DOMContentLoaded', () => {
     loadUsers();
@@ -239,7 +240,6 @@ async function loadUsers() {
     const json = await res.json();
     if (json.status === 'success') {
         users = json.data;
-        embyUrl = json.emby_url || "";
         renderUsers();
     }
 }
@@ -285,6 +285,7 @@ function renderUsers() {
     `).join('');
 }
 
+// === 邀请与新建逻辑 ===
 function openInviteModal() {
     const modal = document.getElementById('invite-modal');
     modal.classList.remove('hidden');
@@ -307,31 +308,27 @@ function selectDuration(days) {
     const btns = document.querySelectorAll('.dur-btn');
     for (let btn of btns) {
         if (btn.getAttribute('onclick').includes(`selectDuration(${days})`)) {
-            btn.classList.remove('border-gray-200', 'dark:border-gray-600');
             btn.classList.add('bg-indigo-50', 'border-indigo-500', 'text-indigo-600', 'dark:bg-indigo-900/50', 'dark:text-indigo-300');
             break;
         }
     }
 }
 async function generateInvite() {
-    const template_user_id = document.getElementById('invite-template').value;
+    const tid = document.getElementById('invite-template').value;
     const res = await fetch('/api/manage/invite/gen', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ days: selectedDuration, template_user_id: template_user_id || null }) 
+        body: JSON.stringify({ days: selectedDuration, template_user_id: tid || null }) 
     });
     const json = await res.json();
     if (json.status === 'success') {
-        const link = window.location.origin + '/invite/' + json.code;
-        document.getElementById('invite-link-box').textContent = link;
+        document.getElementById('invite-link-box').textContent = window.location.origin + '/invite/' + json.code;
         document.getElementById('invite-form-step').classList.add('hidden');
         document.getElementById('invite-result-step').classList.remove('hidden');
     } else { alert('生成失败: ' + json.message); }
 }
 function copyInvite() {
-    const text = document.getElementById('invite-link-box').textContent;
-    navigator.clipboard.writeText(text).then(() => alert('✅ 已复制到剪贴板'));
+    navigator.clipboard.writeText(document.getElementById('invite-link-box').textContent).then(() => alert('✅ 已复制到剪贴板'));
 }
-
 function openNewUserModal() { 
     const modal = document.getElementById('new-user-modal');
     modal.classList.remove('hidden');
@@ -350,28 +347,26 @@ async function submitNewUser() {
     const name = document.getElementById('new-username').value;
     const pass = document.getElementById('new-password').value; 
     const expire = document.getElementById('new-expire').value;
-    const template_user_id = document.getElementById('new-template').value;
+    const tid = document.getElementById('new-template').value;
     if (!name) return alert("请输入用户名");
-    
-    btn.disabled = true; btn.textContent = "处理中...";
+    btn.disabled = true; btn.textContent = "创建中...";
     const res = await fetch('/api/manage/user/new', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ name, password: pass, expire_date: expire || null, template_user_id: template_user_id || null })
+        body: JSON.stringify({ name, password: pass, expire_date: expire || null, template_user_id: tid || null })
     });
     const json = await res.json();
     btn.disabled = false; btn.textContent = "创建";
-    if (json.status === 'success') { alert(json.message); closeNewUserModal(); loadUsers(); } 
+    if (json.status === 'success') { closeNewUserModal(); loadUsers(); } 
     else { alert(json.message); }
 }
 
+// === 编辑与权限逻辑 ===
 function switchEditTab(tabName) {
     const isBasic = tabName === 'basic';
     document.getElementById('edit-tab-basic').style.display = isBasic ? 'block' : 'none';
     document.getElementById('edit-tab-library').style.display = isBasic ? 'none' : 'block';
-    
     const btnBasic = document.getElementById('tab-btn-basic');
     const btnLib = document.getElementById('tab-btn-library');
-    
     if (isBasic) {
         btnBasic.className = "pb-2 text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 dark:text-indigo-400 dark:border-indigo-400 transition-colors";
         btnLib.className = "pb-2 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 transition-colors";
@@ -381,41 +376,36 @@ function switchEditTab(tabName) {
     }
 }
 
-// 🔥 核心改动：打开编辑时，去后端抓取单个用户的“真实完整权限”
 async function openEditUserModal(uid) {
     const user = users.find(u => u.Id === uid);
     if(!user) return;
     
     switchEditTab('basic');
-
     document.getElementById('edit-userid').value = uid;
     document.getElementById('edit-username').value = user.Name;
     document.getElementById('edit-disabled').value = user.IsDisabled ? "true" : "false";
     document.getElementById('edit-expire').value = user.ExpireDate || '';
     document.getElementById('edit-password').value = ''; 
-    currentAvatarUrl = ""; currentAvatarFile = null;
-    const preview = document.getElementById('edit-avatar-preview');
-    if (user.PrimaryImageTag) { preview.src = `/api/user/image/${uid}?t=${new Date().getTime()}`; } 
-    else { preview.src = `https://api.dicebear.com/9.x/notionists/png?seed=${user.Name}`; }
     
-    // 显示弹窗
+    const preview = document.getElementById('edit-avatar-preview');
+    preview.src = user.PrimaryImageTag ? `/api/user/image/${uid}?t=${new Date().getTime()}` : `https://api.dicebear.com/9.x/notionists/png?seed=${user.Name}`;
+    
     const modal = document.getElementById('edit-user-modal');
     modal.classList.remove('hidden');
     setTimeout(() => { modal.classList.add('flex'); }, 10);
 
-    // 🔥 实时获取真实权限数据
+    // 🔥 实时获取详情（含子文件夹排除项）
     try {
         const res = await fetch(`/api/manage/user/${uid}`);
         const json = await res.json();
         if (json.status === 'success') {
             user.EnableAllFolders = json.data.EnableAllFolders;
             user.EnabledFolders = json.data.EnabledFolders;
+            // 记录当前的子文件夹排除项
+            currentExcludedSubFolders = json.data.ExcludedSubFolders || [];
         }
-    } catch (e) {
-        console.error("获取用户真实权限失败", e);
-    }
+    } catch (e) { console.error("获取权限详情失败", e); }
     
-    // 获取完真实数据后，再渲染复选框
     renderLibraryCheckboxes(user);
     populateTemplates('edit-template-select', uid);
 }
@@ -423,7 +413,7 @@ async function openEditUserModal(uid) {
 function renderLibraryCheckboxes(user) {
     const container = document.getElementById('edit-library-list');
     if (allLibraries.length === 0) {
-        container.innerHTML = `<div class="col-span-2 text-sm text-gray-500 p-2">未获取到媒体库，请刷新重试</div>`;
+        container.innerHTML = `<div class="col-span-2 text-sm text-gray-500 p-2">未获取到媒体库</div>`;
     } else {
         container.innerHTML = allLibraries.map(lib => {
             const isChecked = user.EnabledFolders.includes(lib.Id) ? 'checked' : '';
@@ -431,8 +421,7 @@ function renderLibraryCheckboxes(user) {
             <label class="flex items-center gap-3 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:border-indigo-300 transition">
                 <input type="checkbox" value="${lib.Id}" class="lib-checkbox w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700" ${isChecked}>
                 <span class="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">${lib.Name}</span>
-            </label>
-            `;
+            </label>`;
         }).join('');
     }
     document.getElementById('edit-enable-all').checked = user.EnableAllFolders;
@@ -440,20 +429,16 @@ function renderLibraryCheckboxes(user) {
 }
 
 function toggleLibraryCheckboxes() {
-    const isAllEnabled = document.getElementById('edit-enable-all').checked;
-    const checkboxes = document.querySelectorAll('.lib-checkbox');
+    const isAll = document.getElementById('edit-enable-all').checked;
     const container = document.getElementById('edit-library-list');
-    
-    checkboxes.forEach(cb => { cb.disabled = isAllEnabled; });
-    container.style.opacity = isAllEnabled ? '0.4' : '1';
-    container.style.pointerEvents = isAllEnabled ? 'none' : 'auto';
+    document.querySelectorAll('.lib-checkbox').forEach(cb => { cb.disabled = isAll; });
+    container.style.opacity = isAll ? '0.4' : '1';
+    container.style.pointerEvents = isAll ? 'none' : 'auto';
 }
 
-// 🔥 核心改动：套用模板时，去后端抓取模板用户的“真实完整权限”
 async function applyEditTemplate() {
     const tid = document.getElementById('edit-template-select').value;
     if (!tid) return;
-    
     const btn = document.getElementById('apply-template-btn');
     const oldText = btn.innerHTML;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
@@ -462,80 +447,36 @@ async function applyEditTemplate() {
     try {
         const res = await fetch(`/api/manage/user/${tid}`);
         const json = await res.json();
-        
         if (json.status === 'success') {
             document.getElementById('edit-enable-all').checked = json.data.EnableAllFolders;
             const checkboxes = document.querySelectorAll('.lib-checkbox');
             checkboxes.forEach(cb => { cb.checked = json.data.EnabledFolders.includes(cb.value); });
-            
+            // 🔥 关键：抄袭子文件夹黑名单
+            currentExcludedSubFolders = json.data.ExcludedSubFolders || [];
             toggleLibraryCheckboxes();
-            
-            btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> 已套用';
-            btn.classList.add('bg-green-600', 'hover:bg-green-700');
-        } else {
-            alert('获取模板权限失败');
-            btn.innerHTML = oldText;
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> 已套用';
+            btn.classList.add('bg-green-600');
         }
-    } catch(e) {
-        btn.innerHTML = oldText;
-    }
-
-    setTimeout(() => { 
-        btn.innerHTML = oldText; 
-        btn.classList.remove('bg-green-600', 'hover:bg-green-700');
-        btn.disabled = false;
-    }, 1500);
-}
-
-function closeEditUserModal() {
-    const modal = document.getElementById('edit-user-modal');
-    modal.classList.remove('flex'); modal.classList.add('hidden');
-}
-
-function generateRandomAvatar() {
-    const styles = ['notionists', 'bottts', 'adventurer', 'avataaars', 'big-smile', 'fun-emoji', 'lorelei', 'open-peeps'];
-    const style = styles[Math.floor(Math.random() * styles.length)];
-    const seed = Math.random().toString(36).substring(7);
-    const url = `https://api.dicebear.com/9.x/${style}/png?seed=${seed}`;
-    currentAvatarUrl = url; currentAvatarFile = null; 
-    document.getElementById('edit-avatar-preview').src = url;
-}
-function setAvatarPreset(style) {
-    const seed = Math.random().toString(36).substring(7);
-    const url = `https://api.dicebear.com/9.x/${style}/png?seed=${seed}`;
-    currentAvatarUrl = url; currentAvatarFile = null;
-    document.getElementById('edit-avatar-preview').src = url;
-}
-function previewFileAvatar() {
-    const fileInput = document.getElementById('edit-avatar-file');
-    if (fileInput.files && fileInput.files[0]) {
-        currentAvatarFile = fileInput.files[0]; currentAvatarUrl = ""; 
-        const reader = new FileReader();
-        reader.onload = function(e) { document.getElementById('edit-avatar-preview').src = e.target.result; }
-        reader.readAsDataURL(fileInput.files[0]);
-    }
+    } catch(e) { console.error(e); }
+    setTimeout(() => { btn.innerHTML = oldText; btn.classList.remove('bg-green-600'); btn.disabled = false; }, 1500);
 }
 
 async function submitEditUser() {
     const btn = document.getElementById('save-user-btn');
-    const btnText = document.getElementById('save-user-text');
     const uid = document.getElementById('edit-userid').value;
     const isDisabled = document.getElementById('edit-disabled').value === "true";
     const expire = document.getElementById('edit-expire').value;
     const pass = document.getElementById('edit-password').value; 
-    
     const enableAll = document.getElementById('edit-enable-all').checked;
-    const checkedLibs = enableAll 
-        ? [] 
-        : Array.from(document.querySelectorAll('.lib-checkbox:checked')).map(cb => cb.value);
+    const checkedLibs = enableAll ? [] : Array.from(document.querySelectorAll('.lib-checkbox:checked')).map(cb => cb.value);
     
-    btn.disabled = true; btnText.textContent = "保存中...";
+    btn.disabled = true; document.getElementById('save-user-text').textContent = "保存中...";
 
     if (currentAvatarUrl || currentAvatarFile) {
         const formData = new FormData();
         formData.append('user_id', uid);
-        if (currentAvatarFile) { formData.append('file', currentAvatarFile); } 
-        else { formData.append('url', currentAvatarUrl); }
+        if (currentAvatarFile) formData.append('file', currentAvatarFile);
+        else formData.append('url', currentAvatarUrl);
         try { await fetch('/api/manage/user/image', { method: 'POST', body: formData }); } catch (e) { console.error(e); }
     }
     
@@ -547,25 +488,45 @@ async function submitEditUser() {
             expire_date: expire || "", 
             password: pass || null,
             enable_all_folders: enableAll,
-            enabled_folders: checkedLibs
+            enabled_folders: checkedLibs,
+            // 🔥 关键：提交时包含子文件夹排除项
+            excluded_sub_folders: currentExcludedSubFolders 
         })
     });
     
     const json = await res.json();
-    if (json.status === 'success') { 
-        closeEditUserModal(); 
-        loadUsers(); 
-    } else { 
-        alert(json.message); 
-    }
-    btn.disabled = false; btnText.textContent = "保存修改";
+    if (json.status === 'success') { closeEditUserModal(); loadUsers(); } 
+    else { alert(json.message); }
+    btn.disabled = false; document.getElementById('save-user-text').textContent = "保存修改";
 }
 
+// === 头像及辅助逻辑 ===
+function closeEditUserModal() { document.getElementById('edit-user-modal').classList.add('hidden'); }
+function generateRandomAvatar() {
+    const style = ['notionists', 'bottts', 'adventurer', 'avataaars', 'fun-emoji', 'lorelei'][Math.floor(Math.random() * 6)];
+    const url = `https://api.dicebear.com/9.x/${style}/png?seed=${Math.random().toString(36).substring(7)}`;
+    currentAvatarUrl = url; currentAvatarFile = null; 
+    document.getElementById('edit-avatar-preview').src = url;
+}
+function setAvatarPreset(style) {
+    const url = `https://api.dicebear.com/9.x/${style}/png?seed=${Math.random().toString(36).substring(7)}`;
+    currentAvatarUrl = url; currentAvatarFile = null;
+    document.getElementById('edit-avatar-preview').src = url;
+}
+function previewFileAvatar() {
+    const file = document.getElementById('edit-avatar-file').files[0];
+    if (file) {
+        currentAvatarFile = file; currentAvatarUrl = ""; 
+        const reader = new FileReader();
+        reader.onload = e => { document.getElementById('edit-avatar-preview').src = e.target.result; }
+        reader.readAsDataURL(file);
+    }
+}
 async function deleteUser(uid) {
-    if (!confirm('确定要删除此用户吗？操作不可恢复！')) return;
+    if (!confirm('确定要删除吗？操作不可恢复！')) return;
     const res = await fetch(`/api/manage/user/${uid}`, { method: 'DELETE' });
-    const json = await res.json();
-    if (json.status === 'success') loadUsers(); else alert(json.message);
+    if ((await res.json()).status === 'success') loadUsers();
 }
 </script>
+<style>.custom-scrollbar::-webkit-scrollbar{width:4px}.custom-scrollbar::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:10px}dark .custom-scrollbar::-webkit-scrollbar-thumb{background:#4a5568}</style>
 {% endblock %}

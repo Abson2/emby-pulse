@@ -35,7 +35,6 @@ def check_expired_users():
     except Exception as e:
         print(f"Check Expire Error: {e}")
 
-# 🔥🔥🔥 终极修复：从 VirtualFolders 接口精准提取 Guid 字段 (32位长字符)
 @router.get("/api/manage/libraries")
 def api_get_libraries(request: Request):
     if not request.session.get("user"): return {"status": "error"}
@@ -43,7 +42,6 @@ def api_get_libraries(request: Request):
     try:
         res = requests.get(f"{host}/emby/Library/VirtualFolders?api_key={key}", timeout=5)
         if res.status_code == 200:
-            # 关键改动：使用 item["Guid"] 而非 item["Id"] 或 item["ItemId"]
             libs = [{"Id": item["Guid"], "Name": item["Name"]} for item in res.json() if "Guid" in item]
             return {"status": "success", "data": libs}
         return {"status": "error", "message": "获取媒体库失败"}
@@ -81,7 +79,9 @@ def api_manage_users(request: Request):
                 "Note": meta.get('note'), 
                 "PrimaryImageTag": u.get('PrimaryImageTag'),
                 "EnableAllFolders": policy.get('EnableAllFolders', True),
-                "EnabledFolders": policy.get('EnabledFolders', [])
+                "EnabledFolders": policy.get('EnabledFolders', []),
+                # 🔥 列表也带上子文件夹排除项
+                "ExcludedSubFolders": policy.get('ExcludedSubFolders', [])
             })
             
         return {
@@ -104,7 +104,9 @@ def api_get_single_user(user_id: str, request: Request):
                 "Id": user_data['Id'],
                 "Name": user_data['Name'],
                 "EnableAllFolders": policy.get('EnableAllFolders', True),
-                "EnabledFolders": policy.get('EnabledFolders', [])
+                "EnabledFolders": policy.get('EnabledFolders', []),
+                # 🔥 单人详情也带上子文件夹排除项
+                "ExcludedSubFolders": policy.get('ExcludedSubFolders', [])
             }}
         return {"status": "error", "message": "获取用户详情失败"}
     except Exception as e: return {"status": "error", "message": str(e)}
@@ -179,7 +181,7 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
             pwd_res = requests.post(f"{host}/emby/Users/{data.user_id}/Password?api_key={key}", json={"Id": data.user_id, "NewPw": data.password})
             if pwd_res.status_code not in [200, 204]: return {"status": "error", "message": "密码修改失败，请检查日志"}
 
-        if data.is_disabled is not None or data.enable_all_folders is not None or data.enabled_folders is not None:
+        if any(x is not None for x in [data.is_disabled, data.enable_all_folders, data.enabled_folders, data.excluded_sub_folders]):
             p_res = requests.get(f"{host}/emby/Users/{data.user_id}?api_key={key}")
             if p_res.status_code == 200:
                 policy = p_res.json().get('Policy', {})
@@ -193,13 +195,15 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
                     if policy['EnableAllFolders']:
                         policy['EnabledFolders'] = [] 
                     else:
-                        policy['EnabledFolders'] = [str(x) for x in data.enabled_folders] if data.enabled_folders else []
+                        policy['EnabledFolders'] = [str(x) for x in data.enabled_folders] if data.enabled_folders is not None else []
                 
+                # 🔥 处理子文件夹排除项（黑名单）
+                # 如果是套用模板，前端会把模板的 excluded_sub_folders 传过来
+                if data.excluded_sub_folders is not None:
+                    policy['ExcludedSubFolders'] = data.excluded_sub_folders
+
                 junk_keys = ['BlockedMediaFolders', 'BlockedChannels', 'EnableAllChannels', 'EnabledChannels', 'BlockedTags', 'AllowedTags']
                 for k in junk_keys: policy.pop(k, None)
-                
-                # 🔥 确认此时打印出来的是否为 32位 GUID
-                print(f"🚀 [DEBUG] Final Policy Update -> EnableAllFolders: {policy.get('EnableAllFolders')}, EnabledFolders: {policy.get('EnabledFolders')}")
                 
                 headers = {"Content-Type": "application/json", "X-Emby-Token": key}
                 up_res = requests.post(f"{host}/emby/Users/{data.user_id}/Policy?api_key={key}", json=policy, headers=headers)
@@ -232,6 +236,8 @@ def api_manage_user_new(data: NewUserModel, request: Request):
                 src_policy = src_res.json().get('Policy', {})
                 policy['EnableAllFolders'] = src_policy.get('EnableAllFolders', True)
                 policy['EnabledFolders'] = src_policy.get('EnabledFolders', [])
+                # 🔥 新建用户时，也一并抄袭子文件夹排除项
+                policy['ExcludedSubFolders'] = src_policy.get('ExcludedSubFolders', [])
         
         junk_keys = ['BlockedMediaFolders', 'BlockedChannels', 'EnableAllChannels', 'EnabledChannels', 'BlockedTags', 'AllowedTags']
         for k in junk_keys: policy.pop(k, None)

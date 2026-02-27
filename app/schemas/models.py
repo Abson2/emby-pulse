@@ -37,9 +37,10 @@ class UserUpdateModel(BaseModel):
     password: Optional[str] = None
     is_disabled: Optional[bool] = None
     expire_date: Optional[str] = None 
-    # 🔥 新增：媒体库权限字段
     enable_all_folders: Optional[bool] = None
     enabled_folders: Optional[List[str]] = None
+    # 🔥 新增：支持子文件夹排除列表（黑名单）
+    excluded_sub_folders: Optional[List[str]] = None
 
 class NewUserModel(BaseModel):
     name: str
