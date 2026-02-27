@@ -35,6 +35,19 @@ def check_expired_users():
     except Exception as e:
         print(f"Check Expire Error: {e}")
 
+# 🔥 新增：获取服务器所有媒体库列表
+@router.get("/api/manage/libraries")
+def api_get_libraries(request: Request):
+    if not request.session.get("user"): return {"status": "error"}
+    key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
+    try:
+        res = requests.get(f"{host}/emby/Library/MediaFolders?api_key={key}", timeout=5)
+        if res.status_code == 200:
+            libs = [{"Id": item["Id"], "Name": item["Name"]} for item in res.json().get("Items", [])]
+            return {"status": "success", "data": libs}
+        return {"status": "error", "message": "获取媒体库失败"}
+    except Exception as e: return {"status": "error", "message": str(e)}
+
 @router.get("/api/manage/users")
 def api_manage_users(request: Request):
     if not request.session.get("user"): return {"status": "error"}
@@ -65,7 +78,10 @@ def api_manage_users(request: Request):
                 "IsAdmin": policy.get('IsAdministrator', False),
                 "ExpireDate": meta.get('expire_date'), 
                 "Note": meta.get('note'), 
-                "PrimaryImageTag": u.get('PrimaryImageTag')
+                "PrimaryImageTag": u.get('PrimaryImageTag'),
+                # 🔥 新增：下发用户的媒体库权限数据
+                "EnableAllFolders": policy.get('EnableAllFolders', True),
+                "EnabledFolders": policy.get('EnabledFolders', [])
             })
             
         return {
@@ -147,7 +163,6 @@ def api_gen_invite(data: InviteGenModel, request: Request):
         code = secrets.token_hex(3) 
         created_at = datetime.datetime.now().isoformat()
         
-        # 🔥 修改：插入 template_user_id
         query_db("INSERT INTO invitations (code, days, created_at, template_user_id) VALUES (?, ?, ?, ?)", 
                  (code, data.days, created_at, data.template_user_id))
                  
@@ -160,25 +175,39 @@ def api_manage_user_update(data: UserUpdateModel, request: Request):
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     
     try:
+        # 更新本地有效期记录
         if data.expire_date is not None:
             expire_val = data.expire_date if data.expire_date else None
             exist = query_db("SELECT 1 FROM users_meta WHERE user_id = ?", (data.user_id,), one=True)
             if exist: query_db("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (expire_val, data.user_id))
             else: query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (data.user_id, expire_val, datetime.datetime.now().isoformat()))
         
+        # 修改密码
         if data.password:
             pwd_res = requests.post(f"{host}/emby/Users/{data.user_id}/Password?api_key={key}", 
                                   json={"Id": data.user_id, "NewPw": data.password})
             if pwd_res.status_code not in [200, 204]:
                 return {"status": "error", "message": "密码修改失败，请检查日志"}
 
-        if data.is_disabled is not None:
+        # 🔥 合并 Policy 更新 (包括账号状态和媒体库权限)
+        if data.is_disabled is not None or data.enable_all_folders is not None or data.enabled_folders is not None:
             p_res = requests.get(f"{host}/emby/Users/{data.user_id}?api_key={key}")
             if p_res.status_code == 200:
                 policy = p_res.json().get('Policy', {})
-                policy['IsDisabled'] = data.is_disabled
-                if not data.is_disabled:
-                    policy['LoginAttemptsBeforeLockout'] = -1 
+                
+                # 账号状态
+                if data.is_disabled is not None:
+                    policy['IsDisabled'] = data.is_disabled
+                    if not data.is_disabled:
+                        policy['LoginAttemptsBeforeLockout'] = -1 
+                
+                # 全局媒体库开关
+                if data.enable_all_folders is not None:
+                    policy['EnableAllFolders'] = data.enable_all_folders
+                
+                # 白名单数组
+                if data.enabled_folders is not None:
+                    policy['EnabledFolders'] = data.enabled_folders
                 
                 requests.post(f"{host}/emby/Users/{data.user_id}/Policy?api_key={key}", json=policy)
 
@@ -200,14 +229,13 @@ def api_manage_user_new(data: NewUserModel, request: Request):
         if data.password:
             requests.post(f"{host}/emby/Users/{new_id}/Password?api_key={key}", json={"Id": new_id, "NewPw": data.password})
         
-        # 3. 🔥 初始化策略 (并注入权限模板)
+        # 3. 初始化策略 (并注入权限模板)
         p_res = requests.get(f"{host}/emby/Users/{new_id}?api_key={key}")
         policy = p_res.json().get('Policy', {}) if p_res.status_code == 200 else {}
         
         policy['IsDisabled'] = False
         policy['LoginAttemptsBeforeLockout'] = -1
         
-        # 如果选了模板，则获取模板的媒体库权限并合并
         if data.template_user_id:
             src_res = requests.get(f"{host}/emby/Users/{data.template_user_id}?api_key={key}", timeout=5)
             if src_res.status_code == 200:
@@ -215,7 +243,6 @@ def api_manage_user_new(data: NewUserModel, request: Request):
                 policy['EnableAllFolders'] = src_policy.get('EnableAllFolders', True)
                 policy['EnabledFolders'] = src_policy.get('EnabledFolders', [])
         
-        # 提交最终的 Policy
         requests.post(f"{host}/emby/Users/{new_id}/Policy?api_key={key}", json=policy)
         
         # 4. 记录有效期

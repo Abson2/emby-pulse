@@ -37,16 +37,19 @@ class UserUpdateModel(BaseModel):
     password: Optional[str] = None
     is_disabled: Optional[bool] = None
     expire_date: Optional[str] = None 
+    # 🔥 新增：媒体库权限字段
+    enable_all_folders: Optional[bool] = None
+    enabled_folders: Optional[List[str]] = None
 
 class NewUserModel(BaseModel):
     name: str
     password: Optional[str] = None 
     expire_date: Optional[str] = None
-    template_user_id: Optional[str] = None # 🔥 新增权限模板
+    template_user_id: Optional[str] = None 
 
 class InviteGenModel(BaseModel):
     days: int 
-    template_user_id: Optional[str] = None # 🔥 新增权限模板
+    template_user_id: Optional[str] = None 
 
 class UserRegisterModel(BaseModel):
     code: str
