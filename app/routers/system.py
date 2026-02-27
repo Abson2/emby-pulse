@@ -19,7 +19,7 @@ def api_get_settings(request: Request):
             "hidden_users": cfg.get("hidden_users") or [],
             # 🔥 返回新字段
             "emby_public_url": cfg.get("emby_public_url", ""),
-            "welcome_message": cfg.get("welcome_message", "")
+            "welcome_message": cfg.get("welcome_message", ""),
             # 🔥 新增返回字段
             "client_download_url": cfg.get("client_download_url", "")
         }
