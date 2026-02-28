@@ -26,20 +26,20 @@
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); 
         }
         
-        /* 🔥 全面放大的电脑端流式网格 */
         .md-fluid-grid-poster {
             display: grid !important;
-            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); /* 基础宽度升至 140px */
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); 
             gap: 1.25rem;
         }
+        /* 🔥 进一步放大媒体库封面：基准宽度提升至 320px */
         .md-fluid-grid-lib {
             display: grid !important;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); /* 媒体库升至 240px */
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); 
             gap: 1.5rem;
         }
         .md-fluid-grid-live {
             display: grid !important;
-            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); /* 正在播放升至 340px */
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); 
             gap: 1.5rem;
         }
     }
@@ -223,41 +223,34 @@
         window.open(targetUrl, '_blank');
     }
 
-    // 🔥 完美解决白屏：针对媒体库使用最通用的 Item ID 跳转，由 Emby 自己决定视图
+    // 🔥 完美解决跳转看到封面而不是内容的问题：改用 videos 路由，并传入 parentId
     function jumpToLibrary(libraryId) {
         if (!embyBaseUrl) { alert("提示: 未在设置中配置 Emby 地址。"); return; }
-        const targetUrl = `${embyBaseUrl}/web/index.html#!/item?id=${libraryId}&serverId=${embyServerId}`;
+        const targetUrl = `${embyBaseUrl}/web/index.html#!/videos?serverId=${embyServerId}&parentId=${libraryId}`;
         window.open(targetUrl, '_blank');
     }
 
-    // 🔥 核心魔法：自动计算网格列数，实现绝对完美的“2 排展示”
     function applyTwoRowLimit() {
-        if (window.innerWidth < 768) return; // 手机端走原生横向滚动，不处理
+        if (window.innerWidth < 768) return; 
         
         const containers = ['latest-container', 'recent-container'];
         containers.forEach(id => {
             const container = document.getElementById(id);
             if (!container || !container.children.length) return;
             
-            // 读取浏览器实时计算的网格列数
             const style = window.getComputedStyle(container);
             const cols = style.gridTemplateColumns.split(' ').length;
-            
-            // 算出完美填满 2 排所需的项目数量
             const maxItems = cols * 2;
             
             Array.from(container.children).forEach((child, index) => {
-                // 利用 JS 强制隐藏多余元素
                 child.style.display = index < maxItems ? '' : 'none';
             });
         });
     }
 
-    // 监听窗口大小变化实时重算，保证怎么拉伸都是完美两排
     const resizeObserver = new ResizeObserver(() => {
         applyTwoRowLimit();
     });
-    // 监听最外层容器
     resizeObserver.observe(document.body);
 
     document.getElementById('current-date').innerText = new Date().toLocaleDateString('zh-CN', {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'});
@@ -395,8 +388,9 @@
                 let html = '';
                 json.data.forEach(lib => {
                     const imgUrl = `/api/proxy/image/${lib.Id}/primary`; 
+                    // 🔥 放大手机端封面尺寸，提升海报展示质感
                     html += `
-                    <div onclick="jumpToLibrary('${lib.Id}')" class="relative w-52 sm:w-64 md:w-full aspect-video flex-shrink-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-1.5 hover:ring-2 hover:ring-indigo-400/50 transition-all duration-300 group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
+                    <div onclick="jumpToLibrary('${lib.Id}')" class="relative w-64 sm:w-80 md:w-full aspect-video flex-shrink-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-1.5 hover:ring-2 hover:ring-indigo-400/50 transition-all duration-300 group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
                         <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
                         <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex items-end p-4 sm:p-5">
                             <h4 class="text-white font-black text-base sm:text-xl md:text-2xl drop-shadow-lg truncate w-full tracking-wide">${lib.Name}</h4>
@@ -411,7 +405,6 @@
     async function fetchLatest() {
         const container = document.getElementById('latest-container');
         try {
-            // 🔥 后端拉取 40 个，让前端去智能裁剪，保证绝不断层
             const res = await fetch('/api/stats/latest?limit=40');
             const json = await res.json();
             if (json.status === 'success' && json.data.length > 0) {
@@ -433,7 +426,7 @@
                     </div>`;
                 });
                 container.innerHTML = html;
-                applyTwoRowLimit(); // 渲染后立刻执行截断逻辑
+                applyTwoRowLimit(); 
             } else { container.innerHTML = `<div class="w-full md:col-span-full py-10 text-center text-sm text-gray-400 flex-shrink-0">暂无数据</div>`; }
         } catch (e) { console.error(e); }
     }
@@ -445,7 +438,6 @@
             const json = await res.json();
             if (json.status === 'success' && json.data.length > 0) {
                 let html = '';
-                // 🔥 这里同样放宽截取范围到 40，交给 applyTwoRowLimit 决定真正显示多少
                 json.data.slice(0, 40).forEach(item => {
                     const displayTitle = item.DisplayName || item.ItemName;
                     const imgUrl = `/api/proxy/image/${item.ItemId}/primary`;
@@ -464,7 +456,7 @@
                     </div>`;
                 });
                 container.innerHTML = html;
-                applyTwoRowLimit(); // 渲染后立刻执行截断逻辑
+                applyTwoRowLimit(); 
             } else { container.innerHTML = `<div class="w-full md:col-span-full py-10 text-center text-sm text-gray-400 flex-shrink-0">暂无数据</div>`; }
         } catch (e) { console.error(e); }
     }
