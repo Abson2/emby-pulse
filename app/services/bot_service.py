@@ -870,7 +870,26 @@ class TelegramBot:
         except: self.send_message(cid, "❌ 离线", platform=platform)
 
     def _cmd_help(self, cid, platform):
-        self.send_message(cid, "🤖 /search, /stats, /weekly, /monthly, /now, /latest, /recent, /check", platform=platform)
+        msg = (
+            "🤖 <b>EmbyPulse 智能助理指南</b>\n\n"
+            
+            "📊 <b>数据报表指令</b>\n"
+            "/stats - 获取今日播放大盘与用户排行\n"
+            "/weekly - 获取本周全站数据周报\n"
+            "/monthly - 获取本月活跃度月报\n"
+            "/yearly - 获取年度全景总结数据\n\n"
+            
+            "🎬 <b>媒体库与状态指令</b>\n"
+            "/now - 查看当前服务器有谁正在播放\n"
+            "/latest - 获取最近新入库的 8 部影视剧\n"
+            "/recent - 查看本站最近的 10 条播放历史\n"
+            "/search [关键词] - 搜索影视资源并获取直达链接\n\n"
+            
+            "🛠 <b>系统管理指令</b>\n"
+            "/check - 测试 Emby 服务器连通性与网络延迟\n"
+            "/help - 获取本帮助菜单"
+        )
+        self.send_message(cid, msg.strip(), platform=platform)
 
     def _scheduler_loop(self):
         while self.running:
