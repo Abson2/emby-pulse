@@ -21,17 +21,32 @@
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
     }
 
-    /* 电脑端悬停效果 */
     @media (min-width: 768px) {
         .glass-card:hover { 
             transform: translateY(-2px); 
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); 
         }
+        
+        /* 🔥 电脑端流式网格 (Fluid Grid) 核心逻辑：告别边缘留白 */
+        .md-fluid-grid-poster {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 1rem;
+        }
+        .md-fluid-grid-lib {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1.25rem;
+        }
+        .md-fluid-grid-live {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.25rem;
+        }
     }
 
     /* === 手机端紧凑样式优化 === */
     @media (max-width: 767px) {
-        /* 针对最近入库/播放：去框、去内边距 */
         .mobile-borderless {
             background: transparent !important;
             border: none !important;
@@ -39,35 +54,31 @@
             padding: 0 !important;
             border-radius: 0 !important;
         }
-        
-        /* 统计卡片微调：榨干多余留白 */
         .stat-card-mobile {
             padding: 12px !important; 
             margin-bottom: 0 !important;
         }
-        
         .section-title-mobile {
             margin-bottom: 10px !important;
             padding-left: 2px;
         }
     }
     
-    /* 统计小方块：极致紧凑 */
     .stat-mini-item {
         display: flex;
         align-items: center;
-        gap: 8px; /* 减小间距 */
-        padding: 8px 10px; /* 减小内边距 */
+        gap: 8px;
+        padding: 8px 10px;
         background: #f9fafb;
         border-radius: 10px;
         flex: 1;
-        min-width: 0; /* 允许内部文本截断 */
+        min-width: 0;
         border: 1px solid transparent;
     }
     html.dark .stat-mini-item { background: rgba(55, 65, 81, 0.5); }
     
     .stat-mini-icon {
-        width: 32px; /* 缩小图标 */
+        width: 32px;
         height: 32px;
         border-radius: 8px;
         display: flex;
@@ -78,6 +89,7 @@
     }
 </style>
 {% endblock %}
+
 {% block content %}
 <div class="p-2.5 sm:p-4 md:p-8 space-y-4 sm:space-y-6 md:space-y-8 pb-24 max-w-[2000px] mx-auto">
     
@@ -87,7 +99,7 @@
             <div class="text-xs md:text-sm text-gray-400 mt-1 font-bold" id="current-date">...</div>
         </div>
         <div class="w-full md:w-auto relative z-30">
-             <select id="dash-user-select" onchange="changeUser()" class="w-full md:w-56 appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 py-2 sm:py-2.5 pl-4 pr-10 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold transition">
+             <select id="dash-user-select" onchange="changeUser()" class="w-full md:w-56 appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 py-2 sm:py-2.5 pl-4 pr-10 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold transition cursor-pointer hover:border-blue-400">
                 <option value="all">🌏 全服数据</option>
             </select>
             <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500"><i class="fa-solid fa-chevron-down text-xs"></i></div>
@@ -97,9 +109,9 @@
     <div id="live-section" class="hidden animate-fade-in">
         <div class="flex items-center gap-2 mb-3 px-1">
             <span class="relative flex h-2.5 w-2.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span></span>
-            <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200">正在播放</h3>
+            <h3 class="text-sm md:text-base font-bold text-gray-800 dark:text-gray-200">正在播放</h3>
         </div>
-        <div id="live-container" class="flex md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 overflow-x-auto hide-scrollbar pb-2 snap-x"></div>
+        <div id="live-container" class="flex overflow-x-auto hide-scrollbar pb-2 snap-x md-fluid-grid-live md:overflow-visible"></div>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
@@ -126,21 +138,20 @@
         <h3 class="text-xs md:text-sm font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3 md:mb-5 flex items-center">
             <i class="fa-solid fa-photo-film mr-2"></i>我的媒体库
         </h3>
-        <div id="library-container" class="flex overflow-x-auto hide-scrollbar gap-2 sm:gap-3 snap-x md:grid md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 md:gap-5 md:overflow-visible">
+        <div id="library-container" class="flex overflow-x-auto hide-scrollbar gap-2 sm:gap-3 snap-x md-fluid-grid-lib md:overflow-visible">
             <div class="w-full py-8 text-center text-xs text-gray-400 flex-shrink-0 col-span-full"><i class="fa-solid fa-spinner fa-spin mr-2"></i> 正在加载媒体库...</div>
         </div>
     </div>
 
-    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8 md:gap-6">
-        
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8 md:gap-8">
         <div class="glass-card flex flex-col mobile-borderless">
             <div class="flex items-center justify-between mb-3 md:mb-5 section-title-mobile">
                 <h3 class="text-[15px] sm:text-base md:text-lg font-black text-gray-800 dark:text-gray-200 flex items-center">
                     <span class="w-1 h-3.5 sm:h-4 bg-blue-500 rounded-full mr-2.5"></span>最近入库
                 </h3>
             </div>
-            <div id="latest-container" class="flex overflow-x-auto hide-scrollbar gap-2 sm:gap-3 snap-x md:grid md:grid-cols-5 md:gap-4 md:overflow-visible">
-                <div class="w-full py-8 text-center text-xs text-gray-400 md:col-span-5 flex-shrink-0"><i class="fa-solid fa-spinner fa-spin mr-2"></i> 加载中...</div>
+            <div id="latest-container" class="flex overflow-x-auto hide-scrollbar gap-2 sm:gap-3 snap-x md-fluid-grid-poster md:overflow-visible">
+                <div class="w-full py-8 text-center text-xs text-gray-400 md:col-span-full flex-shrink-0"><i class="fa-solid fa-spinner fa-spin mr-2"></i> 加载中...</div>
             </div>
         </div>
 
@@ -150,8 +161,8 @@
                     <span class="w-1 h-3.5 sm:h-4 bg-green-500 rounded-full mr-2.5"></span>最近播放
                 </h3>
             </div>
-            <div id="recent-container" class="flex overflow-x-auto hide-scrollbar gap-2 sm:gap-3 snap-x md:grid md:grid-cols-5 md:gap-4 md:overflow-visible">
-                <div class="w-full py-8 text-center text-xs text-gray-400 md:col-span-5 flex-shrink-0"><i class="fa-solid fa-spinner fa-spin mr-2"></i> 加载中...</div>
+            <div id="recent-container" class="flex overflow-x-auto hide-scrollbar gap-2 sm:gap-3 snap-x md-fluid-grid-poster md:overflow-visible">
+                <div class="w-full py-8 text-center text-xs text-gray-400 md:col-span-full flex-shrink-0"><i class="fa-solid fa-spinner fa-spin mr-2"></i> 加载中...</div>
             </div>
         </div>
     </div>
@@ -183,6 +194,20 @@
 <script>
     let trendChart = null; 
     let currentTrendDim = 'day'; 
+
+    // 🔥 接收后端传来的 Emby 基础地址和 ServerId
+    const embyBaseUrl = "{{ emby_url }}";
+    const embyServerId = "{{ server_id }}";
+
+    // 🔥 统一的深层跳转跳转函数
+    function jumpToEmby(itemId) {
+        if (!embyBaseUrl) {
+            alert("提示: 未在设置中配置 Emby 地址，无法跳转。");
+            return;
+        }
+        const targetUrl = `${embyBaseUrl}/web/index.html#!/item?id=${itemId}&serverId=${embyServerId}`;
+        window.open(targetUrl, '_blank');
+    }
 
     document.getElementById('current-date').innerText = new Date().toLocaleDateString('zh-CN', {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'});
 
@@ -229,8 +254,26 @@
                     let percentage = 0;
                     if (item.RunTimeTicks && item.RunTimeTicks > 0) { percentage = Math.round((playState.PositionTicks / item.RunTimeTicks) * 100); }
                     
-                    /* 修改了手机端容器的宽度，适应紧凑排版 */
-                    html += `<div class="flex-shrink-0 w-[260px] sm:w-80 md:w-full bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-red-50 dark:border-red-500/20 overflow-hidden flex relative snap-center group hover:shadow-md transition-all"><div class="w-2/5 bg-gray-100 dark:bg-gray-700 relative"><img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-105 transition duration-700" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'"></div><div class="w-3/5 p-3 sm:p-4 flex flex-col justify-between"><div><div class="flex items-center mb-1.5"><span class="text-[11px] sm:text-xs font-bold text-gray-500 dark:text-gray-400 flex items-center truncate"><i class="fa-solid fa-user mr-1.5"></i>${s.UserName || s.User || '未知'}</span>${transcodeBadge}</div><h4 class="text-xs sm:text-sm font-black text-gray-800 dark:text-gray-100 line-clamp-2 leading-tight">${title}</h4></div><div class="mt-2 sm:mt-3"><div class="flex justify-between text-[9px] sm:text-[10px] text-gray-400 mb-1 sm:mb-1.5 font-medium"><span class="truncate pr-2">${s.DeviceName || s.Device || '未知'}</span><span>${percentage}%</span></div><div class="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden"><div class="bg-red-500 h-1.5 rounded-full transition-all duration-1000" style="width: ${percentage}%"></div></div></div></div></div>`;
+                    // 🔥 添加跳转事件、悬停放大特效和手指指针
+                    html += `
+                    <div onclick="jumpToEmby('${targetId}')" class="flex-shrink-0 w-[260px] sm:w-80 md:w-full bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-red-50 dark:border-red-500/20 overflow-hidden flex relative snap-center group hover:shadow-xl hover:-translate-y-1 hover:ring-2 hover:ring-red-400/50 transition-all duration-300 cursor-pointer">
+                        <div class="w-2/5 bg-gray-100 dark:bg-gray-700 relative">
+                            <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
+                        </div>
+                        <div class="w-3/5 p-3 sm:p-4 flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center mb-1.5">
+                                    <span class="text-[11px] sm:text-xs font-bold text-gray-500 dark:text-gray-400 flex items-center truncate"><i class="fa-solid fa-user mr-1.5"></i>${s.UserName || s.User || '未知'}</span>
+                                    ${transcodeBadge}
+                                </div>
+                                <h4 class="text-xs sm:text-sm font-black text-gray-800 dark:text-gray-100 line-clamp-2 leading-tight">${title}</h4>
+                            </div>
+                            <div class="mt-2 sm:mt-3">
+                                <div class="flex justify-between text-[9px] sm:text-[10px] text-gray-400 mb-1 sm:mb-1.5 font-medium"><span class="truncate pr-2">${s.DeviceName || s.Device || '未知'}</span><span>${percentage}%</span></div>
+                                <div class="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden"><div class="bg-red-500 h-1.5 rounded-full transition-all duration-1000" style="width: ${percentage}%"></div></div>
+                            </div>
+                        </div>
+                    </div>`;
                 });
                 container.innerHTML = html; section.classList.remove('hidden');
             } else { section.classList.add('hidden'); }
@@ -302,10 +345,10 @@
                 let html = '';
                 json.data.forEach(lib => {
                     const imgUrl = `/api/proxy/image/${lib.Id}/primary`; 
-                    /* 手机端 w-44 (176px)，能更友好地排布 */
+                    // 🔥 添加跳转事件和悬停特效
                     html += `
-                    <div class="relative w-44 sm:w-60 md:w-full aspect-video flex-shrink-0 rounded-xl sm:rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
-                        <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-105 transition duration-700" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
+                    <div onclick="jumpToEmby('${lib.Id}')" class="relative w-44 sm:w-60 md:w-full aspect-video flex-shrink-0 rounded-xl sm:rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 hover:ring-2 hover:ring-indigo-400/50 transition-all duration-300 group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
+                        <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
                         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-3 sm:p-5">
                             <h4 class="text-white font-bold text-sm sm:text-lg md:text-xl drop-shadow-md truncate w-full tracking-wide">${lib.Name}</h4>
                         </div>
@@ -328,20 +371,20 @@
                     const title = item.SeriesName ? `${item.SeriesName} - ${item.Name}` : item.Name;
                     const metaInfo = [item.Year, item.Rating ? `⭐${item.Rating}` : ''].filter(Boolean).join(' • '); 
                     
-                    /* 缩小手机端海报尺寸到 w-20 */
+                    // 🔥 添加跳转事件和精美悬停特效
                     html += `
-                    <div class="group relative w-20 sm:w-24 md:w-full flex-shrink-0 cursor-default snap-center">
-                        <div class="aspect-[2/3] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative shadow-sm transition-all border border-gray-100 dark:border-gray-700/50">
-                            <img src="${imgUrl}" class="w-full h-full object-cover" loading="lazy" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
+                    <div onclick="jumpToEmby('${item.Id}')" class="group relative w-24 sm:w-28 md:w-full flex-shrink-0 cursor-pointer snap-center hover:-translate-y-1 transition-all duration-300">
+                        <div class="aspect-[2/3] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative shadow-sm group-hover:shadow-xl group-hover:ring-2 group-hover:ring-blue-400/50 transition-all border border-gray-100 dark:border-gray-700/50">
+                            <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" loading="lazy" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
                         </div>
                         <div class="mt-2 px-0.5">
-                            <h4 class="text-[11px] sm:text-sm font-bold text-gray-800 dark:text-gray-200 truncate leading-tight mb-0.5">${title}</h4>
+                            <h4 class="text-[11px] sm:text-sm font-bold text-gray-800 dark:text-gray-200 truncate leading-tight mb-0.5 group-hover:text-blue-500 transition-colors">${title}</h4>
                             <p class="text-[9px] sm:text-[10px] text-gray-400 truncate font-medium">${metaInfo}</p>
                         </div>
                     </div>`;
                 });
                 container.innerHTML = html;
-            } else { container.innerHTML = `<div class="w-full md:col-span-5 py-8 text-center text-xs text-gray-400 flex-shrink-0">暂无数据</div>`; }
+            } else { container.innerHTML = `<div class="w-full md:col-span-full py-8 text-center text-xs text-gray-400 flex-shrink-0">暂无数据</div>`; }
         } catch (e) { console.error(e); }
     }
 
@@ -355,25 +398,23 @@
                 json.data.slice(0, 10).forEach(item => {
                     const displayTitle = item.DisplayName || item.ItemName;
                     const imgUrl = `/api/proxy/image/${item.ItemId}/primary`;
-                    let dateObj = new Date(item.DateCreated);
-                    let dateStr = dateObj.toLocaleDateString('zh-CN', {month:'numeric', day:'numeric'});
-                    let timeStr = dateObj.toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'});
                     
+                    // 🔥 添加跳转事件和精美悬停特效
                     html += `
-                    <div class="group relative w-20 sm:w-24 md:w-full flex-shrink-0 cursor-default snap-center">
-                        <div class="aspect-[2/3] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative shadow-sm transition-all border border-gray-100 dark:border-gray-700/50">
-                            <img src="${imgUrl}" class="w-full h-full object-cover" loading="lazy" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
-                            <div class="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/80 to-transparent">
-                                <p class="text-[8px] sm:text-[9px] text-white font-bold truncate flex items-center"><i class="fa-solid fa-play text-[8px] mr-1 opacity-80"></i>${item.UserName}</p>
+                    <div onclick="jumpToEmby('${item.ItemId}')" class="group relative w-24 sm:w-28 md:w-full flex-shrink-0 cursor-pointer snap-center hover:-translate-y-1 transition-all duration-300">
+                        <div class="aspect-[2/3] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative shadow-sm group-hover:shadow-xl group-hover:ring-2 group-hover:ring-green-400/50 transition-all border border-gray-100 dark:border-gray-700/50">
+                            <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" loading="lazy" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
+                            <div class="absolute bottom-0 left-0 right-0 p-1.5 sm:p-2 bg-gradient-to-t from-black/80 to-transparent opacity-90 group-hover:opacity-100 transition-opacity">
+                                <p class="text-[8px] sm:text-[10px] text-white font-bold truncate flex items-center"><i class="fa-solid fa-play text-[8px] mr-1 opacity-80"></i>${item.UserName}</p>
                             </div>
                         </div>
                         <div class="mt-2 px-0.5">
-                            <h4 class="text-[11px] sm:text-sm font-bold text-gray-800 dark:text-gray-200 truncate leading-tight mb-0.5">${displayTitle}</h4>
+                            <h4 class="text-[11px] sm:text-sm font-bold text-gray-800 dark:text-gray-200 truncate leading-tight mb-0.5 group-hover:text-green-500 transition-colors">${displayTitle}</h4>
                         </div>
                     </div>`;
                 });
                 container.innerHTML = html;
-            } else { container.innerHTML = `<div class="w-full md:col-span-5 py-8 text-center text-xs text-gray-400 flex-shrink-0">暂无数据</div>`; }
+            } else { container.innerHTML = `<div class="w-full md:col-span-full py-8 text-center text-xs text-gray-400 flex-shrink-0">暂无数据</div>`; }
         } catch (e) { console.error(e); }
     }
     

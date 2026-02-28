@@ -1,4 +1,5 @@
 import os
+import requests
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -22,7 +23,25 @@ def check_login(request: Request):
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     if not check_login(request): return RedirectResponse("/login")
-    return templates.TemplateResponse("index.html", {"request": request, "active_page": "dashboard", "version": APP_VERSION})
+    
+    # 🔥 获取 Emby 基础地址和 ServerId，用于前端点击海报实现深度跳转
+    emby_url = cfg.get("emby_public_url") or cfg.get("emby_public_host") or cfg.get("emby_host") or ""
+    if emby_url.endswith('/'): emby_url = emby_url[:-1]
+    
+    server_id = ""
+    try:
+        sys_res = requests.get(f"{cfg.get('emby_host')}/emby/System/Info?api_key={cfg.get('emby_api_key')}", timeout=2)
+        if sys_res.status_code == 200:
+            server_id = sys_res.json().get("Id", "")
+    except: pass
+
+    return templates.TemplateResponse("index.html", {
+        "request": request, 
+        "active_page": "dashboard", 
+        "version": APP_VERSION,
+        "emby_url": emby_url,        # 注入地址
+        "server_id": server_id       # 注入 ServerId
+    })
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -36,7 +55,6 @@ async def invite_page(code: str, request: Request):
     if invite and invite['used_count'] < invite['max_uses']:
         valid = True; days = invite['days']
     
-    # 🔥 获取自定义下载链接 (没填则使用默认)
     client_url = cfg.get("client_download_url") or "https://emby.media/download.html"
     
     return templates.TemplateResponse("register.html", {
