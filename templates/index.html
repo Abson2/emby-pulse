@@ -63,13 +63,21 @@
     
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
         
-        <div class="flex items-center justify-between w-full md:w-auto gap-4">
-            <div>
-                <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 dark:text-white tracking-tight">数据概览</h2>
-                <div class="text-xs md:text-sm text-gray-500 mt-1.5 font-bold uppercase tracking-wider" id="current-date">...</div>
-            </div>
+        <div>
+            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 dark:text-white tracking-tight">数据概览</h2>
+            <div class="text-xs md:text-sm text-gray-500 mt-1.5 font-bold uppercase tracking-wider" id="current-date">...</div>
+        </div>
+        
+        <div class="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto">
             
-            <div class="relative z-50">
+            <div class="relative z-20 flex-1 md:flex-none">
+                 <select id="dash-user-select" onchange="changeUser()" class="w-full md:w-64 appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 py-3 pl-5 pr-10 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold transition cursor-pointer hover:border-blue-400">
+                    <option value="all">🌏 全站统计数据</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500"><i class="fa-solid fa-chevron-down text-sm"></i></div>
+            </div>
+
+            <div class="relative z-50 flex-shrink-0">
                 <button onclick="toggleLiveDropdown()" id="live-btn" class="relative p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-600 dark:text-gray-300 shadow-sm hover:text-red-500 transition-all active:scale-90 flex items-center justify-center">
                     <i class="fa-solid fa-satellite-dish"></i>
                     <span id="live-badge" class="hidden absolute -top-1.5 -right-1.5 flex h-4 w-4">
@@ -78,7 +86,7 @@
                     </span>
                 </button>
                 
-                <div id="live-dropdown" class="hidden absolute right-0 md:left-0 md:right-auto mt-3 w-[280px] sm:w-96 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden transform opacity-0 scale-95 transition-all duration-200 origin-top-right md:origin-top-left">
+                <div id="live-dropdown" class="hidden absolute right-0 mt-3 w-[280px] sm:w-96 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden transform opacity-0 scale-95 transition-all duration-200 origin-top-right">
                     <div class="bg-gray-50 dark:bg-gray-900/50 px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
                         <h4 class="text-sm font-black text-gray-800 dark:text-gray-200 tracking-wider flex items-center">
                             <span class="w-1.5 h-1.5 rounded-full bg-red-500 mr-2 animate-pulse"></span>正在热播
@@ -90,13 +98,7 @@
                     </div>
                 </div>
             </div>
-        </div>
-        
-        <div class="relative z-20 w-full md:w-auto">
-             <select id="dash-user-select" onchange="changeUser()" class="w-full md:w-64 appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 py-3 pl-5 pr-10 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold transition cursor-pointer hover:border-blue-400">
-                <option value="all">🌏 全站统计数据</option>
-            </select>
-            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500"><i class="fa-solid fa-chevron-down text-sm"></i></div>
+            
         </div>
     </div>
 
@@ -240,6 +242,7 @@
         window.open(targetUrl, '_blank');
     }
 
+    // 正在热播下拉菜单控制
     function toggleLiveDropdown() {
         const dropdown = document.getElementById('live-dropdown');
         if (dropdown.classList.contains('hidden')) {
@@ -251,7 +254,9 @@
         } else {
             dropdown.classList.remove('opacity-100', 'scale-100');
             dropdown.classList.add('opacity-0', 'scale-95');
-            setTimeout(() => { dropdown.classList.add('hidden'); }, 200);
+            setTimeout(() => {
+                dropdown.classList.add('hidden');
+            }, 200);
         }
     }
 
@@ -418,7 +423,7 @@
                     <div onclick="jumpToLibrary('${lib.Id}')" class="relative w-48 sm:w-60 md:w-full aspect-video flex-shrink-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-1 hover:ring-2 hover:ring-indigo-400/50 transition-all duration-300 group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
                         <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-105 transition duration-700" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
                         <div class="absolute bottom-0 inset-x-0 p-3 pb-4 flex justify-center items-end">
-                            <h4 class="text-white font-black text-sm md:text-[17px] truncate w-full text-center tracking-widest" style="text-shadow: 0px 2px 8px rgba(0,0,0,0.9), 0px 0px 3px rgba(0,0,0,1);">${lib.Name}</h4>
+                            <h4 class="text-white font-black text-sm md:text-[17px] truncate w-full text-center tracking-widest transform group-hover:scale-105 transition-transform duration-300" style="text-shadow: 0px 2px 8px rgba(0,0,0,0.9), 0px 0px 3px rgba(0,0,0,1);">${lib.Name}</h4>
                         </div>
                     </div>`;
                 });
@@ -438,6 +443,7 @@
                     const imgUrl = `/api/proxy/image/${item.Id}/primary`;
                     const title = item.SeriesName ? `${item.SeriesName} - ${item.Name}` : item.Name;
                     const metaInfo = [item.Year, item.Rating ? `⭐${item.Rating}` : ''].filter(Boolean).join(' • '); 
+                    
                     html += `
                     <div onclick="jumpToEmby('${item.Id}')" class="group relative w-24 sm:w-28 md:w-full flex-shrink-0 cursor-pointer snap-center hover:-translate-y-1 transition-all duration-300">
                         <div class="aspect-[2/3] rounded-xl md:rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative shadow-sm group-hover:shadow-2xl group-hover:ring-2 group-hover:ring-blue-400/50 transition-all border border-gray-100 dark:border-gray-700/50">
@@ -465,6 +471,7 @@
                 json.data.slice(0, 40).forEach(item => {
                     const displayTitle = item.DisplayName || item.ItemName;
                     const imgUrl = `/api/proxy/image/${item.ItemId}/primary`;
+                    
                     html += `
                     <div onclick="jumpToEmby('${item.ItemId}')" class="group relative w-24 sm:w-28 md:w-full flex-shrink-0 cursor-pointer snap-center hover:-translate-y-1 transition-all duration-300">
                         <div class="aspect-[2/3] rounded-xl md:rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative shadow-sm group-hover:shadow-2xl group-hover:ring-2 group-hover:ring-green-400/50 transition-all border border-gray-100 dark:border-gray-700/50">
