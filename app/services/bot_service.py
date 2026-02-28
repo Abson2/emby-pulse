@@ -27,7 +27,7 @@ class TelegramBot:
         self.offset = 0
         self.last_check_min = -1
         self.user_cache = {}
-        self.ip_cache = {} # 🔥 新增：IP 地址内存级缓存
+        self.ip_cache = {} # IP 内存缓存
         
         self.wecom_token = None
         self.wecom_token_expires = 0
@@ -50,7 +50,7 @@ class TelegramBot:
         self.library_thread = threading.Thread(target=self._library_notify_loop, daemon=True)
         self.library_thread.start()
         
-        print("🤖 Bot Service Started (Dual Channel Interactive Mode - V3 Ultimate)")
+        print("🤖 Bot Service Started (Dual Channel Interactive Mode - V4 Ultimate IP)")
 
     def stop(self): self.running = False
 
@@ -82,55 +82,75 @@ class TelegramBot:
         except: pass
         return self.user_cache.get(user_id, "Unknown User")
 
-    # ================= 🔥 史诗级加强：双引擎 IP 定位与缓存 =================
+    # ================= 🔥 三引擎高精度 IP 追踪 =================
     def _get_location(self, ip):
-        if not ip: return "未知位置"
+        if not ip: return "未知"
         
-        # 1. 严格过滤局域网/内网 IP (包含 IPv4 和 IPv6)
+        # 1. 过滤局域网直连
         try:
             ip_obj = ipaddress.ip_address(ip)
             if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
-                return "局域网 (本地直连)"
+                return "局域网"
         except: pass
 
-        # 2. 引入内存级缓存
+        # 2. 读取缓存
         if ip in self.ip_cache:
             return self.ip_cache[ip]
 
-        loc = "未知位置"
+        loc = ""
         
-        # 3. 引擎 A: 太平洋电脑网 API (对国内极其精准，含 IPv6)
+        # 3. 引擎 A: 高精度聚合 API (基于纯真/IPIP，专治国内 IPv6 不准)
         try:
-            res = requests.get(f"https://whois.pconline.com.cn/ipJson.jsp?ip={ip}&json=true", timeout=3)
-            res.encoding = 'gbk'
+            res = requests.get(f"https://api.vvhan.com/api/ipInfo?ip={ip}", timeout=3)
             if res.status_code == 200:
                 data = res.json()
-                if data.get('addr') and "本机地址" not in data.get('addr'):
-                    loc = data.get('addr').strip()
+                if data.get('success'):
+                    info = data.get('info', {})
+                    country = info.get('country', '')
+                    prov = info.get('prov', '')
+                    city = info.get('city', '')
+                    if prov or city:
+                        loc = f"{country} {prov} {city}".strip()
         except: pass
 
-        # 4. 引擎 B: ip-api 兜底查国外
-        if loc == "未知位置" or len(loc) < 2:
+        # 4. 引擎 B: 太平洋电脑网 (国内老牌兜底)
+        if not loc or loc == "中国  ":
+            try:
+                res = requests.get(f"https://whois.pconline.com.cn/ipJson.jsp?ip={ip}&json=true", timeout=3)
+                res.encoding = 'gbk'
+                if res.status_code == 200:
+                    addr = res.json().get('addr', '')
+                    if addr and "本机地址" not in addr:
+                        loc = addr.strip()
+            except: pass
+
+        # 5. 引擎 C: ip-api (国外节点精确识别兜底)
+        if not loc:
             try:
                 res = requests.get(f"http://ip-api.com/json/{ip}?lang=zh-CN", timeout=3)
                 if res.status_code == 200:
                     d = res.json()
                     if d.get('status') == 'success':
                         country = d.get('country', '')
+                        region = d.get('regionName', '')
                         city = d.get('city', '')
-                        if country == "中国":
-                            loc = f"{d.get('regionName', '')} {city}".strip()
-                        else:
-                            loc = f"{country} {city}".strip()
+                        loc = f"{country} {region} {city}".strip()
             except: pass
 
-        # 5. 写入缓存并控制容量 (保留 1000 条防止内存泄漏)
-        if loc and loc != "未知位置":
+        # 6. 数据净化与排版优化
+        if not loc:
+            loc = "未知地区"
+        else:
+            loc = loc.replace("省", "").replace("市", "").replace("中国 中国", "中国").strip()
+            loc = re.sub(r'\s+', ' ', loc) # 合并多余的连续空格
+
+        # 7. 写入缓存 (容量保护)
+        if loc != "未知地区":
             if len(self.ip_cache) > 1000:
                 self.ip_cache.clear()
             self.ip_cache[ip] = loc
             
-        return loc if loc else "未知位置"
+        return loc
 
     def _download_emby_image(self, item_id, img_type='Primary', image_tag=None):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -146,7 +166,7 @@ class TelegramBot:
             pass
         return None
 
-    # ================= 🔥 企微核心洗稿引擎 (留白版) =================
+    # ================= 企微核心洗稿引擎 =================
     
     def _get_wecom_token(self):
         corpid = cfg.get("wecom_corpid"); corpsecret = cfg.get("wecom_corpsecret")
@@ -327,7 +347,7 @@ class TelegramBot:
                     requests.post(url, json=data, proxies=self._get_proxies(), timeout=10)
                 except Exception as e: pass
 
-    # ================= 业务排版逻辑 (极致留白版) =================
+    # ================= 业务排版逻辑 =================
     
     def add_library_task(self, item):
         with self.library_lock:
