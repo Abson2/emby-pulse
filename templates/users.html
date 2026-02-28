@@ -292,15 +292,19 @@
         <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><i class="fa-solid fa-link text-emerald-500"></i>批量生成邀请码</h3>
         <div id="invite-form-step" class="space-y-5">
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">账号有效期预设</label>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">账号有效期</label>
                 <div class="grid grid-cols-4 gap-2 mb-3">
-                    <button onclick="selectDuration(1)" class="dur-btn px-2 py-2 border border-gray-200 rounded-lg text-xs hover:bg-indigo-50 transition-all text-gray-600">1 天</button>
-                    <button onclick="selectDuration(7)" class="dur-btn px-2 py-2 border border-gray-200 rounded-lg text-xs hover:bg-indigo-50 transition-all text-gray-600">7 天</button>
-                    <button onclick="selectDuration(30)" class="dur-btn px-2 py-2 border border-indigo-500 bg-indigo-50 text-indigo-600 font-bold rounded-lg text-xs shadow-sm transition-all">30 天</button>
-                    <button onclick="selectDuration(90)" class="dur-btn px-2 py-2 border border-gray-200 rounded-lg text-xs hover:bg-indigo-50 transition-all text-gray-600">90 天</button>
-                    <button onclick="selectDuration(180)" class="dur-btn px-2 py-2 border border-gray-200 rounded-lg text-xs hover:bg-indigo-50 transition-all text-gray-600">180 天</button>
-                    <button onclick="selectDuration(365)" class="dur-btn px-2 py-2 border border-gray-200 rounded-lg text-xs hover:bg-indigo-50 transition-all text-gray-600">365 天</button>
-                    <button onclick="selectDuration(-1)" class="dur-btn px-2 py-2 border border-gray-200 rounded-lg text-xs hover:bg-indigo-50 col-span-2 transition-all text-gray-600">永久有效</button>
+                    <button onclick="selectDuration(1)" class="dur-btn px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all text-gray-600 dark:text-gray-400">1 天</button>
+                    <button onclick="selectDuration(7)" class="dur-btn px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all text-gray-600 dark:text-gray-400">7 天</button>
+                    <button onclick="selectDuration(30)" class="dur-btn px-2 py-2 border border-indigo-500 bg-indigo-50 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg text-xs shadow-sm transition-all">30 天</button>
+                    <button onclick="selectDuration(90)" class="dur-btn px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all text-gray-600 dark:text-gray-400">90 天</button>
+                    <button onclick="selectDuration(180)" class="dur-btn px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all text-gray-600 dark:text-gray-400">180 天</button>
+                    <button onclick="selectDuration(365)" class="dur-btn px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all text-gray-600 dark:text-gray-400">365 天</button>
+                    <button onclick="selectDuration(-1)" class="dur-btn px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/30 col-span-2 transition-all text-gray-600 dark:text-gray-400">永久</button>
+                </div>
+                <div class="relative w-full mt-2">
+                    <input type="number" id="custom-duration" placeholder="或自定义天数..." oninput="setCustomDuration()" min="1" class="w-full pl-3 pr-8 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 outline-none text-sm text-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 transition-all">
+                    <span class="absolute right-3 top-2.5 text-xs font-bold text-gray-400">天</span>
                 </div>
             </div>
             <div>
@@ -313,13 +317,13 @@
             </div>
             <div class="flex justify-end gap-3 mt-8">
                 <button onclick="closeInviteModal()" class="px-5 py-2 text-gray-500">取消</button>
-                <button onclick="generateInvite(event)" class="px-6 py-2 bg-emerald-500 text-white rounded-lg font-bold">生成链接</button>
+                <button onclick="generateInvite(event)" class="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 transition text-white rounded-lg font-bold shadow-md active:scale-95">生成链接</button>
             </div>
         </div>
         <div id="invite-result-step" class="hidden space-y-4">
             <div id="invite-links-container" class="space-y-3 max-h-72 overflow-y-auto p-2 bg-gray-50 dark:bg-gray-900 rounded-xl border dark:border-gray-700"></div>
-            <button onclick="copyAllInvites()" class="w-full py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg mt-2">复制全部</button>
-            <button onclick="closeInviteModal()" class="w-full py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-lg">关闭</button>
+            <button onclick="copyAllInvites()" class="w-full py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg mt-2 transition hover:bg-indigo-100">复制全部</button>
+            <button onclick="closeInviteModal()" class="w-full py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-lg transition hover:bg-gray-300 dark:hover:bg-gray-600">关闭</button>
         </div>
     </div>
 </div>
@@ -332,7 +336,6 @@ let currentAvatarUrl = "";
 let currentAvatarFile = null;
 let currentExcludedSubFolders = []; 
 
-// 管理选中状态与当前过滤条件
 let selectedUsers = new Set();
 let currentFilter = 'all';
 
@@ -378,7 +381,7 @@ async function loadUsers() {
 
 function setFilter(filter) {
     currentFilter = filter;
-    selectedUsers.clear(); // 切换过滤时清空选择
+    selectedUsers.clear();
     renderUsers();
     updateStickyBar();
 }
@@ -389,7 +392,6 @@ function renderUsers() {
     const searchQ = document.getElementById('search-input').value.toLowerCase();
     const sortOpt = document.getElementById('sort-select').value;
     
-    // 更新看板统计
     let stTotal = users.length;
     let stActive = users.filter(u => u.StatusCat === 'normal' || u.StatusCat === 'expiring').length;
     let stExpiring = users.filter(u => u.StatusCat === 'expiring').length;
@@ -400,7 +402,6 @@ function renderUsers() {
     document.getElementById('stat-expiring').innerText = stExpiring;
     document.getElementById('stat-error').innerText = stError;
 
-    // 过滤
     let filtered = users.filter(u => {
         if (searchQ && !u.Name.toLowerCase().includes(searchQ)) return false;
         if (currentFilter === 'active' && !(u.StatusCat === 'normal' || u.StatusCat === 'expiring')) return false;
@@ -409,7 +410,6 @@ function renderUsers() {
         return true;
     });
 
-    // 排序
     if (sortOpt === 'name') {
         filtered.sort((a,b) => a.Name.localeCompare(b.Name));
     } else if (sortOpt === 'login') {
@@ -435,7 +435,6 @@ function renderUsers() {
 
         const isChecked = selectedUsers.has(u.Id) ? 'checked' : '';
 
-        // 🔥 恢复：桌面端表格里的单点注销按钮
         desktopHtml += `
             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-all border-b border-gray-50 dark:border-gray-700/50">
                 <td class="px-4 py-4 text-center">
@@ -460,7 +459,6 @@ function renderUsers() {
             </tr>
         `;
 
-        // 🔥 恢复：移动端卡片里的单点注销按钮
         mobileHtml += `
             <div class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm mb-1 flex items-start gap-3">
                 <input type="checkbox" value="${u.Id}" onchange="toggleSelectUser('${u.Id}', this.checked)" class="user-checkbox mt-1 w-4 h-4 rounded text-indigo-600" ${isChecked}>
@@ -476,7 +474,7 @@ function renderUsers() {
                         ${badge}
                     </div>
                     <div class="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-50 dark:border-gray-700/50">
-                        <button onclick="openEditUserModal('${u.Id}')" class="w-full py-1.5 text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg active:scale-95 transition-all">修改配置</button>
+                        <button onclick="openEditUserModal('${u.Id}')" class="w-full py-1.5 text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg active:scale-95 transition-all">配置</button>
                         <button onclick="deleteUser('${u.Id}')" class="w-full py-1.5 text-xs font-bold bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg active:scale-95 transition-all">注销账号</button>
                     </div>
                 </div>
@@ -487,7 +485,6 @@ function renderUsers() {
     desktopBody.innerHTML = desktopHtml || '<tr><td colspan="6" class="text-center py-8 text-gray-400">无符合条件的用户</td></tr>';
     mobileBody.innerHTML = mobileHtml || '<div class="text-center py-8 text-gray-400">无符合条件的用户</div>';
     
-    // 更新全选框状态
     const allBoxD = document.getElementById('selectAll-desktop');
     const allBoxM = document.getElementById('selectAll-mobile');
     const renderedIds = filtered.map(u => u.Id);
@@ -499,7 +496,6 @@ function renderUsers() {
     updateStickyBar();
 }
 
-/** 批量操作 UI 逻辑 */
 function toggleSelectUser(uid, isChecked) {
     if (isChecked) selectedUsers.add(uid);
     else selectedUsers.delete(uid);
@@ -530,15 +526,14 @@ function updateStickyBar() {
     }
 }
 
-// ================= API 请求区 =================
-
-// 🔥 恢复：单体删除用户函数
+// 恢复：单用户删除功能
 async function deleteUser(uid) {
     if (!confirm('危险操作：该用户将被物理删除且无法恢复，确认注销？')) return;
     try {
         const response = await fetch("/api/manage/user/" + uid, { method: 'DELETE' });
         const json = await response.json();
         if (json.status === 'success') {
+            selectedUsers.delete(uid); // 如果该用户恰好被选中了，从集合里移除
             loadUsers();
         } else {
             alert('注销失败: ' + (json.message || '未知错误'));
@@ -622,6 +617,7 @@ function populateTemplates(selectId, excludeUserId = null) {
     }
 }
 
+// 🔥 修复：交互联动 - 点击预设按钮
 function selectDuration(days) {
     selectedDuration = parseInt(days);
     const buttons = document.querySelectorAll('.dur-btn');
@@ -631,6 +627,25 @@ function selectDuration(days) {
     const target = Array.from(buttons).find(btn => btn.getAttribute('onclick').includes("(" + days + ")"));
     if (target) {
         target.className = "dur-btn px-2 py-2 border border-indigo-500 bg-indigo-50 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg text-xs shadow-sm transition-all";
+    }
+    // 清空自定义输入框
+    const customInput = document.getElementById('custom-duration');
+    if (customInput) customInput.value = '';
+}
+
+// 🔥 修复：交互联动 - 填写自定义天数
+function setCustomDuration() {
+    const val = document.getElementById('custom-duration').value;
+    if (val && parseInt(val) > 0) {
+        selectedDuration = parseInt(val);
+        // 移除所有预设按钮的选中状态
+        const buttons = document.querySelectorAll('.dur-btn');
+        for (let b of buttons) {
+            b.className = "dur-btn px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all text-gray-600 dark:text-gray-400";
+        }
+    } else {
+        // 如果清空了输入框，默认切回 30 天
+        selectDuration(30); 
     }
 }
 
@@ -661,7 +676,7 @@ async function generateInvite(e) {
                 itemDiv.className = "flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm";
                 itemDiv.innerHTML = `
                     <span class="flex-1 truncate font-mono text-[11px] text-gray-500 dark:text-gray-400 select-all">${link}</span>
-                    <button onclick="copyToClipboard('${link}')" class="text-indigo-600 dark:text-indigo-400 font-bold px-3 py-1 text-xs border-l border-gray-100 dark:border-gray-700">复制</button>
+                    <button onclick="copyToClipboard('${link}')" class="text-indigo-600 dark:text-indigo-400 font-bold px-3 py-1 text-xs border-l border-gray-100 dark:border-gray-700 hover:text-indigo-800 transition">复制</button>
                 `;
                 container.appendChild(itemDiv);
             }
@@ -879,7 +894,11 @@ function openInviteModal() {
     modal.classList.remove('hidden');
     document.getElementById('invite-form-step').classList.remove('hidden');
     document.getElementById('invite-result-step').classList.add('hidden');
+    
+    // 每次打开重置为 30天 默认状态
+    document.getElementById('custom-duration').value = '';
     selectDuration(30);
+    
     populateTemplates('invite-template');
     setTimeout(() => { modal.classList.add('flex'); }, 10);
 }
@@ -925,8 +944,22 @@ function closeEditUserModal() {
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
 .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #4a5568; }
 
-/* 隐藏滑动条但保留滑动功能 (专门针对手机端窄屏幕操作舱) */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* 针对部分浏览器的强效防自动填充修复 (隐形背景) */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active{
+    -webkit-box-shadow: 0 0 0 30px white inset !important;
+}
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover, 
+.dark input:-webkit-autofill:focus, 
+.dark input:-webkit-autofill:active{
+    -webkit-box-shadow: 0 0 0 30px #1f2937 inset !important;
+    -webkit-text-fill-color: white !important;
+}
 </style>
 {% endblock %}
