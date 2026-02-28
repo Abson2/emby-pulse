@@ -6,49 +6,97 @@
     <title>加入媒体库</title>
     <link rel="icon" type="image/png" href="/static/img/favicon.png">
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;500;700&display=swap');
         body { font-family: 'Noto Sans SC', sans-serif; }
     </style>
 </head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
 
-    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm">
-        <div class="text-center mb-8">
-            <h1 class="text-2xl font-bold text-gray-800">🎉 欢迎加入</h1>
-            <p class="text-gray-500 text-sm mt-2">注册您的专属 Emby 账号</p>
-        </div>
-
-        {% if valid %}
-        <div class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">用户名</label>
-                <input type="text" id="username" class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="设置一个好记的名字">
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
-                <input type="password" id="password" class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="设置登录密码">
+    <div id="main-card" class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm transition-all duration-500">
+        
+        <div id="register-form">
+            <div class="text-center mb-8">
+                <h1 class="text-2xl font-bold text-gray-800">🎉 欢迎加入</h1>
+                <p class="text-gray-500 text-sm mt-2">注册您的专属 Emby 账号</p>
             </div>
 
-            <div class="bg-indigo-50 text-indigo-700 text-xs p-3 rounded-lg flex items-center">
-                <span class="mr-2">⏳</span>
-                <span>账号有效期：<strong>{{ '永久' if days == -1 else days ~ ' 天' }}</strong></span>
+            {% if valid %}
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+                    <input type="text" id="username" class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="设置一个好记的名字">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                    <input type="password" id="password" class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="设置登录密码">
+                </div>
+
+                <div class="bg-indigo-50 text-indigo-700 text-xs p-3 rounded-lg flex items-center">
+                    <span class="mr-2">⏳</span>
+                    <span>账号有效期：<strong>{{ '永久' if days == -1 else days ~ ' 天' }}</strong></span>
+                </div>
+
+                <button onclick="register()" id="reg-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg transition shadow-md mt-4">
+                    立即注册
+                </button>
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <div class="text-4xl mb-4">💔</div>
+                <h3 class="text-lg font-bold text-gray-700">链接已失效</h3>
+                <p class="text-gray-500 text-sm mt-2">该邀请链接不存在或已达到使用次数上限。</p>
+            </div>
+            {% endif %}
+
+            <p class="text-center text-xs text-gray-400 mt-8">Powered by EmbyPulse</p>
+        </div>
+
+        <div id="success-view" class="hidden text-center">
+            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fa-solid fa-check text-3xl text-green-500"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">注册成功！</h2>
+            <p class="text-gray-500 text-sm mb-6">请截屏或复制下方信息登录</p>
+
+            <div class="bg-gray-50 rounded-xl p-4 text-left space-y-3 border border-gray-200">
+                <div>
+                    <span class="text-xs text-gray-400 block mb-1">服务器地址</span>
+                    <div class="flex items-center justify-between bg-white px-2 py-1.5 rounded border border-gray-100">
+                        <code class="text-sm font-mono text-indigo-600 truncate" id="res-server">...</code>
+                        <button onclick="copyText('res-server')" class="text-gray-400 hover:text-indigo-500 ml-2"><i class="fa-regular fa-copy"></i></button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <span class="text-xs text-gray-400 block mb-1">用户名</span>
+                        <div class="flex items-center justify-between bg-white px-2 py-1.5 rounded border border-gray-100">
+                            <code class="text-sm font-bold text-gray-800 truncate" id="res-user">...</code>
+                            <button onclick="copyText('res-user')" class="text-gray-400 hover:text-indigo-500 ml-2"><i class="fa-regular fa-copy"></i></button>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-gray-400 block mb-1">密码</span>
+                        <div class="flex items-center justify-between bg-white px-2 py-1.5 rounded border border-gray-100">
+                            <code class="text-sm font-mono text-gray-800 truncate" id="res-pass">...</code>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <button onclick="register()" id="reg-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg transition shadow-md mt-4">
-                立即注册
-            </button>
-        </div>
-        {% else %}
-        <div class="text-center py-8">
-            <div class="text-4xl mb-4">💔</div>
-            <h3 class="text-lg font-bold text-gray-700">链接已失效</h3>
-            <p class="text-gray-500 text-sm mt-2">该邀请链接不存在或已达到使用次数上限。</p>
-        </div>
-        {% endif %}
+            <div id="welcome-msg-box" class="mt-4 p-3 bg-blue-50 text-blue-800 text-xs rounded-lg text-left hidden">
+                <i class="fa-solid fa-circle-info mr-1"></i> <span id="res-msg"></span>
+            </div>
 
-        <p class="text-center text-xs text-gray-400 mt-8">Powered by EmbyPulse</p>
+            <div class="mt-6">
+                <a href="{{ client_download_url }}" target="_blank" class="block w-full bg-gray-800 hover:bg-gray-900 text-white font-bold py-2.5 rounded-lg transition text-sm text-center">
+                    <i class="fa-solid fa-download mr-2"></i> 下载客户端
+                </a>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -75,16 +123,19 @@
                 const json = await res.json();
                 
                 if (json.status === 'success') {
-                    document.body.innerHTML = `
-                        <div class="flex items-center justify-center min-h-screen bg-gray-100">
-                            <div class="bg-white p-8 rounded-2xl shadow-xl text-center">
-                                <div class="text-5xl mb-4">✅</div>
-                                <h2 class="text-2xl font-bold text-gray-800 mb-2">注册成功！</h2>
-                                <p class="text-gray-600 mb-6">您现在可以使用账号 <strong>${u}</strong> 登录 Emby 了。</p>
-                                <a href="/login" class="text-indigo-600 hover:underline">前往登录页</a>
-                            </div>
-                        </div>
-                    `;
+                    // 切换视图
+                    document.getElementById('register-form').classList.add('hidden');
+                    document.getElementById('success-view').classList.remove('hidden');
+                    
+                    // 填充数据
+                    document.getElementById('res-server').textContent = json.server_url || "请联系管理员获取";
+                    document.getElementById('res-user').textContent = u;
+                    document.getElementById('res-pass').textContent = p; // 显示明文密码方便截图
+                    
+                    if (json.welcome_message) {
+                        document.getElementById('res-msg').textContent = json.welcome_message;
+                        document.getElementById('welcome-msg-box').classList.remove('hidden');
+                    }
                 } else {
                     alert("注册失败: " + json.message);
                     btn.disabled = false;
@@ -93,7 +144,16 @@
             } catch (e) {
                 alert("网络错误");
                 btn.disabled = false;
+                btn.textContent = "立即注册";
             }
+        }
+
+        function copyText(id) {
+            const text = document.getElementById(id).textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                // 简单的视觉反馈
+                alert("已复制");
+            });
         }
     </script>
 </body>

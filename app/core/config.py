@@ -50,8 +50,11 @@ DEFAULT_CONFIG = {
     "enable_notify": False,
     "enable_library_notify": False,
     "webhook_token": "embypulse",
-    "calendar_cache_ttl": 86400, # 🔥 新增默认值
-    "scheduled_tasks": []
+    "calendar_cache_ttl": 86400,
+    "scheduled_tasks": [],
+    # 🔥 新增配置项 (解决 system.py 读取报错)
+    "emby_public_url": "", 
+    "welcome_message": ""
 }
 
 class ConfigManager:
@@ -75,9 +78,19 @@ class ConfigManager:
         except Exception as e: 
             print(f"⚠️ Config Save Error: {e}")
 
-    def get(self, key): 
-        return self.config.get(key, DEFAULT_CONFIG.get(key))
+    def get(self, key, default=None): 
+        # 兼容 dict.get 的用法
+        return self.config.get(key, default if default is not None else DEFAULT_CONFIG.get(key))
     
+    def __getitem__(self, key):
+        # 兼容 cfg['key'] 的用法
+        return self.config.get(key, DEFAULT_CONFIG.get(key))
+
+    def __setitem__(self, key, value):
+        # 兼容 cfg['key'] = value 的用法
+        self.config[key] = value
+        self.save()
+
     def set(self, key, value): 
         self.config[key] = value
         self.save()
@@ -90,3 +103,7 @@ templates = Jinja2Templates(directory="templates")
 SECRET_KEY = os.getenv("SECRET_KEY", "embypulse_secret_key_2026")
 PORT = 10307
 DB_PATH = os.getenv("DB_PATH", "/emby-data/playback_reporting.db")
+
+# 🔥🔥 核心修复：导出 save_config 供 system.py 调用
+def save_config():
+    cfg.save()

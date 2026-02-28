@@ -35,6 +35,16 @@ async def emby_webhook(request: Request, background_tasks: BackgroundTasks):
                 # 这一步非常快，不会阻塞 Webhook
                 bot.add_library_task(item)
 
+                # 🔥 新增：日历 Webhook 联动 (点亮绿灯)
+                if item.get("Type") == "Episode":
+                    series_id = item.get("SeriesId")
+                    season = item.get("ParentIndexNumber")
+                    episode = item.get("IndexNumber")
+                    
+                    if series_id and season is not None and episode is not None:
+                        from app.services.calendar_service import calendar_service
+                        calendar_service.mark_episode_ready(series_id, season, episode)
+
         # 2. 播放状态 (保持不变)
         elif event == "playback.start":
             background_tasks.add_task(bot.push_playback_event, data, "start")

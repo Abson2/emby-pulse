@@ -11,6 +11,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
@@ -25,5 +28,13 @@ jobs:
         with:
           context: .
           push: true
-          # ⚠️⚠️⚠️ 下面这行一定要改！
-          tags: zeyu8023/emby-stats:latest
+          platforms: linux/amd64,linux/arm64
+          # 🔥 修改 1：打上 latest 和自动递增版本号的双标签
+          tags: |
+            zeyu8023/emby-stats:latest
+            zeyu8023/emby-stats:1.2.0.${{ github.run_number }}
+          # 🔥 修改 2：将版本号作为参数传进 Dockerfile
+          build-args: |
+            APP_VERSION=1.2.0.${{ github.run_number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
