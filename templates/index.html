@@ -31,15 +31,9 @@
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); 
             gap: 1.25rem;
         }
-        /* 🔥 媒体库封面尺寸微调至 280px，寻找最佳视觉比例 */
         .md-fluid-grid-lib {
             display: grid !important;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); 
-            gap: 1.5rem;
-        }
-        .md-fluid-grid-live {
-            display: grid !important;
-            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); 
             gap: 1.5rem;
         }
     }
@@ -67,22 +61,16 @@
 {% block content %}
 <div class="w-full px-3 sm:px-6 md:px-10 py-6 md:py-8 pb-32 max-w-[3000px] mx-auto space-y-6 md:space-y-10">
     
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-            <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 dark:text-white tracking-tight">数据概览</h2>
-            <div class="text-xs md:text-sm text-gray-500 mt-1.5 font-bold uppercase tracking-wider" id="current-date">...</div>
-        </div>
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
         
-        <div class="flex flex-wrap items-center justify-between md:justify-end gap-3 md:gap-4">
-            <div class="relative z-20 w-full sm:w-auto">
-                 <select id="dash-user-select" onchange="changeUser()" class="w-full sm:w-56 md:w-64 appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 py-3 pl-5 pr-10 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold transition cursor-pointer hover:border-blue-400">
-                    <option value="all">🌏 全站统计数据</option>
-                </select>
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500"><i class="fa-solid fa-chevron-down text-sm"></i></div>
+        <div class="flex items-center justify-between w-full md:w-auto gap-4">
+            <div>
+                <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 dark:text-white tracking-tight">数据概览</h2>
+                <div class="text-xs md:text-sm text-gray-500 mt-1.5 font-bold uppercase tracking-wider" id="current-date">...</div>
             </div>
-
+            
             <div class="relative z-50">
-                <button onclick="toggleLiveDropdown()" id="live-btn" class="relative p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-600 dark:text-gray-300 shadow-sm hover:text-red-500 transition-all active:scale-90">
+                <button onclick="toggleLiveDropdown()" id="live-btn" class="relative p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-600 dark:text-gray-300 shadow-sm hover:text-red-500 transition-all active:scale-90 flex items-center justify-center">
                     <i class="fa-solid fa-satellite-dish"></i>
                     <span id="live-badge" class="hidden absolute -top-1.5 -right-1.5 flex h-4 w-4">
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -90,18 +78,25 @@
                     </span>
                 </button>
                 
-                <div id="live-dropdown" class="hidden absolute right-0 mt-3 w-80 sm:w-96 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden transform opacity-0 scale-95 transition-all duration-200 origin-top-right">
-                    <div class="bg-gray-50 dark:bg-gray-900/50 px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                <div id="live-dropdown" class="hidden absolute right-0 md:left-0 md:right-auto mt-3 w-[280px] sm:w-96 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden transform opacity-0 scale-95 transition-all duration-200 origin-top-right md:origin-top-left">
+                    <div class="bg-gray-50 dark:bg-gray-900/50 px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
                         <h4 class="text-sm font-black text-gray-800 dark:text-gray-200 tracking-wider flex items-center">
                             <span class="w-1.5 h-1.5 rounded-full bg-red-500 mr-2 animate-pulse"></span>正在热播
                         </h4>
-                        <span class="text-xs text-gray-500 font-bold" id="live-status-text">空闲中</span>
+                        <span class="text-[11px] sm:text-xs text-gray-500 font-bold" id="live-status-text">空闲中</span>
                     </div>
                     <div id="live-dropdown-list" class="max-h-[60vh] overflow-y-auto custom-scroll p-2 space-y-1">
                         <div class="py-10 text-center text-xs text-gray-400 italic font-medium">当前无人观看</div>
                     </div>
                 </div>
             </div>
+        </div>
+        
+        <div class="relative z-20 w-full md:w-auto">
+             <select id="dash-user-select" onchange="changeUser()" class="w-full md:w-64 appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 py-3 pl-5 pr-10 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold transition cursor-pointer hover:border-blue-400">
+                <option value="all">🌏 全站统计数据</option>
+            </select>
+            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500"><i class="fa-solid fa-chevron-down text-sm"></i></div>
         </div>
     </div>
 
@@ -233,21 +228,18 @@
     const embyBaseUrl = "{{ emby_url }}";
     const embyServerId = "{{ server_id }}";
 
-    // 针对电影、剧集、单集的标准跳转路由
     function jumpToEmby(itemId) {
         if (!embyBaseUrl) { alert("提示: 未在设置中配置 Emby 地址。"); return; }
         const targetUrl = `${embyBaseUrl}/web/index.html#!/item?id=${itemId}&serverId=${embyServerId}`;
         window.open(targetUrl, '_blank');
     }
 
-    // 针对媒体库使用 videos 通用路由
     function jumpToLibrary(libraryId) {
         if (!embyBaseUrl) { alert("提示: 未在设置中配置 Emby 地址。"); return; }
         const targetUrl = `${embyBaseUrl}/web/index.html#!/videos?serverId=${embyServerId}&parentId=${libraryId}`;
         window.open(targetUrl, '_blank');
     }
 
-    // 正在热播下拉菜单控制
     function toggleLiveDropdown() {
         const dropdown = document.getElementById('live-dropdown');
         if (dropdown.classList.contains('hidden')) {
@@ -259,13 +251,10 @@
         } else {
             dropdown.classList.remove('opacity-100', 'scale-100');
             dropdown.classList.add('opacity-0', 'scale-95');
-            setTimeout(() => {
-                dropdown.classList.add('hidden');
-            }, 200);
+            setTimeout(() => { dropdown.classList.add('hidden'); }, 200);
         }
     }
 
-    // 点击空白处关闭悬浮窗
     document.addEventListener('click', (event) => {
         const dropdown = document.getElementById('live-dropdown');
         const btn = document.getElementById('live-btn');
@@ -276,19 +265,15 @@
         }
     });
 
-    // 自动计算网格列数，实现绝对完美的“2 排展示”
     function applyTwoRowLimit() {
         if (window.innerWidth < 768) return; 
-        
         const containers = ['latest-container', 'recent-container'];
         containers.forEach(id => {
             const container = document.getElementById(id);
             if (!container || !container.children.length) return;
-            
             const style = window.getComputedStyle(container);
             const cols = style.gridTemplateColumns.split(' ').length;
             const maxItems = cols * 2;
-            
             Array.from(container.children).forEach((child, index) => {
                 child.style.display = index < maxItems ? '' : 'none';
             });
@@ -324,7 +309,6 @@
         setInterval(fetchLive, 10000);
     }
 
-    // 🔥 正在热播数据：渲染到右上角悬浮窗内
     async function fetchLive() {
         try {
             const res = await fetch('/api/stats/live');
@@ -337,8 +321,7 @@
             if(json.status === 'success' && json.data.length > 0) {
                 badge.classList.remove('hidden');
                 countText.innerText = json.data.length;
-                statusText.innerText = `${json.data.length} 个设备同时在线`;
-                
+                statusText.innerText = `${json.data.length} 设备在线`;
                 let html = '';
                 json.data.forEach(s => {
                     const item = s.NowPlayingItem || {};
@@ -350,25 +333,23 @@
                     const title = item.SeriesName ? `${item.SeriesName} - ${item.Name}` : (item.Name || '未知内容');
                     let percentage = 0;
                     if (item.RunTimeTicks && item.RunTimeTicks > 0) { percentage = Math.round((playState.PositionTicks / item.RunTimeTicks) * 100); }
-                    
                     html += `
                     <div onclick="jumpToEmby('${targetId}')" class="flex gap-3 p-3 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-xl transition-all cursor-pointer group">
-                        <div class="w-16 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-800 shadow-sm relative">
+                        <div class="w-14 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-800 shadow-sm relative">
                             <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
-                            <div class="absolute inset-0 ring-1 ring-inset ring-black/10 rounded-lg"></div>
                         </div>
                         <div class="flex flex-col justify-center flex-1 min-w-0">
-                            <div class="flex items-center justify-between mb-1.5">
+                            <div class="flex items-center justify-between mb-1">
                                 <span class="text-[11px] font-black text-gray-500 dark:text-gray-400 truncate pr-2"><i class="fa-solid fa-user mr-1 text-gray-400"></i>${s.UserName || s.User || '未知'}</span>
                                 ${transcodeBadge}
                             </div>
-                            <h4 class="text-sm font-black text-gray-800 dark:text-gray-200 truncate mb-2.5 leading-tight group-hover:text-blue-500 transition-colors">${title}</h4>
-                            <div class="flex items-center gap-2.5">
-                                <span class="text-[10px] text-gray-400 truncate max-w-[80px] font-bold">${s.DeviceName || s.Device || '未知'}</span>
+                            <h4 class="text-xs sm:text-sm font-black text-gray-800 dark:text-gray-200 truncate mb-2 leading-tight group-hover:text-blue-500 transition-colors">${title}</h4>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[9px] sm:text-[10px] text-gray-400 truncate max-w-[80px] font-bold">${s.DeviceName || s.Device || '未知'}</span>
                                 <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
                                     <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-1000" style="width: ${percentage}%"></div>
                                 </div>
-                                <span class="text-[10px] font-black text-indigo-500 w-7 text-right">${percentage}%</span>
+                                <span class="text-[10px] font-black text-indigo-500 w-6 text-right">${percentage}%</span>
                             </div>
                         </div>
                     </div>`;
@@ -433,13 +414,11 @@
                 let html = '';
                 json.data.forEach(lib => {
                     const imgUrl = `/api/proxy/image/${lib.Id}/primary`; 
-                    // 🔥 彻底去除背景遮罩，文字放在底部正中间，并加上清晰的深色文字阴影确保能看清
                     html += `
-                    <div onclick="jumpToLibrary('${lib.Id}')" class="relative w-52 sm:w-60 md:w-full aspect-video flex-shrink-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-1 hover:ring-2 hover:ring-indigo-400/50 transition-all duration-300 group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
-                        <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
-                        <div class="absolute bottom-0 inset-x-0 p-3 pb-4 flex justify-center items-end bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    <div onclick="jumpToLibrary('${lib.Id}')" class="relative w-48 sm:w-60 md:w-full aspect-video flex-shrink-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-1 hover:ring-2 hover:ring-indigo-400/50 transition-all duration-300 group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
+                        <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-105 transition duration-700" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
                         <div class="absolute bottom-0 inset-x-0 p-3 pb-4 flex justify-center items-end">
-                            <h4 class="text-white font-black text-sm md:text-[17px] truncate w-full text-center tracking-widest transform group-hover:scale-105 transition-transform duration-300" style="text-shadow: 0px 2px 6px rgba(0,0,0,0.9), 0px 0px 2px rgba(0,0,0,1);">${lib.Name}</h4>
+                            <h4 class="text-white font-black text-sm md:text-[17px] truncate w-full text-center tracking-widest" style="text-shadow: 0px 2px 8px rgba(0,0,0,0.9), 0px 0px 3px rgba(0,0,0,1);">${lib.Name}</h4>
                         </div>
                     </div>`;
                 });
@@ -459,15 +438,14 @@
                     const imgUrl = `/api/proxy/image/${item.Id}/primary`;
                     const title = item.SeriesName ? `${item.SeriesName} - ${item.Name}` : item.Name;
                     const metaInfo = [item.Year, item.Rating ? `⭐${item.Rating}` : ''].filter(Boolean).join(' • '); 
-                    
                     html += `
-                    <div onclick="jumpToEmby('${item.Id}')" class="group relative w-28 sm:w-32 md:w-full flex-shrink-0 cursor-pointer snap-center hover:-translate-y-1 transition-all duration-300">
-                        <div class="aspect-[2/3] rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative shadow-sm group-hover:shadow-2xl group-hover:ring-2 group-hover:ring-blue-400/50 transition-all border border-gray-100 dark:border-gray-700/50">
+                    <div onclick="jumpToEmby('${item.Id}')" class="group relative w-24 sm:w-28 md:w-full flex-shrink-0 cursor-pointer snap-center hover:-translate-y-1 transition-all duration-300">
+                        <div class="aspect-[2/3] rounded-xl md:rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative shadow-sm group-hover:shadow-2xl group-hover:ring-2 group-hover:ring-blue-400/50 transition-all border border-gray-100 dark:border-gray-700/50">
                             <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" loading="lazy" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
                         </div>
                         <div class="mt-2.5 px-1">
-                            <h4 class="text-xs md:text-sm font-black text-gray-800 dark:text-gray-200 truncate leading-tight mb-1 group-hover:text-blue-500 transition-colors">${title}</h4>
-                            <p class="text-[10px] md:text-xs text-gray-400 truncate font-bold tracking-wide">${metaInfo}</p>
+                            <h4 class="text-[11px] md:text-sm font-black text-gray-800 dark:text-gray-200 truncate leading-tight mb-1 group-hover:text-blue-500 transition-colors">${title}</h4>
+                            <p class="text-[9px] md:text-[11px] text-gray-400 truncate font-bold tracking-wide">${metaInfo}</p>
                         </div>
                     </div>`;
                 });
@@ -487,17 +465,16 @@
                 json.data.slice(0, 40).forEach(item => {
                     const displayTitle = item.DisplayName || item.ItemName;
                     const imgUrl = `/api/proxy/image/${item.ItemId}/primary`;
-                    
                     html += `
-                    <div onclick="jumpToEmby('${item.ItemId}')" class="group relative w-28 sm:w-32 md:w-full flex-shrink-0 cursor-pointer snap-center hover:-translate-y-1 transition-all duration-300">
-                        <div class="aspect-[2/3] rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative shadow-sm group-hover:shadow-2xl group-hover:ring-2 group-hover:ring-green-400/50 transition-all border border-gray-100 dark:border-gray-700/50">
+                    <div onclick="jumpToEmby('${item.ItemId}')" class="group relative w-24 sm:w-28 md:w-full flex-shrink-0 cursor-pointer snap-center hover:-translate-y-1 transition-all duration-300">
+                        <div class="aspect-[2/3] rounded-xl md:rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative shadow-sm group-hover:shadow-2xl group-hover:ring-2 group-hover:ring-green-400/50 transition-all border border-gray-100 dark:border-gray-700/50">
                             <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" loading="lazy" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
-                            <div class="absolute bottom-0 left-0 right-0 p-2 sm:p-2.5 bg-gradient-to-t from-black/90 to-transparent opacity-90 group-hover:opacity-100 transition-opacity">
-                                <p class="text-[9px] sm:text-[11px] text-white font-black truncate flex items-center tracking-wider"><i class="fa-solid fa-play text-[8px] mr-1.5 opacity-80"></i>${item.UserName}</p>
+                            <div class="absolute bottom-0 left-0 right-0 p-2 sm:p-2.5 bg-gradient-to-t from-black/90 to-transparent opacity-90 group-hover:opacity-100 transition-opacity flex items-end">
+                                <p class="text-[9px] sm:text-[11px] text-white font-black truncate flex items-center tracking-wider w-full"><i class="fa-solid fa-play text-[8px] mr-1.5 opacity-80"></i>${item.UserName}</p>
                             </div>
                         </div>
                         <div class="mt-2.5 px-1">
-                            <h4 class="text-xs md:text-sm font-black text-gray-800 dark:text-gray-200 truncate leading-tight mb-0.5 group-hover:text-green-500 transition-colors">${displayTitle}</h4>
+                            <h4 class="text-[11px] md:text-sm font-black text-gray-800 dark:text-gray-200 truncate leading-tight mb-0.5 group-hover:text-green-500 transition-colors">${displayTitle}</h4>
                         </div>
                     </div>`;
                 });
@@ -520,12 +497,12 @@
                     if(index === 1) rankClass = "bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300";
                     if(index === 2) rankClass = "bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-400";
                     html += `
-                    <div class="flex items-center justify-between p-3 sm:p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-xl transition group cursor-default border border-transparent hover:border-gray-200 dark:hover:border-gray-600">
+                    <div class="flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-xl transition group cursor-default border border-transparent hover:border-gray-200 dark:hover:border-gray-600">
                         <div class="flex items-center min-w-0">
                             <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl ${rankClass} flex items-center justify-center font-black text-sm mr-4 shrink-0 shadow-sm">${index + 1}</div>
                             <div class="truncate">
                                 <p class="text-sm md:text-base font-black text-gray-800 dark:text-gray-200 truncate group-hover:text-amber-500 transition">${user.UserName}</p>
-                                <p class="text-[10px] md:text-xs text-gray-500 font-bold mt-1 uppercase tracking-wide">${user.Plays} 次播放</p>
+                                <p class="text-[10px] md:text-xs text-gray-500 font-bold mt-0.5 uppercase tracking-wide">${user.Plays} 次播放</p>
                             </div>
                         </div>
                         <div class="text-right pl-3"><p class="text-lg font-black text-gray-900 dark:text-gray-100 tracking-tighter">${Math.round(user.TotalTime/3600)}<span class="text-[10px] md:text-xs font-bold text-gray-400 ml-1">小时</span></p></div>
