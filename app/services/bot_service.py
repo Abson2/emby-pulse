@@ -27,7 +27,7 @@ class TelegramBot:
         self.offset = 0
         self.last_check_min = -1
         self.user_cache = {}
-        self.ip_cache = {} # IP 内存缓存
+        self.ip_cache = {} 
         
         self.wecom_token = None
         self.wecom_token_expires = 0
@@ -50,7 +50,7 @@ class TelegramBot:
         self.library_thread = threading.Thread(target=self._library_notify_loop, daemon=True)
         self.library_thread.start()
         
-        print("🤖 Bot Service Started (Dual Channel Interactive Mode - V4 Ultimate IP)")
+        print("🤖 Bot Service Started (Dual Channel Interactive Mode - V4 Ultimate WeChat Compatible)")
 
     def stop(self): self.running = False
 
@@ -82,24 +82,15 @@ class TelegramBot:
         except: pass
         return self.user_cache.get(user_id, "Unknown User")
 
-    # ================= 🔥 三引擎高精度 IP 追踪 =================
     def _get_location(self, ip):
         if not ip: return "未知"
-        
-        # 1. 过滤局域网直连
         try:
             ip_obj = ipaddress.ip_address(ip)
             if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
                 return "局域网"
         except: pass
-
-        # 2. 读取缓存
-        if ip in self.ip_cache:
-            return self.ip_cache[ip]
-
+        if ip in self.ip_cache: return self.ip_cache[ip]
         loc = ""
-        
-        # 3. 引擎 A: 高精度聚合 API (基于纯真/IPIP，专治国内 IPv6 不准)
         try:
             res = requests.get(f"https://api.vvhan.com/api/ipInfo?ip={ip}", timeout=3)
             if res.status_code == 200:
@@ -109,22 +100,16 @@ class TelegramBot:
                     country = info.get('country', '')
                     prov = info.get('prov', '')
                     city = info.get('city', '')
-                    if prov or city:
-                        loc = f"{country} {prov} {city}".strip()
+                    if prov or city: loc = f"{country} {prov} {city}".strip()
         except: pass
-
-        # 4. 引擎 B: 太平洋电脑网 (国内老牌兜底)
         if not loc or loc == "中国  ":
             try:
                 res = requests.get(f"https://whois.pconline.com.cn/ipJson.jsp?ip={ip}&json=true", timeout=3)
                 res.encoding = 'gbk'
                 if res.status_code == 200:
                     addr = res.json().get('addr', '')
-                    if addr and "本机地址" not in addr:
-                        loc = addr.strip()
+                    if addr and "本机地址" not in addr: loc = addr.strip()
             except: pass
-
-        # 5. 引擎 C: ip-api (国外节点精确识别兜底)
         if not loc:
             try:
                 res = requests.get(f"http://ip-api.com/json/{ip}?lang=zh-CN", timeout=3)
@@ -136,20 +121,13 @@ class TelegramBot:
                         city = d.get('city', '')
                         loc = f"{country} {region} {city}".strip()
             except: pass
-
-        # 6. 数据净化与排版优化
-        if not loc:
-            loc = "未知地区"
+        if not loc: loc = "未知地区"
         else:
             loc = loc.replace("省", "").replace("市", "").replace("中国 中国", "中国").strip()
-            loc = re.sub(r'\s+', ' ', loc) # 合并多余的连续空格
-
-        # 7. 写入缓存 (容量保护)
+            loc = re.sub(r'\s+', ' ', loc)
         if loc != "未知地区":
-            if len(self.ip_cache) > 1000:
-                self.ip_cache.clear()
+            if len(self.ip_cache) > 1000: self.ip_cache.clear()
             self.ip_cache[ip] = loc
-            
         return loc
 
     def _download_emby_image(self, item_id, img_type='Primary', image_tag=None):
@@ -162,11 +140,10 @@ class TelegramBot:
                 url = f"{host}/emby/Items/{item_id}/Images/{img_type}?maxHeight=800&maxWidth=600&quality=90&api_key={key}"
             res = requests.get(url, timeout=15)
             if res.status_code == 200: return io.BytesIO(res.content)
-        except Exception as e: 
-            pass
+        except Exception as e: pass
         return None
 
-    # ================= 企微核心洗稿引擎 =================
+    # ================= 🔥 企微核心洗稿引擎 (全面兼容普通微信) =================
     
     def _get_wecom_token(self):
         corpid = cfg.get("wecom_corpid"); corpsecret = cfg.get("wecom_corpsecret")
@@ -183,17 +160,18 @@ class TelegramBot:
         except Exception as e: pass
         return None
 
-    def _html_to_wecom_md(self, html_text, inline_keyboard=None):
-        text = html_text.replace("<b>", "**").replace("</b>", "**")
+    def _html_to_wecom_text(self, html_text, inline_keyboard=None):
+        # 彻底抛弃 markdown，使用纯文本 + 符号排版，100% 兼容普通微信
+        text = html_text.replace("<b>", "【").replace("</b>", "】")
         text = text.replace("<i>", "").replace("</i>", "")
-        text = text.replace("<code>", "`").replace("</code>", "`")
-        text = re.sub(r"<a\s+href=['\"](.*?)['\"]>(.*?)</a>", r"[\2](\1)", text)
+        text = text.replace("<code>", "").replace("</code>", "")
+        text = re.sub(r"<a\s+href=['\"](.*?)['\"]>(.*?)</a>", r"\2: \1", text)
         if inline_keyboard and "inline_keyboard" in inline_keyboard:
             text += "\n\n"
             for row in inline_keyboard["inline_keyboard"]:
                 for btn in row:
                     if "text" in btn and "url" in btn:
-                        text += f"> [{btn['text']}]({btn['url']})\n"
+                        text += f"🔗 {btn['text']}: {btn['url']}\n"
         return text.strip()
 
     def _set_wecom_menu(self):
@@ -210,26 +188,31 @@ class TelegramBot:
                 ]}
             ]
         }
-        try: requests.post(f"{proxy_url}/cgi-bin/menu/create?access_token={token}&agentid={agentid}", json=menu_data, timeout=5)
-        except Exception as e: pass
+        try: 
+            # 🔥 增加日志打印：用来排查代理是否支持 menu/create 路由
+            res = requests.post(f"{proxy_url}/cgi-bin/menu/create?access_token={token}&agentid={agentid}", json=menu_data, timeout=5)
+            print(f"📦 WeCom Menu Sync: {res.status_code} - {res.text}")
+        except Exception as e: 
+            print(f"❌ WeCom Menu Error: {e}")
 
     def _send_wecom_message(self, text, inline_keyboard=None, touser="@all"):
         token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
         proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
         if not token or not agentid: return
         try:
-            md_text = self._html_to_wecom_md(text, inline_keyboard)
+            # 🔥 强制使用 text 类型，摒弃 markdown
+            clean_text = self._html_to_wecom_text(text, inline_keyboard)
             url = f"{proxy_url}/cgi-bin/message/send?access_token={token}"
-            requests.post(url, json={"touser": touser, "msgtype": "markdown", "agentid": int(agentid), "markdown": {"content": md_text}}, timeout=10)
+            requests.post(url, json={"touser": touser, "msgtype": "text", "agentid": int(agentid), "text": {"content": clean_text}}, timeout=10)
         except Exception as e: pass
 
     def _send_wecom_photo(self, photo_bytes, html_text, inline_keyboard=None, touser="@all"):
+        # 有图片的图文卡片 (News) 是全端兼容的，保持不变
         token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
         proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
         if not token or not agentid: return
         
         pic_url = REPORT_COVER_URL
-        
         try:
             if photo_bytes:
                 upload_url = f"{proxy_url}/cgi-bin/media/uploadimg?access_token={token}"
@@ -245,13 +228,11 @@ class TelegramBot:
         try:
             plain_text = re.sub(r'<[^>]+>', '', html_text).strip()
             lines = [line.strip() for line in plain_text.split('\n')]
-            
             title = "EmbyPulse 通知"
             desc = ""
             if lines:
                 title = lines[0]
                 if len(title.encode('utf-8')) > 120: title = title[:35] + "..."
-                
                 raw_desc = '\n'.join(lines[1:]).strip()
                 desc = re.sub(r'\n{3,}', '\n\n', raw_desc)
                 if len(desc.encode('utf-8')) > 500: desc = desc[:150] + "..."
