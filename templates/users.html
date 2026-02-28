@@ -43,7 +43,7 @@
     <div class="flex flex-col md:flex-row gap-3 mb-4">
         <div class="relative flex-1">
             <i class="fa-solid fa-search absolute left-3 top-3 text-gray-400"></i>
-            <input type="text" id="search-input" oninput="renderUsers()" placeholder="搜索用户名..." class="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none text-sm dark:text-white transition-all">
+            <input type="text" id="search-input" name="search_prevent_autofill" autocomplete="off" oninput="renderUsers()" placeholder="搜索用户名..." class="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none text-sm dark:text-white transition-all">
         </div>
         <select id="sort-select" onchange="renderUsers()" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 text-sm text-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
             <option value="name">排序: 按名称 A-Z</option>
@@ -147,11 +147,11 @@
         <div class="space-y-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">用户名</label>
-                <input type="text" id="new-username" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
+                <input type="text" id="new-username" autocomplete="off" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all">
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">初始密码 (可选)</label>
-                <input type="password" id="new-password" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="留空则不设置密码">
+                <input type="password" id="new-password" autocomplete="new-password" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="留空则不设置密码">
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">账号到期时间</label>
@@ -222,7 +222,7 @@
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-400 mb-1 uppercase tracking-wider">重置密码</label>
-                        <input type="password" id="edit-password" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="如需修改请输入新密码，否则留空">
+                        <input type="password" id="edit-password" autocomplete="new-password" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="如需修改请输入新密码，否则留空">
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div>
@@ -435,6 +435,7 @@ function renderUsers() {
 
         const isChecked = selectedUsers.has(u.Id) ? 'checked' : '';
 
+        // 🔥 恢复：桌面端表格里的单点注销按钮
         desktopHtml += `
             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-all border-b border-gray-50 dark:border-gray-700/50">
                 <td class="px-4 py-4 text-center">
@@ -452,12 +453,14 @@ function renderUsers() {
                 <td class="px-6 py-4">${badge}</td>
                 <td class="px-6 py-4 text-sm font-mono font-medium text-gray-600 dark:text-gray-400">${u.ExpireDate || '永久有效'}</td>
                 <td class="px-6 py-4 text-sm text-gray-500">${u.LastLoginDate ? new Date(u.LastLoginDate).toLocaleDateString() : '从未'}</td>
-                <td class="px-6 py-4 text-right">
+                <td class="px-6 py-4 text-right whitespace-nowrap">
                     <button onclick="openEditUserModal('${u.Id}')" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-bold transition-all">配置</button>
+                    <button onclick="deleteUser('${u.Id}')" class="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 ml-4 font-medium opacity-60 hover:opacity-100 transition-all">注销</button>
                 </td>
             </tr>
         `;
 
+        // 🔥 恢复：移动端卡片里的单点注销按钮
         mobileHtml += `
             <div class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm mb-1 flex items-start gap-3">
                 <input type="checkbox" value="${u.Id}" onchange="toggleSelectUser('${u.Id}', this.checked)" class="user-checkbox mt-1 w-4 h-4 rounded text-indigo-600" ${isChecked}>
@@ -472,7 +475,10 @@ function renderUsers() {
                         </div>
                         ${badge}
                     </div>
-                    <button onclick="openEditUserModal('${u.Id}')" class="w-full py-1.5 text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg active:scale-95 transition-all mt-2">修改资料</button>
+                    <div class="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-50 dark:border-gray-700/50">
+                        <button onclick="openEditUserModal('${u.Id}')" class="w-full py-1.5 text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg active:scale-95 transition-all">修改配置</button>
+                        <button onclick="deleteUser('${u.Id}')" class="w-full py-1.5 text-xs font-bold bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg active:scale-95 transition-all">注销账号</button>
+                    </div>
                 </div>
             </div>
         `;
@@ -525,6 +531,20 @@ function updateStickyBar() {
 }
 
 // ================= API 请求区 =================
+
+// 🔥 恢复：单体删除用户函数
+async function deleteUser(uid) {
+    if (!confirm('危险操作：该用户将被物理删除且无法恢复，确认注销？')) return;
+    try {
+        const response = await fetch("/api/manage/user/" + uid, { method: 'DELETE' });
+        const json = await response.json();
+        if (json.status === 'success') {
+            loadUsers();
+        } else {
+            alert('注销失败: ' + (json.message || '未知错误'));
+        }
+    } catch(e) { alert("删除请求异常"); }
+}
 
 async function batchAction(actionName) {
     if (selectedUsers.size === 0) return;
