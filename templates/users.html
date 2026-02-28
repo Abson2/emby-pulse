@@ -81,13 +81,35 @@
     </div>
 </div>
 
-<div id="batch-action-bar" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-gray-900/90 backdrop-blur-md text-white rounded-2xl px-6 py-3 shadow-2xl flex items-center gap-6 transform translate-y-24 opacity-0 transition-all duration-300">
-    <div class="font-bold whitespace-nowrap"><span id="batch-count" class="text-indigo-400 text-lg mr-1">0</span> 已选</div>
-    <div class="flex items-center gap-2 border-l border-gray-700 pl-6">
-        <button onclick="openBatchRenewModal()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-bold transition">批量续期</button>
-        <button onclick="batchAction('enable')" class="px-3 py-1.5 hover:bg-gray-700 rounded-lg text-sm font-medium transition text-green-400">启用</button>
-        <button onclick="batchAction('disable')" class="px-3 py-1.5 hover:bg-gray-700 rounded-lg text-sm font-medium transition text-amber-400">禁用</button>
-        <button onclick="batchAction('delete')" class="px-3 py-1.5 hover:bg-red-900/50 rounded-lg text-sm font-medium transition text-red-400 ml-2"><i class="fa-solid fa-trash"></i></button>
+<div id="batch-action-bar" class="fixed bottom-4 left-4 right-4 md:bottom-8 md:left-1/2 md:right-auto md:-translate-x-1/2 z-40 bg-white/90 dark:bg-gray-800/95 backdrop-blur-xl text-gray-800 dark:text-white border border-gray-200/60 dark:border-gray-700/60 shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.5)] rounded-2xl px-3 py-3 md:px-5 flex items-center justify-between md:justify-start gap-2 md:gap-5 transform translate-y-24 opacity-0 transition-all duration-300 overflow-x-auto no-scrollbar">
+    
+    <div class="flex items-center shrink-0 pl-1">
+        <div id="batch-count" class="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-black h-7 md:h-8 min-w-[1.75rem] md:min-w-[2rem] px-2 rounded-lg flex items-center justify-center text-sm shadow-inner">0</div>
+        <span class="text-sm font-bold text-gray-600 dark:text-gray-300 ml-2 hidden sm:inline whitespace-nowrap">项已选</span>
+    </div>
+
+    <div class="w-px h-5 bg-gray-200 dark:bg-gray-700 hidden md:block shrink-0"></div>
+
+    <div class="flex items-center gap-1.5 md:gap-2 shrink-0">
+        <button onclick="openBatchRenewModal()" class="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs md:text-sm font-bold transition shadow-md active:scale-95 whitespace-nowrap">
+            <i class="fa-solid fa-calendar-plus"></i>
+            <span class="hidden sm:inline">批量续期</span>
+            <span class="sm:hidden">续期</span>
+        </button>
+        
+        <button onclick="batchAction('enable')" class="flex items-center gap-1.5 px-2.5 md:px-3 py-2 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40 text-green-600 dark:text-green-400 rounded-xl text-xs md:text-sm font-bold transition whitespace-nowrap border border-transparent hover:border-green-200 dark:hover:border-green-800/50 active:scale-95">
+            <i class="fa-solid fa-play"></i>
+            <span>启用</span>
+        </button>
+        
+        <button onclick="batchAction('disable')" class="flex items-center gap-1.5 px-2.5 md:px-3 py-2 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded-xl text-xs md:text-sm font-bold transition whitespace-nowrap border border-transparent hover:border-amber-200 dark:hover:border-amber-800/50 active:scale-95">
+            <i class="fa-solid fa-pause"></i>
+            <span>禁用</span>
+        </button>
+        
+        <button onclick="batchAction('delete')" class="flex items-center justify-center w-8 h-8 md:w-9 md:h-9 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-500 rounded-xl transition ml-0.5 shrink-0 active:scale-95 border border-transparent hover:border-red-200 dark:hover:border-red-800/50" title="批量删除">
+            <i class="fa-solid fa-trash text-xs md:text-sm"></i>
+        </button>
     </div>
 </div>
 
@@ -97,9 +119,9 @@
         <p class="text-xs text-gray-500 mb-4">将为选中的 <span id="renew-count-text" class="font-bold text-indigo-500"></span> 个用户修改到期时间。</p>
         
         <div class="grid grid-cols-3 gap-2 mb-4">
-            <button onclick="submitBatchRenew('+30')" class="py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-bold hover:bg-indigo-100 transition">+ 30 天</button>
-            <button onclick="submitBatchRenew('+90')" class="py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-bold hover:bg-indigo-100 transition">+ 90 天</button>
-            <button onclick="submitBatchRenew('+365')" class="py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-bold hover:bg-indigo-100 transition">+ 1 年</button>
+            <button onclick="submitBatchRenew('+30')" class="py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-bold hover:bg-indigo-100 transition border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800">+ 30 天</button>
+            <button onclick="submitBatchRenew('+90')" class="py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-bold hover:bg-indigo-100 transition border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800">+ 90 天</button>
+            <button onclick="submitBatchRenew('+365')" class="py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-bold hover:bg-indigo-100 transition border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800">+ 1 年</button>
         </div>
         
         <div class="relative flex py-2 items-center">
@@ -282,12 +304,12 @@
                 </div>
             </div>
             <div>
-                <label class="block text-sm mb-1">生成数量 (1-50)</label>
-                <input type="number" id="invite-count" value="1" min="1" max="50" class="w-full px-4 py-2 rounded-lg border bg-gray-50 outline-none">
+                <label class="block text-sm mb-1 text-gray-700 dark:text-gray-300">生成数量 (1-50)</label>
+                <input type="number" id="invite-count" value="1" min="1" max="50" class="w-full px-4 py-2 rounded-lg border dark:border-gray-600 bg-gray-50 dark:bg-gray-700 outline-none text-gray-800 dark:text-gray-100">
             </div>
             <div>
-                <label class="block text-sm mb-1">模板继承</label>
-                <select id="invite-template" class="w-full px-4 py-2 rounded-lg border bg-gray-50 outline-none"></select>
+                <label class="block text-sm mb-1 text-gray-700 dark:text-gray-300">模板继承</label>
+                <select id="invite-template" class="w-full px-4 py-2 rounded-lg border dark:border-gray-600 bg-gray-50 dark:bg-gray-700 outline-none text-gray-800 dark:text-gray-100"></select>
             </div>
             <div class="flex justify-end gap-3 mt-8">
                 <button onclick="closeInviteModal()" class="px-5 py-2 text-gray-500">取消</button>
@@ -295,9 +317,9 @@
             </div>
         </div>
         <div id="invite-result-step" class="hidden space-y-4">
-            <div id="invite-links-container" class="space-y-3 max-h-72 overflow-y-auto p-2 bg-gray-50 rounded-xl border"></div>
-            <button onclick="copyAllInvites()" class="w-full py-2 bg-indigo-50 text-indigo-600 font-bold rounded-lg mt-2">复制全部</button>
-            <button onclick="closeInviteModal()" class="w-full py-2 bg-gray-200 text-gray-700 font-bold rounded-lg">关闭</button>
+            <div id="invite-links-container" class="space-y-3 max-h-72 overflow-y-auto p-2 bg-gray-50 dark:bg-gray-900 rounded-xl border dark:border-gray-700"></div>
+            <button onclick="copyAllInvites()" class="w-full py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg mt-2">复制全部</button>
+            <button onclick="closeInviteModal()" class="w-full py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-lg">关闭</button>
         </div>
     </div>
 </div>
@@ -310,7 +332,7 @@ let currentAvatarUrl = "";
 let currentAvatarFile = null;
 let currentExcludedSubFolders = []; 
 
-// 🔥 新增：管理选中状态与当前过滤条件
+// 管理选中状态与当前过滤条件
 let selectedUsers = new Set();
 let currentFilter = 'all';
 
@@ -333,7 +355,6 @@ async function loadUsers() {
         const json = await response.json();
         if (json.status === 'success') {
             users = json.data;
-            // 预处理用户状态
             const today = new Date();
             today.setHours(0,0,0,0);
             users.forEach(u => {
@@ -407,10 +428,10 @@ function renderUsers() {
             : `<div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold uppercase text-sm shadow-inner">${u.Name[0]}</div>`;
 
         let badge = "";
-        if (u.StatusCat === 'disabled') badge = '<span class="px-2 py-1 rounded border bg-red-50 text-red-600 text-xs font-bold border-red-200">被禁用</span>';
-        else if (u.StatusCat === 'expired') badge = '<span class="px-2 py-1 rounded border bg-gray-100 text-gray-500 text-xs font-bold border-gray-300">已过期</span>';
-        else if (u.StatusCat === 'expiring') badge = '<span class="px-2 py-1 rounded border bg-amber-50 text-amber-600 text-xs font-bold border-amber-200">即将到期</span>';
-        else badge = '<span class="px-2 py-1 rounded border bg-green-50 text-green-600 text-xs font-bold border-green-200">活跃中</span>';
+        if (u.StatusCat === 'disabled') badge = '<span class="px-2 py-1 rounded border bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-xs font-bold border-red-200 dark:border-red-800">被禁用</span>';
+        else if (u.StatusCat === 'expired') badge = '<span class="px-2 py-1 rounded border bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 text-xs font-bold border-gray-300 dark:border-gray-600">已过期</span>';
+        else if (u.StatusCat === 'expiring') badge = '<span class="px-2 py-1 rounded border bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 text-xs font-bold border-amber-200 dark:border-amber-800">即将到期</span>';
+        else badge = '<span class="px-2 py-1 rounded border bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400 text-xs font-bold border-green-200 dark:border-green-800">活跃中</span>';
 
         const isChecked = selectedUsers.has(u.Id) ? 'checked' : '';
 
@@ -424,7 +445,7 @@ function renderUsers() {
                         ${avatarTag}
                         <div>
                             <div class="font-bold text-gray-900 dark:text-white">${u.Name}</div>
-                            ${u.IsAdmin ? '<span class="text-[9px] font-bold bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded border border-yellow-200">ADMIN</span>' : ''}
+                            ${u.IsAdmin ? '<span class="text-[9px] font-bold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-200 dark:border-yellow-800">ADMIN</span>' : ''}
                         </div>
                     </div>
                 </td>
@@ -432,7 +453,7 @@ function renderUsers() {
                 <td class="px-6 py-4 text-sm font-mono font-medium text-gray-600 dark:text-gray-400">${u.ExpireDate || '永久有效'}</td>
                 <td class="px-6 py-4 text-sm text-gray-500">${u.LastLoginDate ? new Date(u.LastLoginDate).toLocaleDateString() : '从未'}</td>
                 <td class="px-6 py-4 text-right">
-                    <button onclick="openEditUserModal('${u.Id}')" class="text-indigo-600 hover:text-indigo-800 font-bold transition-all">配置</button>
+                    <button onclick="openEditUserModal('${u.Id}')" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-bold transition-all">配置</button>
                 </td>
             </tr>
         `;
@@ -451,7 +472,7 @@ function renderUsers() {
                         </div>
                         ${badge}
                     </div>
-                    <button onclick="openEditUserModal('${u.Id}')" class="w-full py-1.5 text-xs font-bold bg-indigo-50 text-indigo-600 rounded-lg active:scale-95 transition-all mt-2">修改资料</button>
+                    <button onclick="openEditUserModal('${u.Id}')" class="w-full py-1.5 text-xs font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg active:scale-95 transition-all mt-2">修改资料</button>
                 </div>
             </div>
         `;
@@ -568,8 +589,6 @@ async function submitBatchRenew(val) {
     } catch(e) { alert('网络错误'); }
 }
 
-// ----------------- 保留原有单体处理函数 -----------------
-
 function populateTemplates(selectId, excludeUserId = null) {
     const sel = document.getElementById(selectId);
     sel.innerHTML = '<option value="">默认模板 (全库权限)</option>';
@@ -587,11 +606,11 @@ function selectDuration(days) {
     selectedDuration = parseInt(days);
     const buttons = document.querySelectorAll('.dur-btn');
     for (let b of buttons) {
-        b.className = "dur-btn px-2 py-2 border border-gray-200 rounded-lg text-xs hover:bg-indigo-50 transition-all text-gray-600";
+        b.className = "dur-btn px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all text-gray-600 dark:text-gray-400";
     }
     const target = Array.from(buttons).find(btn => btn.getAttribute('onclick').includes("(" + days + ")"));
     if (target) {
-        target.className = "dur-btn px-2 py-2 border border-indigo-500 bg-indigo-50 text-indigo-600 font-bold rounded-lg text-xs shadow-sm transition-all";
+        target.className = "dur-btn px-2 py-2 border border-indigo-500 bg-indigo-50 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg text-xs shadow-sm transition-all";
     }
 }
 
@@ -619,10 +638,10 @@ async function generateInvite(e) {
             for (let i = 0; i < json.codes.length; i++) {
                 const link = window.location.origin + '/invite/' + json.codes[i];
                 const itemDiv = document.createElement('div');
-                itemDiv.className = "flex items-center gap-2 bg-white p-2.5 rounded-xl border border-gray-100 shadow-sm";
+                itemDiv.className = "flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm";
                 itemDiv.innerHTML = `
-                    <span class="flex-1 truncate font-mono text-[11px] text-gray-500 select-all">${link}</span>
-                    <button onclick="copyToClipboard('${link}')" class="text-indigo-600 font-bold px-3 py-1 text-xs border-l border-gray-100">复制</button>
+                    <span class="flex-1 truncate font-mono text-[11px] text-gray-500 dark:text-gray-400 select-all">${link}</span>
+                    <button onclick="copyToClipboard('${link}')" class="text-indigo-600 dark:text-indigo-400 font-bold px-3 py-1 text-xs border-l border-gray-100 dark:border-gray-700">复制</button>
                 `;
                 container.appendChild(itemDiv);
             }
@@ -705,8 +724,8 @@ function renderLibraryCheckboxes(user) {
             const lib = allLibraries[i];
             const isChecked = user.EnabledFolders.includes(lib.Id) ? 'checked' : '';
             const label = document.createElement('label');
-            label.className = "flex items-center gap-3 p-2 bg-white border border-gray-100 rounded-xl cursor-pointer hover:shadow-sm transition-all";
-            label.innerHTML = `<input type="checkbox" value="${lib.Id}" class="lib-checkbox w-4 h-4 text-indigo-600 rounded cursor-pointer" ${isChecked}><span class="text-xs font-bold text-gray-700 truncate">${lib.Name}</span>`;
+            label.className = "flex items-center gap-3 p-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl cursor-pointer hover:shadow-sm transition-all";
+            label.innerHTML = `<input type="checkbox" value="${lib.Id}" class="lib-checkbox w-4 h-4 text-indigo-600 rounded cursor-pointer" ${isChecked}><span class="text-xs font-bold text-gray-700 dark:text-gray-300 truncate">${lib.Name}</span>`;
             container.appendChild(label);
         }
     }
@@ -882,8 +901,12 @@ function closeEditUserModal() {
 </script>
 
 <style>
-.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
 .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #4a5568; }
+
+/* 隐藏滑动条但保留滑动功能 (专门针对手机端窄屏幕操作舱) */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 </style>
 {% endblock %}
