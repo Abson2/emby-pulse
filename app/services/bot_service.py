@@ -6,6 +6,7 @@ import io
 import logging
 import urllib.parse
 import json 
+import re
 from collections import defaultdict
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter
@@ -36,7 +37,7 @@ class TelegramBot:
         self.running = True
         
         self._set_commands()
-        self._set_wecom_menu() # 🔥 启动时自动向企微设置底部菜单
+        self._set_wecom_menu() # 启动时向企微推送菜单
         
         if cfg.get("tg_bot_token"):
             self.poll_thread = threading.Thread(target=self._polling_loop, daemon=True)
@@ -56,7 +57,6 @@ class TelegramBot:
         proxy = cfg.get("proxy_url")
         return {"http": proxy, "https": proxy} if proxy else None
 
-    # 获取管理员ID
     def _get_admin_id(self):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         if not key or not host: return None
@@ -65,8 +65,7 @@ class TelegramBot:
             if res.status_code == 200:
                 users = res.json()
                 for u in users:
-                    if u.get("Policy", {}).get("IsAdministrator"):
-                        return u['Id']
+                    if u.get("Policy", {}).get("IsAdministrator"): return u['Id']
                 if users: return users[0]['Id']
         except: pass
         return None
@@ -106,7 +105,7 @@ class TelegramBot:
         except: pass
         return None
 
-    # ================= 🔥 企微核心驱动 =================
+    # ================= 🔥 企微核心驱动 (图文兼容版) =================
     
     def _get_wecom_token(self):
         corpid = cfg.get("wecom_corpid"); corpsecret = cfg.get("wecom_corpsecret")
@@ -123,20 +122,22 @@ class TelegramBot:
         except Exception as e: logger.error(f"WeCom Token Error: {e}")
         return None
 
-    def _html_to_wecom_md(self, html_text, inline_keyboard=None):
-        text = html_text.replace("<b>", "**").replace("</b>", "**")
-        text = text.replace("<i>", "").replace("</i>", "")
-        text = text.replace("<code>", "`").replace("</code>", "`")
-        text = text.replace("新入库", "<font color=\"info\">新入库</font>")
-        text = text.replace("开始播放", "<font color=\"info\">开始播放</font>")
-        text = text.replace("停止播放", "<font color=\"warning\">停止播放</font>")
-        # 如果有附加的键盘链接，将其转换为 markdown 的超链接格式
+    def _html_to_plain_text(self, html_text, inline_keyboard=None):
+        """将带有 HTML 的文本转为纯文本，彻底兼容普通微信"""
+        text = html_text.replace("<br>", "\n").replace("<br/>", "\n")
+        # 提取链接用于跳转备用
+        links = re.findall(r"href=['\"](.*?)['\"]", text)
+        first_link = links[0] if links else ""
+        
+        # 剔除所有 HTML 标签
+        text = re.sub(r'<[^>]+>', '', text)
+        
         if inline_keyboard and "inline_keyboard" in inline_keyboard:
-            text += "\n\n───────────────\n"
+            text += "\n───────────────\n"
             for row in inline_keyboard["inline_keyboard"]:
                 for btn in row:
-                    if "url" in btn: text += f"> [{btn['text']}]({btn['url']})\n"
-        return text
+                    if "text" in btn: text += f"🔗 {btn['text']}\n"
+        return text.strip(), first_link
 
     def _set_wecom_menu(self):
         token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
@@ -152,35 +153,70 @@ class TelegramBot:
                 ]}
             ]
         }
-        try: requests.post(f"{proxy_url}/cgi-bin/menu/create?access_token={token}&agentid={agentid}", json=menu_data, timeout=5)
-        except: pass
+        try: 
+            res = requests.post(f"{proxy_url}/cgi-bin/menu/create?access_token={token}&agentid={agentid}", json=menu_data, timeout=5).json()
+            logger.info(f"WeCom Menu Sync: {res}")
+        except Exception as e: 
+            logger.error(f"WeCom Menu Error: {e}")
 
     def _send_wecom_message(self, text, touser="@all"):
+        """无图时发送纯文本，100%兼容普通微信"""
         token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
         proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
         if not token or not agentid: return
         try:
+            clean_text, _ = self._html_to_plain_text(text)
             url = f"{proxy_url}/cgi-bin/message/send?access_token={token}"
-            requests.post(url, json={"touser": touser, "msgtype": "markdown", "agentid": int(agentid), "markdown": {"content": text}}, timeout=10)
+            requests.post(url, json={"touser": touser, "msgtype": "text", "agentid": int(agentid), "text": {"content": clean_text}}, timeout=10)
         except Exception as e: logger.error(f"WeCom Text Error: {e}")
 
-    def _send_wecom_photo(self, photo_bytes, text, touser="@all"):
+    def _send_wecom_photo(self, photo_bytes, html_text, touser="@all"):
+        """有图时发送 News 图文卡片，封面+标题+简介，完美兼容普通微信"""
         token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
         proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
         if not token or not agentid: return
         try:
-            upload_url = f"{proxy_url}/cgi-bin/media/upload?access_token={token}&type=image"
+            # 1. 调用专用的上传图片接口获取腾讯云永久 URL
+            upload_url = f"{proxy_url}/cgi-bin/media/uploadimg?access_token={token}"
             files = {"media": ("image.jpg", photo_bytes, "image/jpeg")}
             upload_res = requests.post(upload_url, files=files, timeout=15).json()
-            media_id = upload_res.get("media_id")
-            if media_id:
-                send_img_url = f"{proxy_url}/cgi-bin/message/send?access_token={token}"
-                requests.post(send_img_url, json={"touser": touser, "msgtype": "image", "agentid": int(agentid), "image": {"media_id": media_id}}, timeout=10)
-            if text: self._send_wecom_message(text, touser)
-        except Exception as e:
-            if text: self._send_wecom_message(text, touser)
+            pic_url = upload_res.get("url")
+            
+            # 2. 格式化文本为卡片的标题和摘要
+            clean_text, extra_url = self._html_to_plain_text(html_text)
+            lines = clean_text.split('\n')
+            title = lines[0] if lines else "EmbyPulse 通知"
+            desc = '\n'.join(lines[1:]).strip() if len(lines) > 1 else clean_text
+            
+            # 尝试获取一个跳转链接
+            jump_url = extra_url or cfg.get("emby_public_url") or cfg.get("emby_host") or "https://emby.media"
 
-    # ================= 🚀 底层双通道路由分发 (完全重构) =================
+            if pic_url:
+                # 3. 发送完美的图文卡片 (News)
+                send_msg_url = f"{proxy_url}/cgi-bin/message/send?access_token={token}"
+                msg_data = {
+                    "touser": touser,
+                    "msgtype": "news",
+                    "agentid": int(agentid),
+                    "news": {
+                        "articles": [
+                            {
+                                "title": title,
+                                "description": desc,
+                                "url": jump_url,
+                                "picurl": pic_url
+                            }
+                        ]
+                    }
+                }
+                requests.post(send_msg_url, json=msg_data, timeout=10)
+            else:
+                self._send_wecom_message(html_text, touser)
+        except Exception as e:
+            logger.error(f"WeCom News Error: {e}")
+            if html_text: self._send_wecom_message(html_text, touser)
+
+    # ================= 🚀 底层双通道路由分发 =================
 
     def send_photo(self, chat_id, photo_io, caption, parse_mode="HTML", reply_markup=None, platform="all"):
         photo_bytes = None
@@ -194,9 +230,12 @@ class TelegramBot:
         # 企微通道
         if platform in ["all", "wecom"] and cfg.get("wecom_corpid"):
             touser = chat_id if platform == "wecom" else cfg.get("wecom_touser", "@all")
-            wecom_text = self._html_to_wecom_md(caption, reply_markup)
-            if photo_bytes: threading.Thread(target=self._send_wecom_photo, args=(photo_bytes, wecom_text, touser)).start()
-            else: threading.Thread(target=self._send_wecom_message, args=(wecom_text, touser)).start()
+            # 将 HTML 和 键盘一起传给解析器处理
+            if reply_markup:
+                caption = caption + "\n" + json.dumps(reply_markup)
+            
+            if photo_bytes: threading.Thread(target=self._send_wecom_photo, args=(photo_bytes, caption, touser)).start()
+            else: threading.Thread(target=self._send_wecom_message, args=(caption, touser)).start()
 
         # TG通道
         if platform in ["all", "tg"] and cfg.get("tg_bot_token"):
@@ -218,7 +257,7 @@ class TelegramBot:
         # 企微通道
         if platform in ["all", "wecom"] and cfg.get("wecom_corpid"):
             touser = chat_id if platform == "wecom" else cfg.get("wecom_touser", "@all")
-            threading.Thread(target=self._send_wecom_message, args=(self._html_to_wecom_md(text), touser)).start()
+            threading.Thread(target=self._send_wecom_message, args=(text, touser)).start()
 
         # TG通道
         if platform in ["all", "tg"] and cfg.get("tg_bot_token"):
@@ -229,7 +268,7 @@ class TelegramBot:
                     requests.post(url, json={"chat_id": tg_cid, "text": text, "parse_mode": parse_mode}, proxies=self._get_proxies(), timeout=10)
                 except Exception as e: pass
 
-    # ================= 🚀 修复后的入库逻辑 (时间聚类算法 - 原生版) =================
+    # ================= 以下业务逻辑保持原样 =================
     
     def add_library_task(self, item):
         with self.library_lock:
@@ -280,36 +319,27 @@ class TelegramBot:
         for group_id, group_items in groups.items():
             try:
                 episodes_only = [x for x in group_items if x.get('Type') == 'Episode']
-                
                 if len(episodes_only) > 0:
                     self._push_episode_group(group_id, episodes_only)
-                    
                 elif len(group_items) == 1 and group_items[0].get('Type') == 'Series':
                     series_item = group_items[0]
                     fresh_episodes = self._check_fresh_episodes(group_id)
-                    
                     if fresh_episodes:
-                        logger.info(f"🔄 捕获到 Series {group_id} 的 {len(fresh_episodes)} 个新集数 (主动回查)")
                         self._push_episode_group(group_id, fresh_episodes)
                     else:
                         self._push_single_item(series_item)
                 else:
                     self._push_single_item(group_items[0])
-                
                 time.sleep(2) 
-            except Exception as e:
-                logger.error(f"Group Process Error: {e}")
+            except Exception as e: pass
 
     def _parse_emby_time(self, date_str):
         if not date_str: return None
         try:
             clean_str = date_str.replace('Z', '')[:26]
-            if '.' in clean_str:
-                return datetime.datetime.strptime(clean_str, "%Y-%m-%dT%H:%M:%S.%f")
-            else:
-                return datetime.datetime.strptime(clean_str, "%Y-%m-%dT%H:%M:%S")
-        except:
-            return None
+            if '.' in clean_str: return datetime.datetime.strptime(clean_str, "%Y-%m-%dT%H:%M:%S.%f")
+            else: return datetime.datetime.strptime(clean_str, "%Y-%m-%dT%H:%M:%S")
+        except: return None
 
     def _check_fresh_episodes(self, series_id):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -319,14 +349,9 @@ class TelegramBot:
         try:
             url = f"{host}/emby/Users/{admin_id}/Items"
             params = {
-                "ParentId": series_id,
-                "Recursive": "true",
-                "IncludeItemTypes": "Episode",
-                "Limit": 20, 
-                "SortBy": "DateCreated",
-                "SortOrder": "Descending",
-                "Fields": "DateCreated,Name,ParentIndexNumber,IndexNumber",
-                "api_key": key
+                "ParentId": series_id, "Recursive": "true", "IncludeItemTypes": "Episode",
+                "Limit": 20, "SortBy": "DateCreated", "SortOrder": "Descending",
+                "Fields": "DateCreated,Name,ParentIndexNumber,IndexNumber", "api_key": key
             }
             res = requests.get(url, params=params, timeout=10)
             if res.status_code != 200: return []
@@ -351,13 +376,9 @@ class TelegramBot:
                     if delta <= 60:
                         fresh_list.append(item)
                         last_time = curr_time 
-                    else:
-                        break 
-            
+                    else: break 
             return fresh_list
-        except Exception as e:
-            logger.error(f"Check Fresh Episodes Error: {e}")
-            return []
+        except Exception as e: return []
 
     def _push_episode_group(self, series_id, episodes):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -373,15 +394,11 @@ class TelegramBot:
         if not series_info: series_info = episodes[0]
 
         episodes.sort(key=lambda x: (x.get('ParentIndexNumber', 1), x.get('IndexNumber', 1)))
-        
         season_idx = episodes[0].get('ParentIndexNumber', 1)
-        ep_indices = [e.get('IndexNumber', 0) for e in episodes]
-        
-        ep_indices = sorted(list(set(ep_indices)))
+        ep_indices = sorted(list(set([e.get('IndexNumber', 0) for e in episodes])))
 
         if len(ep_indices) > 1:
-            ep_range = f"E{min(ep_indices)} - E{max(ep_indices)}"
-            title_suffix = f"新增 {len(ep_indices)} 集 ({ep_range})"
+            title_suffix = f"新增 {len(ep_indices)} 集 (E{min(ep_indices)} - E{max(ep_indices)})"
         else:
             title_suffix = f"E{str(ep_indices[0]).zfill(2)}"
             if episodes[0].get('Name') and "Episode" not in episodes[0].get('Name'):
@@ -394,10 +411,17 @@ class TelegramBot:
         overview = series_info.get("Overview", "暂无简介...") 
         if len(overview) > 150: overview = overview[:140] + "..."
         
-        caption = (f"📺 <b>新入库 剧集</b>\n{display_title} ({year})\n\n"
+        # 注入跳转链接
+        base_url = cfg.get("emby_public_url") or cfg.get("emby_host")
+        if base_url.endswith('/'): base_url = base_url[:-1]
+        play_url = f"{base_url}/web/index.html#!/item?id={series_id}&serverId={series_info.get('ServerId','')}"
+
+        caption = (f"📺 新入库 剧集\n"
+                   f"【{display_title} ({year})】\n"
                    f"⭐ 评分：{rating}/10\n"
                    f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-                   f"📝 剧情：{overview}")
+                   f"📝 剧情：{overview}\n"
+                   f"<a href='{play_url}'>点击播放</a>")
 
         img_io = self._download_emby_image(series_id, 'Primary')
         if not img_io: img_io = self._download_emby_image(series_id, 'Backdrop') 
@@ -421,26 +445,24 @@ class TelegramBot:
         if len(overview) > 150: overview = overview[:140] + "..."
         
         type_raw = item.get("Type")
-        type_cn = "电影"
-        type_icon = "🎬"
+        type_cn = "电影"; type_icon = "🎬"
+        if type_raw in ["Series", "Episode"]: type_cn = "剧集"; type_icon = "📺"
         
-        if type_raw == "Series":
-            type_cn = "剧集"
-            type_icon = "📺"
-        elif type_raw == "Episode":
-            type_cn = "剧集"
-            type_icon = "📺"
-        
-        caption = (f"{type_icon} <b>新入库 {type_cn}</b>\n{name} ({year})\n\n"
+        # 注入跳转链接
+        base_url = cfg.get("emby_public_url") or cfg.get("emby_host")
+        if base_url.endswith('/'): base_url = base_url[:-1]
+        play_url = f"{base_url}/web/index.html#!/item?id={item['Id']}&serverId={item.get('ServerId','')}"
+
+        caption = (f"{type_icon} 新入库 {type_cn}\n"
+                   f"【{name} ({year})】\n"
                    f"⭐ 评分：{rating}/10\n"
                    f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-                   f"📝 剧情：{overview}")
+                   f"📝 剧情：{overview}\n"
+                   f"<a href='{play_url}'>点击播放</a>")
         
         img_io = self._download_emby_image(item['Id'], 'Primary')
         if img_io: self.send_photo("sys_notify", img_io, caption, platform="all")
         else: self.send_photo("sys_notify", REPORT_COVER_URL, caption, platform="all")
-
-    # ================= 业务逻辑 (保持不变) =================
 
     def push_playback_event(self, data, action="start"):
         if not cfg.get("enable_notify"): return
@@ -458,7 +480,7 @@ class TelegramBot:
             emoji = "▶️" if action == "start" else "⏹️"; act = "开始播放" if action == "start" else "停止播放"
             ip = session.get("RemoteEndPoint", "127.0.0.1"); loc = self._get_location(ip)
             
-            msg = (f"{emoji} <b>【{user.get('Name')}】{act}</b>\n"
+            msg = (f"{emoji} 【{user.get('Name')}】{act}\n"
                    f"📺 {title}\n"
                    f"📚 类型：{type_cn}\n"
                    f"🌐 地址：{ip} ({loc})\n"
@@ -528,18 +550,15 @@ class TelegramBot:
         try:
             user_id = self._get_admin_id()
             if not user_id: return self.send_message(cid, "❌ 错误: 无法获取 Emby 用户身份", platform=platform)
-
             fields = "DateCreated,Name,SeriesName,ProductionYear,Type"
             url = f"{host}/emby/Users/{user_id}/Items/Latest"
             params = {"Limit": 8, "MediaTypes": "Video", "Fields": fields, "api_key": key}
-            
             res = requests.get(url, params=params, timeout=15)
-            if res.status_code != 200: return self.send_message(cid, f"❌ 查询失败: Emby 返回 HTTP {res.status_code}", platform=platform)
-
+            if res.status_code != 200: return self.send_message(cid, f"❌ 查询失败", platform=platform)
             items = res.json()
             if not items: return self.send_message(cid, "📭 最近没有新入库的资源", platform=platform)
 
-            msg = "🆕 <b>最近入库</b>\n"
+            msg = "🆕 最近入库\n"
             count = 0
             for i in items:
                 if count >= 8: break
@@ -556,8 +575,7 @@ class TelegramBot:
 
     def _extract_tech_info(self, item):
         sources = item.get("MediaSources", [])
-        if not sources: return "📼 未知信息"
-        
+        if not sources: return "📼 未知"
         info_parts = []
         video = next((s for s in sources[0].get("MediaStreams", []) if s.get("Type") == "Video"), None)
         if video:
@@ -566,49 +584,33 @@ class TelegramBot:
             elif w >= 1900: res = "1080P"
             elif w >= 1200: res = "720P"
             else: res = "SD"
-            
             extra = []
             v_range = video.get("VideoRange", "")
             title = video.get("DisplayTitle", "").upper()
             if "HDR" in v_range or "HDR" in title: extra.append("HDR")
             if "DOVI" in title or "DOLBY VISION" in title: extra.append("DoVi")
-            
-            res_str = f"{res}"
-            if extra: res_str += f" {' '.join(extra)}"
-            info_parts.append(res_str)
-            
+            res_str = f"{res} {' '.join(extra)}"
+            info_parts.append(res_str.strip())
             bitrate = sources[0].get("Bitrate", 0)
-            if bitrate > 0:
-                mbps = round(bitrate / 1000000, 1)
-                info_parts.append(f"{mbps}Mbps")
-                
-        return " | ".join(info_parts) if info_parts else "📼 未知信息"
+            if bitrate > 0: info_parts.append(f"{round(bitrate / 1000000, 1)}Mbps")
+        return " | ".join(info_parts) if info_parts else "📼 未知"
 
     def _cmd_search(self, chat_id, text, platform):
         parts = text.split(' ', 1)
-        if len(parts) < 2: return self.send_message(chat_id, "🔍 <b>搜索格式错误</b>\n请使用: <code>/search 关键词</code>", platform=platform)
+        if len(parts) < 2: return self.send_message(chat_id, "🔍 请使用: /search 关键词", platform=platform)
         keyword = parts[1].strip()
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
-        
         try:
             user_id = self._get_admin_id()
             if not user_id: return self.send_message(chat_id, "❌ 错误: 无法获取 Emby 用户身份", platform=platform)
 
             fields = "ProductionYear,Type,Id" 
             url = f"{host}/emby/Users/{user_id}/Items"
-            params = {
-                "SearchTerm": keyword,
-                "IncludeItemTypes": "Movie,Series",
-                "Recursive": "true",
-                "Fields": fields,
-                "Limit": 5,
-                "api_key": key
-            }
+            params = {"SearchTerm": keyword, "IncludeItemTypes": "Movie,Series", "Recursive": "true", "Fields": fields, "Limit": 5, "api_key": key}
             res = requests.get(url, params=params, timeout=10)
-            if res.status_code != 200: return self.send_message(chat_id, f"❌ 搜索失败 (HTTP {res.status_code})", platform=platform)
-            
+            if res.status_code != 200: return self.send_message(chat_id, f"❌ 搜索失败", platform=platform)
             items = res.json().get("Items", [])
-            if not items: return self.send_message(chat_id, f"📭 未找到与 <b>{keyword}</b> 相关的资源", platform=platform)
+            if not items: return self.send_message(chat_id, f"📭 未找到与 {keyword} 相关的资源", platform=platform)
             
             top = items[0]
             type_raw = top.get("Type")
@@ -620,18 +622,15 @@ class TelegramBot:
                     details = requests.get(meta_url, timeout=5).json()
                     ep_count = details.get("RecursiveItemCount", 0)
                     ep_count_str = f"📊 共 {ep_count} 集"
-                    
                     sample_url = f"{host}/emby/Users/{user_id}/Items?ParentId={top['Id']}&Recursive=true&IncludeItemTypes=Episode&Limit=1&Fields=MediaSources&api_key={key}"
                     sample_res = requests.get(sample_url, timeout=5)
                     if sample_res.status_code == 200 and sample_res.json().get("Items"):
-                        sample_ep = sample_res.json().get("Items")[0]
-                        tech_info_str = self._extract_tech_info(sample_ep)
+                        tech_info_str = self._extract_tech_info(sample_res.json().get("Items")[0])
                 else:
                     detail_url = f"{host}/emby/Users/{user_id}/Items/{top['Id']}?Fields=Overview,CommunityRating,Genres,MediaSources&api_key={key}"
                     details = requests.get(detail_url, timeout=8).json()
                     tech_info_str = self._extract_tech_info(details)
-            except Exception as e:
-                tech_info_str = "暂无技术信息"
+            except Exception: tech_info_str = "暂无技术信息"
 
             name = details.get("Name", top.get("Name"))
             year = details.get("ProductionYear", top.get("ProductionYear"))
@@ -642,31 +641,30 @@ class TelegramBot:
             if len(overview) > 120: overview = overview[:120] + "..."
             
             type_icon = "🎬" if type_raw == "Movie" else "📺"
-            info_line = tech_info_str
-            if type_raw == "Series": info_line = f"{ep_count_str} | {tech_info_str}"
+            info_line = f"{ep_count_str} | {tech_info_str}" if type_raw == "Series" else tech_info_str
             
-            caption = (f"{type_icon} <b>{name}</b> {year_str}\n"
+            base_url = cfg.get("emby_public_url") or cfg.get("emby_public_host") or host
+            if base_url.endswith('/'): base_url = base_url[:-1]
+            play_url = f"{base_url}/web/index.html#!/item?id={top.get('Id')}&serverId={top.get('ServerId')}"
+
+            caption = (f"{type_icon} {name} {year_str}\n"
                        f"⭐️ {rating}  |  🎭 {genres}\n"
                        f"{info_line}\n"
                        f"───────────────\n"
-                       f"📝 <b>简介</b>: {overview}\n")
+                       f"📝 简介: {overview}\n"
+                       f"<a href='{play_url}'>点击跳转播放</a>\n")
             
             if len(items) > 1:
-                caption += "\n🔎 <b>其他结果:</b>\n"
+                caption += "\n🔎 其他结果:\n"
                 for i, sub in enumerate(items[1:]):
                     sub_year = f"({sub.get('ProductionYear')})" if sub.get('ProductionYear') else ""
                     sub_type = "📺" if sub.get("Type") == "Series" else "🎬"
                     caption += f"{sub_type} {sub.get('Name')} {sub_year}\n"
             
-            base_url = cfg.get("emby_public_url") or cfg.get("emby_public_host") or host
-            if base_url.endswith('/'): base_url = base_url[:-1]
-            play_url = f"{base_url}/web/index.html#!/item?id={top.get('Id')}&serverId={top.get('ServerId')}"
             keyboard = {"inline_keyboard": [[{"text": "▶️ 立即播放", "url": play_url}]]}
-            
             img_io = self._download_emby_image(top.get("Id"), 'Primary')
             if img_io: self.send_photo(chat_id, img_io, caption, reply_markup=keyboard, platform=platform)
             else: self.send_photo(chat_id, REPORT_COVER_URL, caption, reply_markup=keyboard, platform=platform)
-            
         except Exception as e:
             self.send_message(chat_id, "❌ 搜索时发生错误", platform=platform)
 
@@ -707,14 +705,14 @@ class TelegramBot:
             
             yesterday_date = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%m-%d")
             title_display = f"{title_cn} ({yesterday_date})" if period == 'yesterday' else title_cn
-            caption = (f"📊 <b>EmbyPulse {title_display}</b>\n───────────────\n📈 <b>数据大盘</b>\n▶️ 总播放量: {plays} 次\n⏱️ 活跃时长: {hours} 小时\n👥 活跃人数: {users} 人\n───────────────\n🏆 <b>活跃用户 Top 5</b>\n{user_str}───────────────\n🔥 <b>热门内容 Top 10</b>\n{top_content}")
+            caption = (f"📊 EmbyPulse {title_display}\n───────────────\n📈 数据大盘\n▶️ 总播放量: {plays} 次\n⏱️ 活跃时长: {hours} 小时\n👥 活跃人数: {users} 人\n───────────────\n🏆 活跃用户 Top 5\n{user_str}───────────────\n🔥 热门内容 Top 10\n{top_content}")
             if HAS_PIL:
                 img = report_gen.generate_report('all', period)
                 if img: self.send_photo(chat_id, img, caption, platform=platform)
                 else: self.send_message(chat_id, caption, platform=platform)
             else: self.send_photo(chat_id, REPORT_COVER_URL, caption, platform=platform)
         except Exception as e:
-            self.send_message(chat_id, f"❌ 统计失败: 数据库查询错误", platform=platform)
+            self.send_message(chat_id, f"❌ 统计失败", platform=platform)
 
     def _daily_report_task(self):
         chat_id = "sys_notify"
@@ -723,7 +721,7 @@ class TelegramBot:
         count = res[0]['c'] if res else 0
         if count == 0:
             yesterday_str = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-            msg = (f"📅 <b>昨日日报 ({yesterday_str})</b>\n------------------\n😴 昨天服务器静悄悄，大家都去现充了吗？\n\n📊 活跃用户: 0 人\n⏳ 播放时长: 0 分钟")
+            msg = (f"📅 昨日日报 ({yesterday_str})\n------------------\n😴 昨天服务器静悄悄，大家都去现充了吗？\n\n📊 活跃用户: 0 人\n⏳ 播放时长: 0 分钟")
             self.send_message(chat_id, msg, platform="all")
         else: self._cmd_stats(chat_id, 'yesterday', platform="all")
 
@@ -733,11 +731,11 @@ class TelegramBot:
             res = requests.get(f"{host}/emby/Sessions?api_key={key}", timeout=5)
             sessions = [s for s in res.json() if s.get("NowPlayingItem")]
             if not sessions: return self.send_message(cid, "🟢 当前无播放", platform=platform)
-            msg = f"🟢 <b>正在播放 ({len(sessions)})</b>\n"
+            msg = f"🟢 正在播放 ({len(sessions)})\n"
             for s in sessions:
                 title = s['NowPlayingItem'].get('Name')
                 pct = int(s.get('PlayState', {}).get('PositionTicks', 0) / s['NowPlayingItem'].get('RunTimeTicks', 1) * 100)
-                msg += f"\n👤 <b>{s.get('UserName')}</b> | 🔄 {pct}%\n📺 {title}\n"
+                msg += f"\n👤 {s.get('UserName')} | 🔄 {pct}%\n📺 {title}\n"
             self.send_message(cid, msg, platform=platform)
         except: self.send_message(cid, "❌ 连接失败", platform=platform)
 
@@ -745,7 +743,7 @@ class TelegramBot:
         try:
             rows = query_db("SELECT UserId, ItemName, DateCreated FROM PlaybackActivity ORDER BY DateCreated DESC LIMIT 10")
             if not rows: return self.send_message(cid, "📭 无记录", platform=platform)
-            msg = "📜 <b>最近播放</b>\n"
+            msg = "📜 最近播放\n"
             for r in rows:
                 date = r['DateCreated'][:16].replace('T', ' ')
                 name = self._get_username(r['UserId'])
@@ -763,7 +761,7 @@ class TelegramBot:
                 info = res.json()
                 local = (info.get('LocalAddresses') or [info.get('LocalAddress')])[0]
                 wan = (info.get('RemoteAddresses') or [info.get('WanAddress')])[0]
-                self.send_message(cid, f"✅ <b>在线</b>\n延迟: {int((time.time()-start)*1000)}ms\n内网: {local}\n外网: {wan}", platform=platform)
+                self.send_message(cid, f"✅ 在线\n延迟: {int((time.time()-start)*1000)}ms\n内网: {local}\n外网: {wan}", platform=platform)
         except: self.send_message(cid, "❌ 离线", platform=platform)
 
     def _cmd_help(self, cid, platform):
