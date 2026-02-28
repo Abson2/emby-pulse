@@ -101,11 +101,10 @@ class TelegramBot:
                 url = f"{host}/emby/Items/{item_id}/Images/{img_type}?maxHeight=800&maxWidth=600&quality=90&api_key={key}"
             res = requests.get(url, timeout=15)
             if res.status_code == 200: return io.BytesIO(res.content)
-        except Exception as e: 
-            logger.error(f"下载 Emby 海报失败: {str(e)}")
+        except Exception as e: pass
         return None
 
-    # ================= 🔥 企微核心洗稿引擎 (格式大重构版) =================
+    # ================= 🔥 企微核心洗稿引擎 (终极抗压防崩版) =================
     
     def _get_wecom_token(self):
         corpid = cfg.get("wecom_corpid"); corpsecret = cfg.get("wecom_corpsecret")
@@ -119,16 +118,14 @@ class TelegramBot:
                 self.wecom_token = res["access_token"]
                 self.wecom_token_expires = time.time() + res["expires_in"] - 60
                 return self.wecom_token
-        except Exception as e: logger.error(f"WeCom Token Error: {e}")
+        except Exception as e: pass
         return None
 
     def _html_to_wecom_md(self, html_text, inline_keyboard=None):
-        """洗稿引擎：专门为企业微信无图模式转化为 Markdown"""
         text = html_text.replace("<b>", "**").replace("</b>", "**")
         text = text.replace("<i>", "").replace("</i>", "")
         text = text.replace("<code>", "`").replace("</code>", "`")
         text = re.sub(r"<a\s+href=['\"](.*?)['\"]>(.*?)</a>", r"[\2](\1)", text)
-        
         if inline_keyboard and "inline_keyboard" in inline_keyboard:
             text += "\n\n───────────────\n"
             for row in inline_keyboard["inline_keyboard"]:
@@ -151,13 +148,10 @@ class TelegramBot:
                 ]}
             ]
         }
-        try: 
-            res = requests.post(f"{proxy_url}/cgi-bin/menu/create?access_token={token}&agentid={agentid}", json=menu_data, timeout=5)
-            if res.status_code == 200: logger.info(f"WeCom Menu Sync OK")
-        except Exception as e: logger.error(f"WeCom Menu Error: {e}")
+        try: requests.post(f"{proxy_url}/cgi-bin/menu/create?access_token={token}&agentid={agentid}", json=menu_data, timeout=5)
+        except Exception as e: pass
 
     def _send_wecom_message(self, text, inline_keyboard=None, touser="@all"):
-        """无图时发送 Markdown"""
         token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
         proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
         if not token or not agentid: return
@@ -168,60 +162,69 @@ class TelegramBot:
         except Exception as e: pass
 
     def _send_wecom_photo(self, photo_bytes, html_text, inline_keyboard=None, touser="@all"):
-        """有图时发送精美的 News 图文卡片"""
         token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
         proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
         if not token or not agentid: return
         
-        pic_url = REPORT_COVER_URL
+        # 1. 解析提纯文本与提取动作链接
+        plain_text = re.sub(r'<[^>]+>', '', html_text)
+        lines = [line.strip() for line in plain_text.split('\n') if line.strip()]
         
-        try:
-            if photo_bytes:
+        # 严格截断保护 (防超限崩溃)
+        title = lines[0] if lines else "EmbyPulse 通知"
+        if len(title.encode('utf-8')) > 120: title = title[:35] + "..."
+            
+        desc_lines = [line for line in lines[1:] if '─────' not in line]
+        desc = '\n'.join(desc_lines)
+        if len(desc.encode('utf-8')) > 500: desc = desc[:150] + "..."
+
+        jump_url = cfg.get("emby_public_url") or cfg.get("emby_host") or "https://emby.media"
+        if inline_keyboard and "inline_keyboard" in inline_keyboard:
+            try: jump_url = inline_keyboard["inline_keyboard"][0][0]["url"]
+            except: pass
+        else:
+            links = re.findall(r"href=['\"](.*?)['\"]", html_text)
+            if links: jump_url = links[0]
+
+        # 2. 确定图片链接 (智能提取直连兜底)
+        pic_url = REPORT_COVER_URL
+        item_id_match = re.search(r'id=([a-zA-Z0-9]+)', jump_url)
+        if item_id_match:
+            base_emby = cfg.get("emby_public_url") or cfg.get("emby_host")
+            if base_emby.endswith('/'): base_emby = base_emby[:-1]
+            key = cfg.get("emby_api_key")
+            pic_url = f"{base_emby}/emby/Items/{item_id_match.group(1)}/Images/Primary?maxHeight=800&maxWidth=600&api_key={key}"
+
+        # 3. 尝试向企微图床上传 (如果代理没拦的话)
+        if photo_bytes:
+            try:
                 upload_url = f"{proxy_url}/cgi-bin/media/uploadimg?access_token={token}"
                 files = {"media": ("image.jpg", photo_bytes, "image/jpeg")}
                 upload_res = requests.post(upload_url, files=files, timeout=15)
+                # 只有明确返回 200 才去解析 JSON，防止 Expecting value 崩溃
                 if upload_res.status_code == 200 and upload_res.text.strip():
-                    try:
-                        res_json = upload_res.json()
-                        if res_json.get("url"): pic_url = res_json.get("url")
-                    except Exception: pass
-        except Exception as e: pass
+                    res_json = upload_res.json()
+                    if res_json.get("url"): pic_url = res_json.get("url")
+            except Exception as e:
+                logger.warning(f"WeCom 图床上传受阻，自动切换为直连链接模式")
 
+        # 4. 组装并发送 News 图文卡片
         try:
-            plain_text = re.sub(r'<[^>]+>', '', html_text)
-            lines = [line.strip() for line in plain_text.split('\n') if line.strip()]
-            
-            title = lines[0] if lines else "EmbyPulse 通知"
-            desc_lines = [line for line in lines[1:] if '─────' not in line]
-            desc = '\n'.join(desc_lines)
-            
-            jump_url = cfg.get("emby_public_url") or cfg.get("emby_host") or "https://emby.media"
-            if inline_keyboard and "inline_keyboard" in inline_keyboard:
-                try: jump_url = inline_keyboard["inline_keyboard"][0][0]["url"]
-                except: pass
-            else:
-                links = re.findall(r"href=['\"](.*?)['\"]", html_text)
-                if links: jump_url = links[0]
-
             send_msg_url = f"{proxy_url}/cgi-bin/message/send?access_token={token}"
             msg_data = {
                 "touser": touser,
                 "msgtype": "news",
                 "agentid": int(agentid),
-                "news": {
-                    "articles": [{
-                        "title": title,
-                        "description": desc,
-                        "url": jump_url,
-                        "picurl": pic_url
-                    }]
-                }
+                "news": {"articles": [{"title": title, "description": desc, "url": jump_url, "picurl": pic_url}]}
             }
             res = requests.post(send_msg_url, json=msg_data, timeout=10)
+            
+            # 防御式 JSON 解析
             if res.status_code == 200 and res.text.strip():
                 try:
                     send_json = res.json()
                     if send_json.get("errcode", 0) != 0:
+                        logger.error(f"WeCom News API 拒绝请求: {send_json}")
                         self._send_wecom_message(html_text, inline_keyboard, touser)
                 except Exception:
                     self._send_wecom_message(html_text, inline_keyboard, touser)
@@ -229,7 +232,7 @@ class TelegramBot:
                 self._send_wecom_message(html_text, inline_keyboard, touser)
                 
         except Exception as e:
-            logger.error(f"WeCom News Error: {e}")
+            logger.error(f"WeCom News 网络发送崩溃: {e}")
             if html_text: self._send_wecom_message(html_text, inline_keyboard, touser)
 
     # ================= 🚀 底层双通道路由分发 =================
@@ -395,23 +398,18 @@ class TelegramBot:
         episodes.sort(key=lambda x: (x.get('ParentIndexNumber', 1), x.get('IndexNumber', 1)))
         season_idx = episodes[0].get('ParentIndexNumber', 1)
         
-        # 🔥🔥🔥 智能连续区间提取算法 🔥🔥🔥
         ep_indices = sorted(list(set([e.get('IndexNumber', 0) for e in episodes if e.get('IndexNumber') is not None])))
 
         if len(ep_indices) > 1:
             ranges = []
             start = ep_indices[0]
             end = ep_indices[0]
-            
             for idx in ep_indices[1:]:
-                if idx == end + 1:
-                    end = idx
+                if idx == end + 1: end = idx
                 else:
                     ranges.append(f"E{start}" if start == end else f"E{start}-E{end}")
-                    start = idx
-                    end = idx
+                    start = idx; end = idx
             ranges.append(f"E{start}" if start == end else f"E{start}-E{end}")
-            
             ep_range_str = ", ".join(ranges)
             title_suffix = f"新增 {len(ep_indices)} 集 ({ep_range_str})"
         elif len(ep_indices) == 1:
@@ -598,7 +596,7 @@ class TelegramBot:
                 count += 1
             self.send_message(cid, msg.strip(), platform=platform)
         except Exception as e:
-            self.send_message(cid, f"❌ 查询异常", platform=platform)
+            self.send_message(cid, f"❌ 查询异常: {str(e)}", platform=platform)
 
     def _extract_tech_info(self, item):
         sources = item.get("MediaSources", [])
