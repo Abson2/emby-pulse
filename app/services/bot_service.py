@@ -101,10 +101,11 @@ class TelegramBot:
                 url = f"{host}/emby/Items/{item_id}/Images/{img_type}?maxHeight=800&maxWidth=600&quality=90&api_key={key}"
             res = requests.get(url, timeout=15)
             if res.status_code == 200: return io.BytesIO(res.content)
-        except Exception as e: pass
+        except Exception as e: 
+            pass
         return None
 
-    # ================= 🔥 企微核心洗稿引擎 (终极抗压防崩版) =================
+    # ================= 🔥 企微核心洗稿引擎 =================
     
     def _get_wecom_token(self):
         corpid = cfg.get("wecom_corpid"); corpsecret = cfg.get("wecom_corpsecret")
@@ -118,7 +119,7 @@ class TelegramBot:
                 self.wecom_token = res["access_token"]
                 self.wecom_token_expires = time.time() + res["expires_in"] - 60
                 return self.wecom_token
-        except Exception as e: pass
+        except Exception as e: logger.error(f"WeCom Token Error: {e}")
         return None
 
     def _html_to_wecom_md(self, html_text, inline_keyboard=None):
@@ -166,50 +167,46 @@ class TelegramBot:
         proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
         if not token or not agentid: return
         
-        # 1. 解析提纯文本与提取动作链接
-        plain_text = re.sub(r'<[^>]+>', '', html_text)
-        lines = [line.strip() for line in plain_text.split('\n') if line.strip()]
-        
-        # 严格截断保护 (防超限崩溃)
-        title = lines[0] if lines else "EmbyPulse 通知"
-        if len(title.encode('utf-8')) > 120: title = title[:35] + "..."
-            
-        desc_lines = [line for line in lines[1:] if '─────' not in line]
-        desc = '\n'.join(desc_lines)
-        if len(desc.encode('utf-8')) > 500: desc = desc[:150] + "..."
-
-        jump_url = cfg.get("emby_public_url") or cfg.get("emby_host") or "https://emby.media"
-        if inline_keyboard and "inline_keyboard" in inline_keyboard:
-            try: jump_url = inline_keyboard["inline_keyboard"][0][0]["url"]
-            except: pass
-        else:
-            links = re.findall(r"href=['\"](.*?)['\"]", html_text)
-            if links: jump_url = links[0]
-
-        # 2. 确定图片链接 (智能提取直连兜底)
         pic_url = REPORT_COVER_URL
-        item_id_match = re.search(r'id=([a-zA-Z0-9]+)', jump_url)
-        if item_id_match:
-            base_emby = cfg.get("emby_public_url") or cfg.get("emby_host")
-            if base_emby.endswith('/'): base_emby = base_emby[:-1]
-            key = cfg.get("emby_api_key")
-            pic_url = f"{base_emby}/emby/Items/{item_id_match.group(1)}/Images/Primary?maxHeight=800&maxWidth=600&api_key={key}"
-
-        # 3. 尝试向企微图床上传 (如果代理没拦的话)
-        if photo_bytes:
-            try:
+        
+        try:
+            if photo_bytes:
                 upload_url = f"{proxy_url}/cgi-bin/media/uploadimg?access_token={token}"
                 files = {"media": ("image.jpg", photo_bytes, "image/jpeg")}
                 upload_res = requests.post(upload_url, files=files, timeout=15)
-                # 只有明确返回 200 才去解析 JSON，防止 Expecting value 崩溃
                 if upload_res.status_code == 200 and upload_res.text.strip():
-                    res_json = upload_res.json()
-                    if res_json.get("url"): pic_url = res_json.get("url")
-            except Exception as e:
-                logger.warning(f"WeCom 图床上传受阻，自动切换为直连链接模式")
+                    try:
+                        res_json = upload_res.json()
+                        if res_json.get("url"): pic_url = res_json.get("url")
+                    except Exception: pass
+        except Exception as e: pass
 
-        # 4. 组装并发送 News 图文卡片
         try:
+            plain_text = re.sub(r'<[^>]+>', '', html_text)
+            lines = [line.strip() for line in plain_text.split('\n') if line.strip()]
+            
+            title = lines[0] if lines else "EmbyPulse 通知"
+            if len(title.encode('utf-8')) > 120: title = title[:35] + "..."
+                
+            desc_lines = [line for line in lines[1:] if '─────' not in line]
+            desc = '\n'.join(desc_lines)
+            if len(desc.encode('utf-8')) > 500: desc = desc[:150] + "..."
+
+            jump_url = cfg.get("emby_public_url") or cfg.get("emby_host") or "https://emby.media"
+            if inline_keyboard and "inline_keyboard" in inline_keyboard:
+                try: jump_url = inline_keyboard["inline_keyboard"][0][0]["url"]
+                except: pass
+            else:
+                links = re.findall(r"href=['\"](.*?)['\"]", html_text)
+                if links: jump_url = links[0]
+
+            item_id_match = re.search(r'id=([a-zA-Z0-9]+)', jump_url)
+            if item_id_match and pic_url == REPORT_COVER_URL:
+                base_emby = cfg.get("emby_public_url") or cfg.get("emby_host")
+                if base_emby.endswith('/'): base_emby = base_emby[:-1]
+                key = cfg.get("emby_api_key")
+                pic_url = f"{base_emby}/emby/Items/{item_id_match.group(1)}/Images/Primary?maxHeight=800&maxWidth=600&api_key={key}"
+
             send_msg_url = f"{proxy_url}/cgi-bin/message/send?access_token={token}"
             msg_data = {
                 "touser": touser,
@@ -219,12 +216,10 @@ class TelegramBot:
             }
             res = requests.post(send_msg_url, json=msg_data, timeout=10)
             
-            # 防御式 JSON 解析
             if res.status_code == 200 and res.text.strip():
                 try:
                     send_json = res.json()
                     if send_json.get("errcode", 0) != 0:
-                        logger.error(f"WeCom News API 拒绝请求: {send_json}")
                         self._send_wecom_message(html_text, inline_keyboard, touser)
                 except Exception:
                     self._send_wecom_message(html_text, inline_keyboard, touser)
@@ -232,12 +227,12 @@ class TelegramBot:
                 self._send_wecom_message(html_text, inline_keyboard, touser)
                 
         except Exception as e:
-            logger.error(f"WeCom News 网络发送崩溃: {e}")
             if html_text: self._send_wecom_message(html_text, inline_keyboard, touser)
 
-    # ================= 🚀 底层双通道路由分发 =================
+    # ================= 🚀 底层双通道路由分发 (双排图支持) =================
 
-    def send_photo(self, chat_id, photo_io, caption, parse_mode="HTML", reply_markup=None, platform="all"):
+    def send_photo(self, chat_id, photo_io, caption, parse_mode="HTML", reply_markup=None, platform="all", wecom_photo_io=None):
+        # 提取主图流 (默认供给 TG)
         photo_bytes = None
         if isinstance(photo_io, str):
             try: photo_bytes = requests.get(photo_io, timeout=10).content
@@ -246,10 +241,22 @@ class TelegramBot:
             photo_io.seek(0)
             photo_bytes = photo_io.read()
 
+        # 提取企微专用图片流 (如果不为空，优先取它，否则退回使用主图流)
+        wecom_photo_bytes = photo_bytes
+        if wecom_photo_io is not None and wecom_photo_io != photo_io:
+            if isinstance(wecom_photo_io, str):
+                try: wecom_photo_bytes = requests.get(wecom_photo_io, timeout=10).content
+                except Exception as e: pass
+            else:
+                wecom_photo_io.seek(0)
+                wecom_photo_bytes = wecom_photo_io.read()
+
+        # 企微通道分发
         if platform in ["all", "wecom"] and cfg.get("wecom_corpid"):
             touser = chat_id if platform == "wecom" else cfg.get("wecom_touser", "@all")
-            threading.Thread(target=self._send_wecom_photo, args=(photo_bytes, caption, reply_markup, touser)).start()
+            threading.Thread(target=self._send_wecom_photo, args=(wecom_photo_bytes, caption, reply_markup, touser)).start()
 
+        # TG通道分发
         if platform in ["all", "tg"] and cfg.get("tg_bot_token"):
             tg_cid = chat_id if platform == "tg" else cfg.get("tg_chat_id")
             if tg_cid:
@@ -280,7 +287,7 @@ class TelegramBot:
                     requests.post(url, json=data, proxies=self._get_proxies(), timeout=10)
                 except Exception as e: pass
 
-    # ================= 业务排版逻辑 (V2 极致排版 + 智能连续区间) =================
+    # ================= 业务排版逻辑 =================
     
     def add_library_task(self, item):
         with self.library_lock:
@@ -440,10 +447,14 @@ class TelegramBot:
 
         keyboard = {"inline_keyboard": [[{"text": "▶️ 立即播放", "url": play_url}]]}
 
-        img_io = self._download_emby_image(series_id, 'Primary')
-        if not img_io: img_io = self._download_emby_image(series_id, 'Backdrop') 
-        if not img_io: img_io = REPORT_COVER_URL
-        self.send_photo("sys_notify", img_io, caption, reply_markup=keyboard, platform="all")
+        primary_io = self._download_emby_image(series_id, 'Primary')
+        backdrop_io = self._download_emby_image(series_id, 'Backdrop') 
+        
+        # 🔥 双端海报智能分流引擎
+        tg_img = primary_io or backdrop_io or REPORT_COVER_URL
+        wecom_img = backdrop_io or primary_io or REPORT_COVER_URL
+        
+        self.send_photo("sys_notify", tg_img, caption, reply_markup=keyboard, platform="all", wecom_photo_io=wecom_img)
 
     def _push_single_item(self, item):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -477,9 +488,13 @@ class TelegramBot:
         
         keyboard = {"inline_keyboard": [[{"text": "▶️ 立即播放", "url": play_url}]]}
 
-        img_io = self._download_emby_image(item['Id'], 'Primary')
-        if not img_io: img_io = REPORT_COVER_URL
-        self.send_photo("sys_notify", img_io, caption, reply_markup=keyboard, platform="all")
+        primary_io = self._download_emby_image(item['Id'], 'Primary')
+        backdrop_io = self._download_emby_image(item['Id'], 'Backdrop')
+
+        tg_img = primary_io or backdrop_io or REPORT_COVER_URL
+        wecom_img = backdrop_io or primary_io or REPORT_COVER_URL
+        
+        self.send_photo("sys_notify", tg_img, caption, reply_markup=keyboard, platform="all", wecom_photo_io=wecom_img)
 
     def push_playback_event(self, data, action="start"):
         if not cfg.get("enable_notify"): return
@@ -515,11 +530,16 @@ class TelegramBot:
             play_url = f"{base_url}/web/index.html#!/item?id={target_id}&serverId={item.get('ServerId','')}"
             keyboard = {"inline_keyboard": [[{"text": "🔗 跳转详情", "url": play_url}]]}
 
-            img_io = self._download_emby_image(target_id, 'Primary') 
-            if not img_io: img_io = self._download_emby_image(item.get("Id"), 'Backdrop')
-            if not img_io: img_io = REPORT_COVER_URL
+            primary_io = self._download_emby_image(target_id, 'Primary') 
+            backdrop_io = self._download_emby_image(target_id, 'Backdrop')
+            if not primary_io and not backdrop_io:
+                primary_io = self._download_emby_image(item.get("Id"), 'Primary')
+                backdrop_io = self._download_emby_image(item.get("Id"), 'Backdrop')
+
+            tg_img = primary_io or backdrop_io or REPORT_COVER_URL
+            wecom_img = backdrop_io or primary_io or REPORT_COVER_URL
             
-            self.send_photo("sys_notify", img_io, msg, reply_markup=keyboard, platform="all")
+            self.send_photo("sys_notify", tg_img, msg, reply_markup=keyboard, platform="all", wecom_photo_io=wecom_img)
         except Exception as e:
             logger.error(f"Playback Push Error: {e}")
 
@@ -596,7 +616,7 @@ class TelegramBot:
                 count += 1
             self.send_message(cid, msg.strip(), platform=platform)
         except Exception as e:
-            self.send_message(cid, f"❌ 查询异常: {str(e)}", platform=platform)
+            self.send_message(cid, f"❌ 查询异常", platform=platform)
 
     def _extract_tech_info(self, item):
         sources = item.get("MediaSources", [])
@@ -686,10 +706,14 @@ class TelegramBot:
                     caption += f"{sub_type} {sub.get('Name')} {sub_year}\n"
             
             keyboard = {"inline_keyboard": [[{"text": "▶️ 立即播放", "url": play_url}]]}
-            img_io = self._download_emby_image(top.get("Id"), 'Primary')
+
+            primary_io = self._download_emby_image(top.get("Id"), 'Primary')
+            backdrop_io = self._download_emby_image(top.get("Id"), 'Backdrop')
+
+            tg_img = primary_io or backdrop_io or REPORT_COVER_URL
+            wecom_img = backdrop_io or primary_io or REPORT_COVER_URL
             
-            if not img_io: img_io = REPORT_COVER_URL
-            self.send_photo(chat_id, img_io, caption.strip(), reply_markup=keyboard, platform=platform)
+            self.send_photo(chat_id, tg_img, caption.strip(), reply_markup=keyboard, platform=platform, wecom_photo_io=wecom_img)
         except Exception as e:
             self.send_message(chat_id, "❌ 搜索时发生错误", platform=platform)
 
