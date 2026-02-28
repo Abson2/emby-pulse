@@ -22,7 +22,6 @@ class BotSettingsModel(BaseModel):
     enable_notify: bool
     enable_library_notify: Optional[bool] = False
     
-    # 🔥 企微终极版：全套配置字段
     wecom_corpid: Optional[str] = ""
     wecom_corpsecret: Optional[str] = ""
     wecom_agentid: Optional[str] = ""
@@ -48,7 +47,6 @@ class UserUpdateModel(BaseModel):
     expire_date: Optional[str] = None 
     enable_all_folders: Optional[bool] = None
     enabled_folders: Optional[List[str]] = None
-    # 彻底解决子文件夹同步的黑名单字段
     excluded_sub_folders: Optional[List[str]] = None
 
 class NewUserModel(BaseModel):
@@ -60,7 +58,6 @@ class NewUserModel(BaseModel):
 class InviteGenModel(BaseModel):
     days: int 
     template_user_id: Optional[str] = None 
-    # 支持批量生成的数量
     count: Optional[int] = 1
 
 class UserRegisterModel(BaseModel):
@@ -77,5 +74,10 @@ class SettingsModel(BaseModel):
     hidden_users: List[str] = []
     emby_public_url: Optional[str] = ""  
     welcome_message: Optional[str] = ""  
-    # 🔥 新增：自定义客户端下载链接
     client_download_url: Optional[str] = ""
+
+# 🔥 新增：批量操作模型
+class BatchActionModel(BaseModel):
+    user_ids: List[str]
+    action: str  # 可选: 'enable', 'disable', 'delete', 'renew'
+    value: Optional[str] = None  # 用于 renew 时传递 '+30' 或 '2025-10-01'

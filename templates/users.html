@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="container mx-auto px-4 py-6">
+<div class="container mx-auto px-4 py-6 pb-32">
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <h1 class="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-3">
             <i class="fa-solid fa-users text-indigo-500"></i>
@@ -21,12 +21,46 @@
         </div>
     </div>
 
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div onclick="setFilter('all')" class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm cursor-pointer hover:-translate-y-1 hover:shadow-md transition-all">
+            <div class="text-gray-500 dark:text-gray-400 text-xs font-bold mb-1"><i class="fa-solid fa-users mr-1"></i>总用户数</div>
+            <div class="text-2xl font-black text-gray-900 dark:text-white" id="stat-total">0</div>
+        </div>
+        <div onclick="setFilter('active')" class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-green-100 dark:border-green-900/50 shadow-sm cursor-pointer hover:-translate-y-1 hover:shadow-md hover:border-green-300 transition-all">
+            <div class="text-green-500 text-xs font-bold mb-1"><i class="fa-solid fa-circle-check mr-1"></i>活跃正常</div>
+            <div class="text-2xl font-black text-green-600 dark:text-green-400" id="stat-active">0</div>
+        </div>
+        <div onclick="setFilter('expiring')" class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-amber-100 dark:border-amber-900/50 shadow-sm cursor-pointer hover:-translate-y-1 hover:shadow-md hover:border-amber-300 transition-all">
+            <div class="text-amber-500 text-xs font-bold mb-1"><i class="fa-solid fa-clock mr-1"></i>7天内到期</div>
+            <div class="text-2xl font-black text-amber-600 dark:text-amber-400" id="stat-expiring">0</div>
+        </div>
+        <div onclick="setFilter('error')" class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-red-100 dark:border-red-900/50 shadow-sm cursor-pointer hover:-translate-y-1 hover:shadow-md hover:border-red-300 transition-all">
+            <div class="text-red-500 text-xs font-bold mb-1"><i class="fa-solid fa-ban mr-1"></i>已封禁 / 过期</div>
+            <div class="text-2xl font-black text-red-600 dark:text-red-400" id="stat-error">0</div>
+        </div>
+    </div>
+
+    <div class="flex flex-col md:flex-row gap-3 mb-4">
+        <div class="relative flex-1">
+            <i class="fa-solid fa-search absolute left-3 top-3 text-gray-400"></i>
+            <input type="text" id="search-input" oninput="renderUsers()" placeholder="搜索用户名..." class="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg pl-10 pr-4 py-2 focus:ring-2 focus:ring-indigo-500 outline-none text-sm dark:text-white transition-all">
+        </div>
+        <select id="sort-select" onchange="renderUsers()" class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 text-sm text-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer">
+            <option value="name">排序: 按名称 A-Z</option>
+            <option value="login">排序: 最近登录时间</option>
+            <option value="expire_asc">排序: 到期时间 (先到期优先)</option>
+        </select>
+    </div>
+
     <div class="hidden md:block bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-left text-sm text-gray-600 dark:text-gray-300">
                 <thead class="bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-gray-100 font-bold border-b border-gray-100 dark:border-gray-700">
                     <tr>
-                        <th class="px-6 py-4">用户信息</th>
+                        <th class="px-4 py-4 w-12 text-center">
+                            <input type="checkbox" id="selectAll-desktop" onchange="toggleSelectAll(this)" class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                        </th>
+                        <th class="px-2 py-4">用户信息</th>
                         <th class="px-6 py-4">账号状态</th>
                         <th class="px-6 py-4">有效期至</th>
                         <th class="px-6 py-4">最后登录</th>
@@ -34,20 +68,59 @@
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-700" id="user-list-body-desktop">
-                    </tbody>
+                </tbody>
             </table>
         </div>
     </div>
 
+    <div class="md:hidden flex items-center gap-2 mb-3 px-1">
+        <input type="checkbox" id="selectAll-mobile" onchange="toggleSelectAll(this)" class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+        <span class="text-sm font-bold text-gray-700 dark:text-gray-300">全选当前列表</span>
+    </div>
     <div class="grid grid-cols-1 gap-4 md:hidden" id="user-list-body-mobile">
+    </div>
+</div>
+
+<div id="batch-action-bar" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-gray-900/90 backdrop-blur-md text-white rounded-2xl px-6 py-3 shadow-2xl flex items-center gap-6 transform translate-y-24 opacity-0 transition-all duration-300">
+    <div class="font-bold whitespace-nowrap"><span id="batch-count" class="text-indigo-400 text-lg mr-1">0</span> 已选</div>
+    <div class="flex items-center gap-2 border-l border-gray-700 pl-6">
+        <button onclick="openBatchRenewModal()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-bold transition">批量续期</button>
+        <button onclick="batchAction('enable')" class="px-3 py-1.5 hover:bg-gray-700 rounded-lg text-sm font-medium transition text-green-400">启用</button>
+        <button onclick="batchAction('disable')" class="px-3 py-1.5 hover:bg-gray-700 rounded-lg text-sm font-medium transition text-amber-400">禁用</button>
+        <button onclick="batchAction('delete')" class="px-3 py-1.5 hover:bg-red-900/50 rounded-lg text-sm font-medium transition text-red-400 ml-2"><i class="fa-solid fa-trash"></i></button>
+    </div>
+</div>
+
+<div id="batch-renew-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm p-6">
+        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4"><i class="fa-solid fa-calendar-plus text-indigo-500 mr-2"></i>批量续期</h3>
+        <p class="text-xs text-gray-500 mb-4">将为选中的 <span id="renew-count-text" class="font-bold text-indigo-500"></span> 个用户修改到期时间。</p>
+        
+        <div class="grid grid-cols-3 gap-2 mb-4">
+            <button onclick="submitBatchRenew('+30')" class="py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-bold hover:bg-indigo-100 transition">+ 30 天</button>
+            <button onclick="submitBatchRenew('+90')" class="py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-bold hover:bg-indigo-100 transition">+ 90 天</button>
+            <button onclick="submitBatchRenew('+365')" class="py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-bold hover:bg-indigo-100 transition">+ 1 年</button>
         </div>
+        
+        <div class="relative flex py-2 items-center">
+            <div class="flex-grow border-t border-gray-200 dark:border-gray-700"></div>
+            <span class="flex-shrink-0 mx-4 text-gray-400 text-xs">或指定绝对日期</span>
+            <div class="flex-grow border-t border-gray-200 dark:border-gray-700"></div>
+        </div>
+        
+        <input type="date" id="batch-date-picker" class="w-full px-4 py-2 mt-2 mb-6 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+        
+        <div class="flex justify-end gap-3">
+            <button onclick="closeBatchRenewModal()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-sm transition">取消</button>
+            <button onclick="submitBatchRenew('date')" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold shadow-md transition">确认指定</button>
+        </div>
+    </div>
 </div>
 
 <div id="new-user-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4">
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all">
         <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <i class="fa-solid fa-user-plus text-indigo-500"></i>
-            创建新 Emby 账号
+            <i class="fa-solid fa-user-plus text-indigo-500"></i> 创建新 Emby 账号
         </h3>
         <div class="space-y-4">
             <div>
@@ -64,18 +137,13 @@
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    权限同步模板 
-                    <span class="text-[10px] text-gray-400 font-normal ml-1">(复制该用户的媒体库黑白名单)</span>
+                    权限同步模板 <span class="text-[10px] text-gray-400 font-normal ml-1">(复制其黑白名单)</span>
                 </label>
                 <select id="new-template" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 outline-none appearance-none cursor-pointer"></select>
             </div>
             <div class="flex justify-end gap-3 mt-8">
-                <button onclick="closeNewUserModal()" class="px-5 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-medium transition-colors">
-                    取消
-                </button>
-                <button onclick="submitNewUser()" id="new-user-btn" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-md active:scale-95 transition-all">
-                    立即创建
-                </button>
+                <button onclick="closeNewUserModal()" class="px-5 py-2 text-gray-500 hover:bg-gray-100 rounded-lg font-medium transition-colors">取消</button>
+                <button onclick="submitNewUser()" id="new-user-btn" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-md active:scale-95 transition-all">立即创建</button>
             </div>
         </div>
     </div>
@@ -178,160 +246,336 @@
                 <div>
                     <div class="flex items-center justify-between mb-3">
                         <label class="text-xs font-bold text-gray-400 uppercase tracking-wider">指定访问权限 (白名单)</label>
-                        <button onclick="clearSubFolders()" id="clear-sub-btn" class="text-[10px] text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-400 border border-indigo-100 dark:border-indigo-800 px-2 py-1 rounded bg-indigo-50/50 dark:bg-indigo-900/20 transition-all font-bold">
+                        <button onclick="clearSubFolders()" id="clear-sub-btn" class="text-[10px] text-indigo-500 hover:text-indigo-700 border border-indigo-100 px-2 py-1 rounded bg-indigo-50/50 transition-all font-bold">
                             <i class="fa-solid fa-broom mr-1"></i>重置子文件夹打勾
                         </button>
                     </div>
                     <div id="edit-library-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-700 max-h-56 overflow-y-auto custom-scrollbar">
-                        </div>
-                    <p class="text-[10px] text-gray-400 mt-3 italic leading-relaxed">
-                        <i class="fa-solid fa-circle-info mr-1"></i> 
-                        注：若勾选库后在 Emby 首页看不全文件夹，请点击“重置子文件夹打勾”并保存，系统将清空子目录隐藏记录。
-                    </p>
+                    </div>
                 </div>
             </div>
         </div>
 
         <div class="p-6 pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3 shrink-0">
-            <button onclick="closeEditUserModal()" class="px-5 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-medium transition-colors">
-                放弃修改
-            </button>
-            <button onclick="submitEditUser()" id="save-user-btn" class="px-8 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-lg active:scale-95 transition-all flex items-center">
-                <span id="save-user-text">保存配置并应用</span>
+            <button onclick="closeEditUserModal()" class="px-5 py-2 text-gray-500 hover:bg-gray-100 rounded-lg font-medium transition-colors">取消</button>
+            <button onclick="submitEditUser()" id="save-user-btn" class="px-8 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-lg active:scale-95 transition-all">
+                <span id="save-user-text">保存配置</span>
             </button>
         </div>
     </div>
 </div>
 
 <div id="invite-modal" class="fixed inset-0 z-50 hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4">
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-100">
-        <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <i class="fa-solid fa-link text-emerald-500"></i>
-            批量生成邀请码
-        </h3>
-        
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6">
+        <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><i class="fa-solid fa-link text-emerald-500"></i>批量生成邀请码</h3>
         <div id="invite-form-step" class="space-y-5">
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">账号有效期预设</label>
                 <div class="grid grid-cols-4 gap-2 mb-3">
-                    <button onclick="selectDuration(1)" class="dur-btn px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all">1 天</button>
-                    <button onclick="selectDuration(7)" class="dur-btn px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all">7 天</button>
-                    <button onclick="selectDuration(30)" class="dur-btn px-2 py-2 border border-indigo-500 bg-indigo-50 text-indigo-600 font-bold rounded-lg text-xs transition-all shadow-sm">30 天</button>
-                    <button onclick="selectDuration(90)" class="dur-btn px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all">90 天</button>
-                    <button onclick="selectDuration(180)" class="dur-btn px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all">180 天</button>
-                    <button onclick="selectDuration(365)" class="dur-btn px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all">365 天</button>
-                    <button onclick="selectDuration(-1)" class="dur-btn px-2 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/20 col-span-2 transition-all">永久有效</button>
-                </div>
-                <div class="flex items-center gap-2 mt-3 p-2 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
-                    <span class="text-xs text-gray-500 whitespace-nowrap">或输入天数:</span>
-                    <input type="number" id="custom-days" placeholder="例如: 15" class="flex-1 px-3 py-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded text-sm outline-none focus:ring-1 focus:ring-indigo-500" oninput="selectDuration(this.value)">
+                    <button onclick="selectDuration(1)" class="dur-btn px-2 py-2 border border-gray-200 rounded-lg text-xs hover:bg-indigo-50 transition-all text-gray-600">1 天</button>
+                    <button onclick="selectDuration(7)" class="dur-btn px-2 py-2 border border-gray-200 rounded-lg text-xs hover:bg-indigo-50 transition-all text-gray-600">7 天</button>
+                    <button onclick="selectDuration(30)" class="dur-btn px-2 py-2 border border-indigo-500 bg-indigo-50 text-indigo-600 font-bold rounded-lg text-xs shadow-sm transition-all">30 天</button>
+                    <button onclick="selectDuration(90)" class="dur-btn px-2 py-2 border border-gray-200 rounded-lg text-xs hover:bg-indigo-50 transition-all text-gray-600">90 天</button>
+                    <button onclick="selectDuration(180)" class="dur-btn px-2 py-2 border border-gray-200 rounded-lg text-xs hover:bg-indigo-50 transition-all text-gray-600">180 天</button>
+                    <button onclick="selectDuration(365)" class="dur-btn px-2 py-2 border border-gray-200 rounded-lg text-xs hover:bg-indigo-50 transition-all text-gray-600">365 天</button>
+                    <button onclick="selectDuration(-1)" class="dur-btn px-2 py-2 border border-gray-200 rounded-lg text-xs hover:bg-indigo-50 col-span-2 transition-all text-gray-600">永久有效</button>
                 </div>
             </div>
-
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">本次生成链接数量 (1-50)</label>
-                <input type="number" id="invite-count" value="1" min="1" max="50" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 outline-none focus:ring-2 focus:ring-indigo-500 transition-all">
+                <label class="block text-sm mb-1">生成数量 (1-50)</label>
+                <input type="number" id="invite-count" value="1" min="1" max="50" class="w-full px-4 py-2 rounded-lg border bg-gray-50 outline-none">
             </div>
-
             <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-tight">注册后继承谁的权限？</label>
-                <select id="invite-template" class="w-full px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 outline-none cursor-pointer"></select>
+                <label class="block text-sm mb-1">模板继承</label>
+                <select id="invite-template" class="w-full px-4 py-2 rounded-lg border bg-gray-50 outline-none"></select>
             </div>
-            
             <div class="flex justify-end gap-3 mt-8">
-                <button onclick="closeInviteModal()" class="px-5 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-medium">取消</button>
-                <button onclick="generateInvite()" class="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-bold shadow-lg active:scale-95 transition-all">
-                    立即生成链接
-                </button>
+                <button onclick="closeInviteModal()" class="px-5 py-2 text-gray-500">取消</button>
+                <button onclick="generateInvite(event)" class="px-6 py-2 bg-emerald-500 text-white rounded-lg font-bold">生成链接</button>
             </div>
         </div>
-
         <div id="invite-result-step" class="hidden space-y-4">
-            <div class="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
-                <div class="flex items-center gap-2">
-                    <div class="bg-green-500 p-1.5 rounded-full"><i class="fa-solid fa-check text-white text-xs"></i></div>
-                    <h4 class="text-lg font-bold text-gray-900 dark:text-white">生成成功</h4>
-                </div>
-                <button onclick="copyAllInvites()" class="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-all">
-                    <i class="fa-regular fa-copy mr-1"></i>复制全部
-                </button>
-            </div>
-            <div id="invite-links-container" class="space-y-3 max-h-72 overflow-y-auto custom-scrollbar p-2 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700">
-                </div>
-            <div class="flex justify-center mt-6">
-                <button onclick="closeInviteModal()" class="px-10 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-200 transition-all">
-                    关闭窗口
-                </button>
-            </div>
+            <div id="invite-links-container" class="space-y-3 max-h-72 overflow-y-auto p-2 bg-gray-50 rounded-xl border"></div>
+            <button onclick="copyAllInvites()" class="w-full py-2 bg-indigo-50 text-indigo-600 font-bold rounded-lg mt-2">复制全部</button>
+            <button onclick="closeInviteModal()" class="w-full py-2 bg-gray-200 text-gray-700 font-bold rounded-lg">关闭</button>
         </div>
     </div>
 </div>
 
 <script>
-/**
- * 全局变量存储状态
- */
 let users = [];
 let allLibraries = []; 
 let selectedDuration = 30; 
 let currentAvatarUrl = "";
 let currentAvatarFile = null;
-// 🔥 核心存储变量：当前正在编辑用户的子文件夹排除项 (用于镜像保存)
 let currentExcludedSubFolders = []; 
 
-/**
- * 页面加载后立即拉取基础数据
- */
+// 🔥 新增：管理选中状态与当前过滤条件
+let selectedUsers = new Set();
+let currentFilter = 'all';
+
 document.addEventListener('DOMContentLoaded', function() {
-    loadUsers();
     loadLibraries();
+    loadUsers();
 });
 
-/**
- * 后端交互：拉取库列表 (ID 为 GUID)
- */
 async function loadLibraries() {
     try {
         const response = await fetch('/api/manage/libraries');
         const json = await response.json();
-        if (json.status === 'success') {
-            allLibraries = json.data;
-        }
-    } catch (err) {
-        console.error("媒体库加载失败:", err);
-    }
+        if (json.status === 'success') allLibraries = json.data;
+    } catch (err) {}
 }
 
-/**
- * 后端交互：拉取管理员视角的用户列表
- */
 async function loadUsers() {
     try {
         const response = await fetch('/api/manage/users');
         const json = await response.json();
         if (json.status === 'success') {
             users = json.data;
+            // 预处理用户状态
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            users.forEach(u => {
+                let diffDays = Infinity;
+                if (u.ExpireDate) {
+                    const exp = new Date(u.ExpireDate);
+                    diffDays = (exp - today) / (1000 * 3600 * 24);
+                }
+                
+                if (u.IsDisabled) u.StatusCat = 'disabled';
+                else if (diffDays < 0) u.StatusCat = 'expired';
+                else if (diffDays <= 7) u.StatusCat = 'expiring';
+                else u.StatusCat = 'normal';
+                
+                u.DiffDays = diffDays;
+            });
             renderUsers();
         }
-    } catch (err) {
-        console.error("用户数据加载失败:", err);
+    } catch (err) {}
+}
+
+function setFilter(filter) {
+    currentFilter = filter;
+    selectedUsers.clear(); // 切换过滤时清空选择
+    renderUsers();
+    updateStickyBar();
+}
+
+function renderUsers() {
+    const desktopBody = document.getElementById('user-list-body-desktop');
+    const mobileBody = document.getElementById('user-list-body-mobile');
+    const searchQ = document.getElementById('search-input').value.toLowerCase();
+    const sortOpt = document.getElementById('sort-select').value;
+    
+    // 更新看板统计
+    let stTotal = users.length;
+    let stActive = users.filter(u => u.StatusCat === 'normal' || u.StatusCat === 'expiring').length;
+    let stExpiring = users.filter(u => u.StatusCat === 'expiring').length;
+    let stError = users.filter(u => u.StatusCat === 'disabled' || u.StatusCat === 'expired').length;
+    
+    document.getElementById('stat-total').innerText = stTotal;
+    document.getElementById('stat-active').innerText = stActive;
+    document.getElementById('stat-expiring').innerText = stExpiring;
+    document.getElementById('stat-error').innerText = stError;
+
+    // 过滤
+    let filtered = users.filter(u => {
+        if (searchQ && !u.Name.toLowerCase().includes(searchQ)) return false;
+        if (currentFilter === 'active' && !(u.StatusCat === 'normal' || u.StatusCat === 'expiring')) return false;
+        if (currentFilter === 'expiring' && u.StatusCat !== 'expiring') return false;
+        if (currentFilter === 'error' && !(u.StatusCat === 'disabled' || u.StatusCat === 'expired')) return false;
+        return true;
+    });
+
+    // 排序
+    if (sortOpt === 'name') {
+        filtered.sort((a,b) => a.Name.localeCompare(b.Name));
+    } else if (sortOpt === 'login') {
+        filtered.sort((a,b) => new Date(b.LastLoginDate||0) - new Date(a.LastLoginDate||0));
+    } else if (sortOpt === 'expire_asc') {
+        filtered.sort((a,b) => new Date(a.ExpireDate||'2099-12-31') - new Date(b.ExpireDate||'2099-12-31'));
+    }
+
+    let desktopHtml = "";
+    let mobileHtml = "";
+
+    filtered.forEach(u => {
+        const avatarUrl = "/api/user/image/" + u.Id + "?v=" + (u.PrimaryImageTag || Date.now());
+        const avatarTag = u.PrimaryImageTag 
+            ? `<div class="relative w-10 h-10"><img src="${avatarUrl}" class="w-full h-full rounded-full object-cover absolute inset-0 shadow-sm" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"><div class="w-full h-full rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold hidden uppercase text-sm">${u.Name[0]}</div></div>`
+            : `<div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold uppercase text-sm shadow-inner">${u.Name[0]}</div>`;
+
+        let badge = "";
+        if (u.StatusCat === 'disabled') badge = '<span class="px-2 py-1 rounded border bg-red-50 text-red-600 text-xs font-bold border-red-200">被禁用</span>';
+        else if (u.StatusCat === 'expired') badge = '<span class="px-2 py-1 rounded border bg-gray-100 text-gray-500 text-xs font-bold border-gray-300">已过期</span>';
+        else if (u.StatusCat === 'expiring') badge = '<span class="px-2 py-1 rounded border bg-amber-50 text-amber-600 text-xs font-bold border-amber-200">即将到期</span>';
+        else badge = '<span class="px-2 py-1 rounded border bg-green-50 text-green-600 text-xs font-bold border-green-200">活跃中</span>';
+
+        const isChecked = selectedUsers.has(u.Id) ? 'checked' : '';
+
+        desktopHtml += `
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-all border-b border-gray-50 dark:border-gray-700/50">
+                <td class="px-4 py-4 text-center">
+                    <input type="checkbox" value="${u.Id}" onchange="toggleSelectUser('${u.Id}', this.checked)" class="user-checkbox w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer" ${isChecked}>
+                </td>
+                <td class="px-2 py-4">
+                    <div class="flex items-center gap-3">
+                        ${avatarTag}
+                        <div>
+                            <div class="font-bold text-gray-900 dark:text-white">${u.Name}</div>
+                            ${u.IsAdmin ? '<span class="text-[9px] font-bold bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded border border-yellow-200">ADMIN</span>' : ''}
+                        </div>
+                    </div>
+                </td>
+                <td class="px-6 py-4">${badge}</td>
+                <td class="px-6 py-4 text-sm font-mono font-medium text-gray-600 dark:text-gray-400">${u.ExpireDate || '永久有效'}</td>
+                <td class="px-6 py-4 text-sm text-gray-500">${u.LastLoginDate ? new Date(u.LastLoginDate).toLocaleDateString() : '从未'}</td>
+                <td class="px-6 py-4 text-right">
+                    <button onclick="openEditUserModal('${u.Id}')" class="text-indigo-600 hover:text-indigo-800 font-bold transition-all">配置</button>
+                </td>
+            </tr>
+        `;
+
+        mobileHtml += `
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm mb-1 flex items-start gap-3">
+                <input type="checkbox" value="${u.Id}" onchange="toggleSelectUser('${u.Id}', this.checked)" class="user-checkbox mt-1 w-4 h-4 rounded text-indigo-600" ${isChecked}>
+                <div class="flex-1 min-w-0">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center gap-2">
+                            ${avatarTag}
+                            <div>
+                                <div class="font-bold text-gray-900 dark:text-white">${u.Name}</div>
+                                <div class="text-[10px] text-gray-400 uppercase font-mono">到期: ${u.ExpireDate||'永久'}</div>
+                            </div>
+                        </div>
+                        ${badge}
+                    </div>
+                    <button onclick="openEditUserModal('${u.Id}')" class="w-full py-1.5 text-xs font-bold bg-indigo-50 text-indigo-600 rounded-lg active:scale-95 transition-all mt-2">修改资料</button>
+                </div>
+            </div>
+        `;
+    });
+    
+    desktopBody.innerHTML = desktopHtml || '<tr><td colspan="6" class="text-center py-8 text-gray-400">无符合条件的用户</td></tr>';
+    mobileBody.innerHTML = mobileHtml || '<div class="text-center py-8 text-gray-400">无符合条件的用户</div>';
+    
+    // 更新全选框状态
+    const allBoxD = document.getElementById('selectAll-desktop');
+    const allBoxM = document.getElementById('selectAll-mobile');
+    const renderedIds = filtered.map(u => u.Id);
+    const allSelected = renderedIds.length > 0 && renderedIds.every(id => selectedUsers.has(id));
+    
+    if(allBoxD) allBoxD.checked = allSelected;
+    if(allBoxM) allBoxM.checked = allSelected;
+    
+    updateStickyBar();
+}
+
+/** 批量操作 UI 逻辑 */
+function toggleSelectUser(uid, isChecked) {
+    if (isChecked) selectedUsers.add(uid);
+    else selectedUsers.delete(uid);
+    updateStickyBar();
+}
+
+function toggleSelectAll(checkbox) {
+    const boxes = document.querySelectorAll('.user-checkbox');
+    boxes.forEach(b => {
+        b.checked = checkbox.checked;
+        if (checkbox.checked) selectedUsers.add(b.value);
+        else selectedUsers.delete(b.value);
+    });
+    updateStickyBar();
+}
+
+function updateStickyBar() {
+    const bar = document.getElementById('batch-action-bar');
+    const countSpan = document.getElementById('batch-count');
+    
+    if (selectedUsers.size > 0) {
+        countSpan.innerText = selectedUsers.size;
+        bar.classList.remove('translate-y-24', 'opacity-0');
+        bar.classList.add('translate-y-0', 'opacity-100');
+    } else {
+        bar.classList.remove('translate-y-0', 'opacity-100');
+        bar.classList.add('translate-y-24', 'opacity-0');
     }
 }
 
-/**
- * 辅助函数：填充模板下拉框
- */
+// ================= API 请求区 =================
+
+async function batchAction(actionName) {
+    if (selectedUsers.size === 0) return;
+    
+    if (actionName === 'delete') {
+        if (!confirm(`⚠️ 危险警告：将彻底物理删除选中的 ${selectedUsers.size} 个账号且无法恢复，确认删除？`)) return;
+    }
+    
+    const ids = Array.from(selectedUsers);
+    try {
+        const res = await fetch('/api/manage/users/batch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ user_ids: ids, action: actionName })
+        });
+        const json = await res.json();
+        if (json.status === 'success') {
+            selectedUsers.clear();
+            loadUsers();
+        } else {
+            alert('操作失败: ' + json.message);
+        }
+    } catch(e) { alert('网络错误'); }
+}
+
+function openBatchRenewModal() {
+    document.getElementById('renew-count-text').innerText = selectedUsers.size;
+    const modal = document.getElementById('batch-renew-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeBatchRenewModal() {
+    const modal = document.getElementById('batch-renew-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+async function submitBatchRenew(val) {
+    if (selectedUsers.size === 0) return;
+    let finalValue = val;
+    if (val === 'date') {
+        finalValue = document.getElementById('batch-date-picker').value;
+        if (!finalValue) return alert('请选择指定的日期');
+    }
+    
+    const ids = Array.from(selectedUsers);
+    try {
+        const res = await fetch('/api/manage/users/batch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ user_ids: ids, action: 'renew', value: finalValue })
+        });
+        const json = await res.json();
+        if (json.status === 'success') {
+            closeBatchRenewModal();
+            selectedUsers.clear();
+            loadUsers();
+        } else {
+            alert('续期失败: ' + json.message);
+        }
+    } catch(e) { alert('网络错误'); }
+}
+
+// ----------------- 保留原有单体处理函数 -----------------
+
 function populateTemplates(selectId, excludeUserId = null) {
     const sel = document.getElementById(selectId);
-    sel.innerHTML = '<option value="">默认模板 (全库权限, 无黑名单)</option>';
-    
+    sel.innerHTML = '<option value="">默认模板 (全库权限)</option>';
     for (let i = 0; i < users.length; i++) {
         let user = users[i];
-        // 如果是编辑状态，不能选自己当模板
-        if (excludeUserId && user.Id === excludeUserId) {
-            continue;
-        }
-        
+        if (excludeUserId && user.Id === excludeUserId) continue;
         const option = document.createElement('option');
         option.value = user.Id;
         option.textContent = "👤 " + user.Name;
@@ -339,193 +583,75 @@ function populateTemplates(selectId, excludeUserId = null) {
     }
 }
 
-/**
- * 界面渲染：用户列表 (桌面表格 + 手机卡片)
- */
-function renderUsers() {
-    const desktopBody = document.getElementById('user-list-body-desktop');
-    const mobileBody = document.getElementById('user-list-body-mobile');
-    
-    let desktopHtml = "";
-    let mobileHtml = "";
-
-    for (let i = 0; i < users.length; i++) {
-        const u = users[i];
-        
-        // 渲染头像逻辑
-        const avatarUrl = "/api/user/image/" + u.Id + "?v=" + (u.PrimaryImageTag || Date.now());
-        let avatarTag = "";
-        if (u.PrimaryImageTag) {
-            avatarTag = `
-                <div class="relative w-10 h-10">
-                    <img src="${avatarUrl}" class="w-full h-full rounded-full object-cover absolute inset-0 shadow-sm" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
-                    <div class="w-full h-full rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 font-bold hidden uppercase text-sm">
-                        ${u.Name[0]}
-                    </div>
-                </div>
-            `;
-        } else {
-            avatarTag = `
-                <div class="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 font-bold uppercase text-sm shadow-inner">
-                    ${u.Name[0]}
-                </div>
-            `;
-        }
-
-        // 状态标签
-        const badge = u.IsDisabled 
-            ? '<span class="px-2 py-1 rounded-lg text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800">已禁用</span>'
-            : '<span class="px-2 py-1 rounded-lg text-xs font-bold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800">活跃中</span>';
-
-        // 拼接桌面行 (TR)
-        desktopHtml += `
-            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-all border-b border-gray-50 dark:border-gray-700/50">
-                <td class="px-6 py-4">
-                    <div class="flex items-center gap-3">
-                        ${avatarTag}
-                        <div>
-                            <div class="font-bold text-gray-900 dark:text-white">${u.Name}</div>
-                            ${u.IsAdmin ? '<span class="text-[9px] font-bold bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded border border-yellow-200 dark:bg-yellow-900/40 dark:text-yellow-400 dark:border-yellow-700">ADMIN</span>' : ''}
-                        </div>
-                    </div>
-                </td>
-                <td class="px-6 py-4">${badge}</td>
-                <td class="px-6 py-4 text-sm font-mono font-medium text-gray-600 dark:text-gray-400">${u.ExpireDate || '永久有效'}</td>
-                <td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-500">${u.LastLoginDate ? new Date(u.LastLoginDate).toLocaleDateString() : '从未活跃'}</td>
-                <td class="px-6 py-4 text-right">
-                    <button onclick="openEditUserModal('${u.Id}')" class="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-bold transition-all">配置权限</button>
-                    <button onclick="deleteUser('${u.Id}')" class="text-red-500 hover:text-red-700 ml-4 font-medium opacity-60 hover:opacity-100 transition-all">注销</button>
-                </td>
-            </tr>
-        `;
-
-        // 拼接移动端卡片 (DIV)
-        mobileHtml += `
-            <div class="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm mb-1 transition-all active:bg-gray-50">
-                <div class="flex justify-between items-start mb-4">
-                    <div class="flex items-center gap-3">
-                        ${avatarTag}
-                        <div>
-                            <div class="font-bold text-gray-900 dark:text-white text-lg">${u.Name}</div>
-                            <div class="text-[10px] text-gray-400 uppercase font-mono">到期: ${u.ExpireDate||'永久'}</div>
-                        </div>
-                    </div>
-                    ${badge}
-                </div>
-                <div class="grid grid-cols-2 gap-3 pt-3 border-t border-gray-50 dark:border-gray-700/50">
-                    <button onclick="openEditUserModal('${u.Id}')" class="py-2 text-sm font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl active:scale-95 transition-all">修改资料</button>
-                    <button onclick="deleteUser('${u.Id}')" class="py-2 text-sm font-bold bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-xl active:scale-95 transition-all">注销账号</button>
-                </div>
-            </div>
-        `;
-    }
-    
-    desktopBody.innerHTML = desktopHtml;
-    mobileBody.innerHTML = mobileHtml;
-}
-
-/**
- * 邀请逻辑：选择有效期 (恢复全部天数)
- */
 function selectDuration(days) {
     selectedDuration = parseInt(days);
     const buttons = document.querySelectorAll('.dur-btn');
-    
-    // 清除所有选中样式
     for (let b of buttons) {
-        b.className = "dur-btn px-2 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all text-gray-600 dark:text-gray-400";
+        b.className = "dur-btn px-2 py-2 border border-gray-200 rounded-lg text-xs hover:bg-indigo-50 transition-all text-gray-600";
     }
-    
-    // 匹配并高亮选中的按钮 (支持自定义天数匹配按钮)
     const target = Array.from(buttons).find(btn => btn.getAttribute('onclick').includes("(" + days + ")"));
     if (target) {
         target.className = "dur-btn px-2 py-2 border border-indigo-500 bg-indigo-50 text-indigo-600 font-bold rounded-lg text-xs shadow-sm transition-all";
     }
 }
 
-/**
- * 邀请逻辑：批量生成链接
- */
-async function generateInvite() {
+async function generateInvite(e) {
     const countInput = document.getElementById('invite-count');
     const count = parseInt(countInput.value) || 1;
     const templateId = document.getElementById('invite-template').value;
     
-    const submitBtn = event.target;
+    const submitBtn = e.target;
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> 正在排队生成...';
+    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> 排队生成中...';
     
     try {
         const response = await fetch('/api/manage/invite/gen', {
             method: 'POST', 
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ 
-                days: selectedDuration, 
-                count: count, 
-                template_user_id: templateId || null 
-            }) 
+            body: JSON.stringify({ days: selectedDuration, count: count, template_user_id: templateId || null }) 
         });
         const json = await response.json();
         
         if (json.status === 'success') {
             const container = document.getElementById('invite-links-container');
-            container.innerHTML = ""; // 清空之前的结果
+            container.innerHTML = ""; 
             
-            // 渲染批量链接列表
             for (let i = 0; i < json.codes.length; i++) {
                 const link = window.location.origin + '/invite/' + json.codes[i];
                 const itemDiv = document.createElement('div');
-                itemDiv.className = "flex items-center gap-2 bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm";
+                itemDiv.className = "flex items-center gap-2 bg-white p-2.5 rounded-xl border border-gray-100 shadow-sm";
                 itemDiv.innerHTML = `
                     <span class="flex-1 truncate font-mono text-[11px] text-gray-500 select-all">${link}</span>
-                    <button onclick="copyToClipboard('${link}')" class="text-indigo-600 font-bold px-3 py-1 text-xs border-l border-gray-100 dark:border-gray-700 hover:text-indigo-800 transition-colors">
-                        复制
-                    </button>
+                    <button onclick="copyToClipboard('${link}')" class="text-indigo-600 font-bold px-3 py-1 text-xs border-l border-gray-100">复制</button>
                 `;
                 container.appendChild(itemDiv);
             }
-            
-            // 切换步骤
             document.getElementById('invite-form-step').classList.add('hidden');
             document.getElementById('invite-result-step').classList.remove('hidden');
-        } else {
-            alert("接口生成失败: " + json.message);
         }
-    } catch (e) {
-        alert("网络连接超时");
-    } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = "开始生成链接";
-    }
+    } catch (e) { alert("网络连接超时"); } 
+    finally { submitBtn.disabled = false; submitBtn.textContent = "生成链接"; }
 }
 
-/**
- * 邀请逻辑：复制全部链接
- */
 function copyAllInvites() {
     const spans = document.querySelectorAll('#invite-links-container span');
     let allLinks = "";
     for (let i = 0; i < spans.length; i++) {
         allLinks += spans[i].textContent + "\n";
     }
-    navigator.clipboard.writeText(allLinks.trim()).then(() => alert('✅ 全部邀请链接已复制到剪贴板'));
+    copyToClipboard(allLinks.trim());
 }
 
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => alert('✅ 已复制到剪贴板'));
 }
 
-/**
- * 编辑逻辑：Tabs 切换
- */
 function switchEditTab(tabName) {
     const isBasic = (tabName === 'basic');
     document.getElementById('edit-tab-basic').style.display = isBasic ? 'block' : 'none';
     document.getElementById('edit-tab-library').style.display = isBasic ? 'none' : 'block';
-    
     const btnB = document.getElementById('tab-btn-basic');
     const btnL = document.getElementById('tab-btn-library');
-    
     if (isBasic) {
         btnB.className = "pb-2 text-sm font-bold text-indigo-600 border-b-2 border-indigo-600 transition-all";
         btnL.className = "pb-2 text-sm font-medium text-gray-500 border-b-2 border-transparent transition-all";
@@ -535,74 +661,52 @@ function switchEditTab(tabName) {
     }
 }
 
-/**
- * 编辑逻辑：打开弹窗并实时抓取最新的子黑名单状态
- */
 async function openEditUserModal(uid) {
     const user = users.find(u => u.Id === uid);
     if (!user) return;
     
     switchEditTab('basic');
-
-    // 填充静态表单数据
     document.getElementById('edit-userid').value = uid;
     document.getElementById('edit-username').value = user.Name;
     document.getElementById('edit-disabled').value = String(user.IsDisabled);
     document.getElementById('edit-expire').value = user.ExpireDate || '';
     document.getElementById('edit-password').value = '';
     
-    // 初始化预览图
     const preview = document.getElementById('edit-avatar-preview');
-    if (user.PrimaryImageTag) {
-        preview.src = "/api/user/image/" + uid + "?t=" + Date.now();
-    } else {
-        preview.src = "https://api.dicebear.com/9.x/notionists/png?seed=" + user.Name;
-    }
+    if (user.PrimaryImageTag) preview.src = "/api/user/image/" + uid + "?t=" + Date.now();
+    else preview.src = "https://api.dicebear.com/9.x/notionists/png?seed=" + user.Name;
     
-    // 显示弹窗动画
     const modal = document.getElementById('edit-user-modal');
     modal.classList.remove('hidden');
     setTimeout(() => { modal.classList.add('flex'); }, 10);
 
-    // 🔥 关键逻辑：实时从后端请求最新的权限和黑名单数据，避免列表缓存造成的误勾
     try {
         const res = await fetch("/api/manage/user/" + uid);
         const json = await res.json();
         if (json.status === 'success') {
             user.EnableAllFolders = json.data.EnableAllFolders;
             user.EnabledFolders = json.data.EnabledFolders;
-            // 镜像存储此用户的隐藏子文件夹列表
             currentExcludedSubFolders = json.data.ExcludedSubFolders || [];
         }
-    } catch(err) {
-        console.warn("无法拉取用户实时黑名单，将使用列表数据代替");
-    }
+    } catch(err) {}
     
-    // 渲染复选框与模板
     renderLibraryCheckboxes(user);
     populateTemplates('edit-template-select', uid);
 }
 
-/**
- * 编辑逻辑：渲染媒体库列表 (ID 为 GUID)
- */
 function renderLibraryCheckboxes(user) {
     const container = document.getElementById('edit-library-list');
     container.innerHTML = "";
     
     if (allLibraries.length === 0) {
-        container.innerHTML = '<div class="p-4 text-center text-gray-400 text-xs italic w-full col-span-2">尚未获取到媒体库数据...</div>';
+        container.innerHTML = '<div class="p-4 text-center text-gray-400 text-xs italic col-span-2">未获取到数据</div>';
     } else {
         for (let i = 0; i < allLibraries.length; i++) {
             const lib = allLibraries[i];
             const isChecked = user.EnabledFolders.includes(lib.Id) ? 'checked' : '';
-            
             const label = document.createElement('label');
-            label.className = "flex items-center gap-3 p-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl cursor-pointer hover:shadow-sm hover:border-indigo-200 transition-all";
-            label.innerHTML = `
-                <input type="checkbox" value="${lib.Id}" class="lib-checkbox w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300 dark:border-gray-600 dark:bg-gray-700 transition-all" ${isChecked}>
-                <span class="text-xs font-bold text-gray-700 dark:text-gray-300 truncate">${lib.Name}</span>
-            `;
+            label.className = "flex items-center gap-3 p-2 bg-white border border-gray-100 rounded-xl cursor-pointer hover:shadow-sm transition-all";
+            label.innerHTML = `<input type="checkbox" value="${lib.Id}" class="lib-checkbox w-4 h-4 text-indigo-600 rounded cursor-pointer" ${isChecked}><span class="text-xs font-bold text-gray-700 truncate">${lib.Name}</span>`;
             container.appendChild(label);
         }
     }
@@ -610,119 +714,64 @@ function renderLibraryCheckboxes(user) {
     toggleLibraryCheckboxes();
 }
 
-/**
- * 编辑逻辑：勾选“全库开通”时的 UI 状态
- */
 function toggleLibraryCheckboxes() {
     const isAll = document.getElementById('edit-enable-all').checked;
     const list = document.getElementById('edit-library-list');
     const boxes = document.querySelectorAll('.lib-checkbox');
-    
-    for (let b of boxes) {
-        b.disabled = isAll;
-    }
+    for (let b of boxes) b.disabled = isAll;
     list.style.opacity = isAll ? '0.2' : '1';
     list.style.pointerEvents = isAll ? 'none' : 'auto';
 }
 
-/**
- * 编辑逻辑：重置子文件夹打勾黑名单
- */
 function clearSubFolders() {
-    if (confirm('重置后，该用户已勾选库中的所有物理子文件夹记录将清空，确保文件夹内 100% 打勾可见。确认清空隐藏名单吗？')) {
-        currentExcludedSubFolders = []; // 清空数组
-        const btn = document.getElementById('clear-sub-btn');
-        btn.innerHTML = '✨ 重置就绪 (保存配置后生效)'; 
-        btn.classList.replace('text-indigo-500', 'text-green-600');
-        btn.classList.add('font-bold', 'scale-105');
+    if (confirm('确认清空所有子文件夹隐藏限制？')) {
+        currentExcludedSubFolders = []; 
+        alert("已重置，保存后生效");
     }
 }
 
-/**
- * 编辑逻辑：模板镜像同步 (全量套用)
- */
 async function applyEditTemplate() {
     const tid = document.getElementById('edit-template-select').value;
     if (!tid) return;
-    
-    const applyBtn = document.getElementById('apply-template-btn');
-    const oldLabel = applyBtn.innerHTML;
-    applyBtn.disabled = true;
-    applyBtn.innerHTML = '<i class="fa-solid fa-sync fa-spin"></i>';
-
     try {
-        // 请求模板账号的真实权限快照 (含 GUID 列表和子黑名单)
         const response = await fetch("/api/manage/user/" + tid);
         const json = await response.json();
-        
         if (json.status === 'success') {
             const tData = json.data;
-            
-            // 镜像套用顶层开关
             document.getElementById('edit-enable-all').checked = tData.EnableAllFolders;
-            
-            // 镜像同步大类勾选 (GUID 对齐)
             const boxes = document.querySelectorAll('.lib-checkbox');
             for (let i = 0; i < boxes.length; i++) {
                 boxes[i].checked = tData.EnabledFolders.includes(boxes[i].value);
             }
-            
-            // 🔥 核心镜像同步：抄袭对方的子文件夹排除列表
             currentExcludedSubFolders = tData.ExcludedSubFolders || [];
-            
             toggleLibraryCheckboxes();
-            
-            applyBtn.innerHTML = '<i class="fa-solid fa-check"></i> 镜像同步成功';
-            applyBtn.classList.replace('bg-indigo-600', 'bg-green-600');
+            alert("同步成功");
         }
-    } catch(err) {
-        console.error("同步模板失败", err);
-    }
-
-    setTimeout(() => { 
-        applyBtn.innerHTML = oldLabel; 
-        applyBtn.classList.replace('bg-green-600', 'bg-indigo-600');
-        applyBtn.disabled = false;
-    }, 1500);
+    } catch(err) {}
 }
 
-/**
- * 编辑逻辑：提交修改并保存至 Emby
- */
 async function submitEditUser() {
     const saveBtn = document.getElementById('save-user-btn');
     const labelSpan = document.getElementById('save-user-text');
     const uid = document.getElementById('edit-userid').value;
-    
     const isEnableAll = document.getElementById('edit-enable-all').checked;
     
-    // 收集打勾的 GUID 列表
     const boxes = document.querySelectorAll('.lib-checkbox:checked');
     let guids = [];
     if (!isEnableAll) {
-        for (let i = 0; i < boxes.length; i++) {
-            guids.push(boxes[i].value);
-        }
+        for (let i = 0; i < boxes.length; i++) guids.push(boxes[i].value);
     }
     
-    saveBtn.disabled = true;
-    labelSpan.textContent = "正在同步 Emby...";
+    saveBtn.disabled = true; labelSpan.textContent = "正在同步...";
 
-    // 1. 处理头像变动
     if (currentAvatarUrl || currentAvatarFile) {
         const formData = new FormData();
         formData.append('user_id', uid);
-        if (currentAvatarFile) {
-            formData.append('file', currentAvatarFile);
-        } else {
-            formData.append('url', currentAvatarUrl);
-        }
-        try {
-            await fetch('/api/manage/user/image', { method: 'POST', body: formData });
-        } catch (e) { console.error("Avatar error:", e); }
+        if (currentAvatarFile) formData.append('file', currentAvatarFile);
+        else formData.append('url', currentAvatarUrl);
+        try { await fetch('/api/manage/user/image', { method: 'POST', body: formData }); } catch (e) {}
     }
 
-    // 2. 提交 Policy 与资料
     try {
         const response = await fetch('/api/manage/user/update', {
             method: 'POST',
@@ -734,28 +783,18 @@ async function submitEditUser() {
                 password: document.getElementById('edit-password').value || null,
                 enable_all_folders: isEnableAll, 
                 enabled_folders: guids, 
-                excluded_sub_folders: currentExcludedSubFolders // 🔥 提交子黑名单
+                excluded_sub_folders: currentExcludedSubFolders 
             })
         });
-        
         const json = await response.json();
         if (json.status === 'success') {
             closeEditUserModal();
             loadUsers();
-        } else {
-            alert("保存失败: " + json.message);
-        }
-    } catch (err) {
-        alert("保存请求失败");
-    } finally {
-        saveBtn.disabled = false;
-        labelSpan.textContent = "保存修改";
-    }
+        } else { alert("保存失败"); }
+    } catch (err) {} 
+    finally { saveBtn.disabled = false; labelSpan.textContent = "保存配置"; }
 }
 
-/**
- * 其他辅助 UI 逻辑 (新建、删除、头像预览)
- */
 function openNewUserModal() {
     const modal = document.getElementById('new-user-modal');
     modal.classList.remove('hidden');
@@ -768,8 +807,7 @@ function openNewUserModal() {
 
 function closeNewUserModal() {
     const modal = document.getElementById('new-user-modal');
-    modal.classList.remove('flex');
-    modal.classList.add('hidden');
+    modal.classList.remove('flex'); modal.classList.add('hidden');
 }
 
 async function submitNewUser() {
@@ -793,8 +831,8 @@ async function submitNewUser() {
             closeNewUserModal();
             loadUsers();
         }
-    } catch(e) { alert("创建请求异常"); }
-    btn.disabled = false; btn.textContent = "创建用户";
+    } catch(e) {}
+    btn.disabled = false; btn.textContent = "立即创建";
 }
 
 function openInviteModal() {
@@ -809,8 +847,7 @@ function openInviteModal() {
 
 function closeInviteModal() {
     const modal = document.getElementById('invite-modal');
-    modal.classList.remove('flex');
-    modal.classList.add('hidden');
+    modal.classList.remove('flex'); modal.classList.add('hidden');
 }
 
 function generateRandomAvatar() {
@@ -838,21 +875,9 @@ function previewFileAvatar() {
     }
 }
 
-async function deleteUser(uid) {
-    if (!confirm('危险操作：该用户将被物理删除且无法恢复，确认注销？')) return;
-    try {
-        const response = await fetch("/api/manage/user/" + uid, { method: 'DELETE' });
-        const json = await response.json();
-        if (json.status === 'success') {
-            loadUsers();
-        }
-    } catch(e) { alert("删除异常"); }
-}
-
 function closeEditUserModal() {
     const modal = document.getElementById('edit-user-modal');
-    modal.classList.remove('flex');
-    modal.classList.add('hidden');
+    modal.classList.remove('flex'); modal.classList.add('hidden');
 }
 </script>
 
@@ -860,6 +885,5 @@ function closeEditUserModal() {
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
 .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #4a5568; }
-.caps { font-variant: small-caps; text-transform: lowercase; font-weight: 800; }
 </style>
 {% endblock %}
