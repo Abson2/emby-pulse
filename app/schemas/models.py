@@ -21,10 +21,15 @@ class BotSettingsModel(BaseModel):
     enable_bot: bool
     enable_notify: bool
     enable_library_notify: Optional[bool] = False
-    # 🔥 新增：企业微信配置字段
+    
+    # 🔥 企微终极版：全套配置字段
     wecom_corpid: Optional[str] = ""
     wecom_corpsecret: Optional[str] = ""
     wecom_agentid: Optional[str] = ""
+    wecom_touser: Optional[str] = "@all"
+    wecom_proxy_url: Optional[str] = "https://qyapi.weixin.qq.com"
+    wecom_token: Optional[str] = ""
+    wecom_aeskey: Optional[str] = ""
 
 class PushRequestModel(BaseModel):
     user_id: str

@@ -26,18 +26,18 @@ class TelegramBot:
         self.last_check_min = -1
         self.user_cache = {}
         
-        # 🔥 新增：企业微信 Token 缓存
+        # 企微 Token 缓存
         self.wecom_token = None
         self.wecom_token_expires = 0
         
     def start(self):
         if self.running: return
-        # 🔥 修改：只要配置了TG或配置了企业微信，就启动服务
         if not cfg.get("tg_bot_token") and not cfg.get("wecom_corpid"): return
         self.running = True
-        self._set_commands()
         
-        # 🔥 仅当配置了TG时，才启动TG独有的长轮询监听指令
+        self._set_commands()
+        self._set_wecom_menu() # 🔥 启动时自动向企微设置底部菜单
+        
         if cfg.get("tg_bot_token"):
             self.poll_thread = threading.Thread(target=self._polling_loop, daemon=True)
             self.poll_thread.start()
@@ -48,7 +48,7 @@ class TelegramBot:
         self.library_thread = threading.Thread(target=self._library_notify_loop, daemon=True)
         self.library_thread.start()
         
-        print("🤖 Bot Service Started (Dual Channel: TG / WeCom)")
+        print("🤖 Bot Service Started (Dual Channel Interactive Mode)")
 
     def stop(self): self.running = False
 
@@ -106,15 +106,16 @@ class TelegramBot:
         except: pass
         return None
 
-    # ================= 🔥 新增：企业微信核心发送引擎 =================
+    # ================= 🔥 企微核心驱动 =================
     
     def _get_wecom_token(self):
         corpid = cfg.get("wecom_corpid"); corpsecret = cfg.get("wecom_corpsecret")
+        proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
         if not corpid or not corpsecret: return None
         if self.wecom_token and time.time() < self.wecom_token_expires:
             return self.wecom_token
         try:
-            res = requests.get(f"https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={corpid}&corpsecret={corpsecret}", timeout=5).json()
+            res = requests.get(f"{proxy_url}/cgi-bin/gettoken?corpid={corpid}&corpsecret={corpsecret}", timeout=5).json()
             if res.get("errcode") == 0:
                 self.wecom_token = res["access_token"]
                 self.wecom_token_expires = time.time() + res["expires_in"] - 60
@@ -122,46 +123,66 @@ class TelegramBot:
         except Exception as e: logger.error(f"WeCom Token Error: {e}")
         return None
 
-    def _html_to_wecom_md(self, html_text):
-        """将 TG 的 HTML 转为企微 Markdown"""
+    def _html_to_wecom_md(self, html_text, inline_keyboard=None):
         text = html_text.replace("<b>", "**").replace("</b>", "**")
         text = text.replace("<i>", "").replace("</i>", "")
         text = text.replace("<code>", "`").replace("</code>", "`")
         text = text.replace("新入库", "<font color=\"info\">新入库</font>")
         text = text.replace("开始播放", "<font color=\"info\">开始播放</font>")
         text = text.replace("停止播放", "<font color=\"warning\">停止播放</font>")
+        # 如果有附加的键盘链接，将其转换为 markdown 的超链接格式
+        if inline_keyboard and "inline_keyboard" in inline_keyboard:
+            text += "\n\n───────────────\n"
+            for row in inline_keyboard["inline_keyboard"]:
+                for btn in row:
+                    if "url" in btn: text += f"> [{btn['text']}]({btn['url']})\n"
         return text
 
-    def _send_wecom_message(self, text):
+    def _set_wecom_menu(self):
         token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
+        proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
+        if not token or not agentid: return
+        menu_data = {
+            "button": [
+                {"type": "click", "name": "📊 数据日报", "key": "/stats"},
+                {"type": "click", "name": "🟢 正在播放", "key": "/now"},
+                {"name": "🎬 媒体库", "sub_button": [
+                    {"type": "click", "name": "🆕 最近入库", "key": "/latest"},
+                    {"type": "click", "name": "📜 播放记录", "key": "/recent"}
+                ]}
+            ]
+        }
+        try: requests.post(f"{proxy_url}/cgi-bin/menu/create?access_token={token}&agentid={agentid}", json=menu_data, timeout=5)
+        except: pass
+
+    def _send_wecom_message(self, text, touser="@all"):
+        token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
+        proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
         if not token or not agentid: return
         try:
-            url = f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={token}"
-            requests.post(url, json={"touser": "@all", "msgtype": "markdown", "agentid": int(agentid), "markdown": {"content": self._html_to_wecom_md(text)}}, timeout=10)
+            url = f"{proxy_url}/cgi-bin/message/send?access_token={token}"
+            requests.post(url, json={"touser": touser, "msgtype": "markdown", "agentid": int(agentid), "markdown": {"content": text}}, timeout=10)
         except Exception as e: logger.error(f"WeCom Text Error: {e}")
 
-    def _send_wecom_photo(self, photo_bytes, text):
+    def _send_wecom_photo(self, photo_bytes, text, touser="@all"):
         token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
+        proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
         if not token or not agentid: return
         try:
-            # 上传临时素材
-            upload_url = f"https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token={token}&type=image"
+            upload_url = f"{proxy_url}/cgi-bin/media/upload?access_token={token}&type=image"
             files = {"media": ("image.jpg", photo_bytes, "image/jpeg")}
             upload_res = requests.post(upload_url, files=files, timeout=15).json()
             media_id = upload_res.get("media_id")
-            
             if media_id:
-                send_img_url = f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={token}"
-                requests.post(send_img_url, json={"touser": "@all", "msgtype": "image", "agentid": int(agentid), "image": {"media_id": media_id}}, timeout=10)
-            if text: self._send_wecom_message(text)
+                send_img_url = f"{proxy_url}/cgi-bin/message/send?access_token={token}"
+                requests.post(send_img_url, json={"touser": touser, "msgtype": "image", "agentid": int(agentid), "image": {"media_id": media_id}}, timeout=10)
+            if text: self._send_wecom_message(text, touser)
         except Exception as e:
-            logger.error(f"WeCom Photo Error: {e}")
-            if text: self._send_wecom_message(text)
+            if text: self._send_wecom_message(text, touser)
 
-    # ================= 🔥 升级：底层发送方法（双通道分发） =================
+    # ================= 🚀 底层双通道路由分发 (完全重构) =================
 
-    def send_photo(self, chat_id, photo_io, caption, parse_mode="HTML", reply_markup=None):
-        # 提取字节流，避免流被一次性消耗
+    def send_photo(self, chat_id, photo_io, caption, parse_mode="HTML", reply_markup=None, platform="all"):
         photo_bytes = None
         if isinstance(photo_io, str):
             try: photo_bytes = requests.get(photo_io, timeout=10).content
@@ -170,41 +191,45 @@ class TelegramBot:
             photo_io.seek(0)
             photo_bytes = photo_io.read()
 
-        # 1. 企微通道
-        if cfg.get("wecom_corpid"):
-            if photo_bytes: threading.Thread(target=self._send_wecom_photo, args=(photo_bytes, caption)).start()
-            else: threading.Thread(target=self._send_wecom_message, args=(caption,)).start()
+        # 企微通道
+        if platform in ["all", "wecom"] and cfg.get("wecom_corpid"):
+            touser = chat_id if platform == "wecom" else cfg.get("wecom_touser", "@all")
+            wecom_text = self._html_to_wecom_md(caption, reply_markup)
+            if photo_bytes: threading.Thread(target=self._send_wecom_photo, args=(photo_bytes, wecom_text, touser)).start()
+            else: threading.Thread(target=self._send_wecom_message, args=(wecom_text, touser)).start()
 
-        # 2. TG通道
-        token = cfg.get("tg_bot_token")
-        if token and chat_id and chat_id != "wecom_only":
-            try:
-                url = f"https://api.telegram.org/bot{token}/sendPhoto"
-                data = {"chat_id": chat_id, "caption": caption, "parse_mode": parse_mode}
-                if reply_markup: data["reply_markup"] = json.dumps(reply_markup)
-                if photo_bytes:
-                    files = {"photo": ("image.jpg", io.BytesIO(photo_bytes), "image/jpeg")}
-                    requests.post(url, data=data, files=files, proxies=self._get_proxies(), timeout=30)
-                else:
-                    self.send_message(chat_id, caption)
-            except Exception as e: 
-                logger.error(f"TG Send Photo Error: {e}")
-                self.send_message(chat_id, caption)
+        # TG通道
+        if platform in ["all", "tg"] and cfg.get("tg_bot_token"):
+            tg_cid = chat_id if platform == "tg" else cfg.get("tg_chat_id")
+            if tg_cid:
+                try:
+                    url = f"https://api.telegram.org/bot{cfg.get('tg_bot_token')}/sendPhoto"
+                    data = {"chat_id": tg_cid, "caption": caption, "parse_mode": parse_mode}
+                    if reply_markup: data["reply_markup"] = json.dumps(reply_markup)
+                    if photo_bytes:
+                        files = {"photo": ("image.jpg", io.BytesIO(photo_bytes), "image/jpeg")}
+                        requests.post(url, data=data, files=files, proxies=self._get_proxies(), timeout=20)
+                    else:
+                        self.send_message(tg_cid, caption, platform="tg")
+                except Exception as e: 
+                    self.send_message(tg_cid, caption, platform="tg")
 
-    def send_message(self, chat_id, text, parse_mode="HTML"):
-        # 1. 企微通道
-        if cfg.get("wecom_corpid"):
-            threading.Thread(target=self._send_wecom_message, args=(text,)).start()
+    def send_message(self, chat_id, text, parse_mode="HTML", platform="all"):
+        # 企微通道
+        if platform in ["all", "wecom"] and cfg.get("wecom_corpid"):
+            touser = chat_id if platform == "wecom" else cfg.get("wecom_touser", "@all")
+            threading.Thread(target=self._send_wecom_message, args=(self._html_to_wecom_md(text), touser)).start()
 
-        # 2. TG通道
-        token = cfg.get("tg_bot_token")
-        if token and chat_id and chat_id != "wecom_only":
-            try:
-                url = f"https://api.telegram.org/bot{token}/sendMessage"
-                requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode}, proxies=self._get_proxies(), timeout=10)
-            except Exception as e: logger.error(f"TG Send Message Error: {e}")
+        # TG通道
+        if platform in ["all", "tg"] and cfg.get("tg_bot_token"):
+            tg_cid = chat_id if platform == "tg" else cfg.get("tg_chat_id")
+            if tg_cid:
+                try:
+                    url = f"https://api.telegram.org/bot{cfg.get('tg_bot_token')}/sendMessage"
+                    requests.post(url, json={"chat_id": tg_cid, "text": text, "parse_mode": parse_mode}, proxies=self._get_proxies(), timeout=10)
+                except Exception as e: pass
 
-    # ================= 🚀 以下是你原封不动的业务代码 =================
+    # ================= 🚀 修复后的入库逻辑 (时间聚类算法 - 原生版) =================
     
     def add_library_task(self, item):
         with self.library_lock:
@@ -275,7 +300,6 @@ class TelegramBot:
             except Exception as e:
                 logger.error(f"Group Process Error: {e}")
 
-    # 原生时间解析函数
     def _parse_emby_time(self, date_str):
         if not date_str: return None
         try:
@@ -287,7 +311,6 @@ class TelegramBot:
         except:
             return None
 
-    # 使用原生解析
     def _check_fresh_episodes(self, series_id):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         admin_id = self._get_admin_id()
@@ -337,7 +360,6 @@ class TelegramBot:
             return []
 
     def _push_episode_group(self, series_id, episodes):
-        cid = str(cfg.get("tg_chat_id", "wecom_only"))
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         admin_id = self._get_admin_id()
         
@@ -380,11 +402,10 @@ class TelegramBot:
         img_io = self._download_emby_image(series_id, 'Primary')
         if not img_io: img_io = self._download_emby_image(series_id, 'Backdrop') 
         
-        if img_io: self.send_photo(cid, img_io, caption)
-        else: self.send_photo(cid, REPORT_COVER_URL, caption)
+        if img_io: self.send_photo("sys_notify", img_io, caption, platform="all")
+        else: self.send_photo("sys_notify", REPORT_COVER_URL, caption, platform="all")
 
     def _push_single_item(self, item):
-        cid = str(cfg.get("tg_chat_id", "wecom_only"))
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         
         try:
@@ -416,15 +437,14 @@ class TelegramBot:
                    f"📝 剧情：{overview}")
         
         img_io = self._download_emby_image(item['Id'], 'Primary')
-        if img_io: self.send_photo(cid, img_io, caption)
-        else: self.send_photo(cid, REPORT_COVER_URL, caption)
+        if img_io: self.send_photo("sys_notify", img_io, caption, platform="all")
+        else: self.send_photo("sys_notify", REPORT_COVER_URL, caption, platform="all")
 
-    # ================= 业务逻辑 =================
+    # ================= 业务逻辑 (保持不变) =================
 
     def push_playback_event(self, data, action="start"):
         if not cfg.get("enable_notify"): return
         try:
-            chat_id = str(cfg.get("tg_chat_id", "wecom_only"))
             user = data.get("User", {})
             item = data.get("Item", {})
             session = data.get("Session", {})
@@ -451,8 +471,8 @@ class TelegramBot:
             img_io = self._download_emby_image(target_id, 'Primary') 
             if not img_io: img_io = self._download_emby_image(item.get("Id"), 'Backdrop')
             
-            if img_io: self.send_photo(chat_id, img_io, msg)
-            else: self.send_message(chat_id, msg)
+            if img_io: self.send_photo("sys_notify", img_io, msg, platform="all")
+            else: self.send_message("sys_notify", msg, platform="all")
         except Exception as e:
             logger.error(f"Playback Push Error: {e}")
 
@@ -485,38 +505,39 @@ class TelegramBot:
                         if "message" in u:
                             cid = str(u["message"]["chat"]["id"]); 
                             if admin_id and cid != admin_id: continue
-                            self._handle_message(u["message"], cid)
+                            text = u["message"].get("text", "")
+                            self._handle_message(text, cid, platform="tg")
                 else: time.sleep(5)
             except: time.sleep(5)
 
-    def _handle_message(self, msg, cid):
-        text = msg.get("text", "").strip()
-        if text.startswith("/search"): self._cmd_search(cid, text)
-        elif text.startswith("/stats"): self._cmd_stats(cid, 'day')
-        elif text.startswith("/weekly"): self._cmd_stats(cid, 'week')
-        elif text.startswith("/monthly"): self._cmd_stats(cid, 'month')
-        elif text.startswith("/yearly"): self._cmd_stats(cid, 'year')
-        elif text.startswith("/now"): self._cmd_now(cid)
-        elif text.startswith("/latest"): self._cmd_latest(cid)
-        elif text.startswith("/recent"): self._cmd_recent(cid)
-        elif text.startswith("/check"): self._cmd_check(cid)
-        elif text.startswith("/help"): self._cmd_help(cid)
+    def _handle_message(self, text, cid, platform="tg"):
+        text = text.strip()
+        if text.startswith("/search"): self._cmd_search(cid, text, platform)
+        elif text.startswith("/stats"): self._cmd_stats(cid, 'day', platform)
+        elif text.startswith("/weekly"): self._cmd_stats(cid, 'week', platform)
+        elif text.startswith("/monthly"): self._cmd_stats(cid, 'month', platform)
+        elif text.startswith("/yearly"): self._cmd_stats(cid, 'year', platform)
+        elif text.startswith("/now"): self._cmd_now(cid, platform)
+        elif text.startswith("/latest"): self._cmd_latest(cid, platform)
+        elif text.startswith("/recent"): self._cmd_recent(cid, platform)
+        elif text.startswith("/check"): self._cmd_check(cid, platform)
+        elif text.startswith("/help"): self._cmd_help(cid, platform)
 
-    def _cmd_latest(self, cid):
+    def _cmd_latest(self, cid, platform):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         try:
             user_id = self._get_admin_id()
-            if not user_id: return self.send_message(cid, "❌ 错误: 无法获取 Emby 用户身份")
+            if not user_id: return self.send_message(cid, "❌ 错误: 无法获取 Emby 用户身份", platform=platform)
 
             fields = "DateCreated,Name,SeriesName,ProductionYear,Type"
             url = f"{host}/emby/Users/{user_id}/Items/Latest"
             params = {"Limit": 8, "MediaTypes": "Video", "Fields": fields, "api_key": key}
             
             res = requests.get(url, params=params, timeout=15)
-            if res.status_code != 200: return self.send_message(cid, f"❌ 查询失败: Emby 返回 HTTP {res.status_code}")
+            if res.status_code != 200: return self.send_message(cid, f"❌ 查询失败: Emby 返回 HTTP {res.status_code}", platform=platform)
 
             items = res.json()
-            if not items: return self.send_message(cid, "📭 最近没有新入库的资源")
+            if not items: return self.send_message(cid, "📭 最近没有新入库的资源", platform=platform)
 
             msg = "🆕 <b>最近入库</b>\n"
             count = 0
@@ -529,9 +550,9 @@ class TelegramBot:
                 type_icon = "🎬" if i.get("Type") == "Movie" else "📺"
                 msg += f"\n{type_icon} {date_str} | {name}"
                 count += 1
-            self.send_message(cid, msg)
+            self.send_message(cid, msg, platform=platform)
         except Exception as e:
-            self.send_message(cid, f"❌ 查询异常: {str(e)}")
+            self.send_message(cid, f"❌ 查询异常: {str(e)}", platform=platform)
 
     def _extract_tech_info(self, item):
         sources = item.get("MediaSources", [])
@@ -563,17 +584,16 @@ class TelegramBot:
                 
         return " | ".join(info_parts) if info_parts else "📼 未知信息"
 
-    def _cmd_search(self, chat_id, text):
+    def _cmd_search(self, chat_id, text, platform):
         parts = text.split(' ', 1)
-        if len(parts) < 2: return self.send_message(chat_id, "🔍 <b>搜索格式错误</b>\n请使用: <code>/search 关键词</code>")
+        if len(parts) < 2: return self.send_message(chat_id, "🔍 <b>搜索格式错误</b>\n请使用: <code>/search 关键词</code>", platform=platform)
         keyword = parts[1].strip()
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         
         try:
             user_id = self._get_admin_id()
-            if not user_id: return self.send_message(chat_id, "❌ 错误: 无法获取 Emby 用户身份")
+            if not user_id: return self.send_message(chat_id, "❌ 错误: 无法获取 Emby 用户身份", platform=platform)
 
-            # 1️⃣ 第一步：只搜基础信息
             fields = "ProductionYear,Type,Id" 
             url = f"{host}/emby/Users/{user_id}/Items"
             params = {
@@ -585,12 +605,11 @@ class TelegramBot:
                 "api_key": key
             }
             res = requests.get(url, params=params, timeout=10)
-            if res.status_code != 200: return self.send_message(chat_id, f"❌ 搜索失败 (HTTP {res.status_code})")
+            if res.status_code != 200: return self.send_message(chat_id, f"❌ 搜索失败 (HTTP {res.status_code})", platform=platform)
             
             items = res.json().get("Items", [])
-            if not items: return self.send_message(chat_id, f"📭 未找到与 <b>{keyword}</b> 相关的资源")
+            if not items: return self.send_message(chat_id, f"📭 未找到与 <b>{keyword}</b> 相关的资源", platform=platform)
             
-            # 2️⃣ 第二步：查询详细信息
             top = items[0]
             type_raw = top.get("Type")
             tech_info_str = "查询中..."; ep_count_str = ""; details = {}
@@ -612,10 +631,8 @@ class TelegramBot:
                     details = requests.get(detail_url, timeout=8).json()
                     tech_info_str = self._extract_tech_info(details)
             except Exception as e:
-                logger.error(f"Detail Fetch Error: {e}")
                 tech_info_str = "暂无技术信息"
 
-            # 3️⃣ 组装消息
             name = details.get("Name", top.get("Name"))
             year = details.get("ProductionYear", top.get("ProductionYear"))
             year_str = f"({year})" if year else ""
@@ -647,14 +664,13 @@ class TelegramBot:
             keyboard = {"inline_keyboard": [[{"text": "▶️ 立即播放", "url": play_url}]]}
             
             img_io = self._download_emby_image(top.get("Id"), 'Primary')
-            if img_io: self.send_photo(chat_id, img_io, caption, reply_markup=keyboard)
-            else: self.send_photo(chat_id, REPORT_COVER_URL, caption, reply_markup=keyboard)
+            if img_io: self.send_photo(chat_id, img_io, caption, reply_markup=keyboard, platform=platform)
+            else: self.send_photo(chat_id, REPORT_COVER_URL, caption, reply_markup=keyboard, platform=platform)
             
         except Exception as e:
-            logger.error(f"Search Error: {e}")
-            self.send_message(chat_id, "❌ 搜索时发生错误")
+            self.send_message(chat_id, "❌ 搜索时发生错误", platform=platform)
 
-    def _cmd_stats(self, chat_id, period='day'):
+    def _cmd_stats(self, chat_id, period='day', platform="tg"):
         where, params = get_base_filter('all') 
         titles = {'day': '今日日报', 'yesterday': '昨日日报', 'week': '本周周报', 'month': '本月月报', 'year': '年度报告'}
         title_cn = titles.get(period, '数据报表')
@@ -694,53 +710,51 @@ class TelegramBot:
             caption = (f"📊 <b>EmbyPulse {title_display}</b>\n───────────────\n📈 <b>数据大盘</b>\n▶️ 总播放量: {plays} 次\n⏱️ 活跃时长: {hours} 小时\n👥 活跃人数: {users} 人\n───────────────\n🏆 <b>活跃用户 Top 5</b>\n{user_str}───────────────\n🔥 <b>热门内容 Top 10</b>\n{top_content}")
             if HAS_PIL:
                 img = report_gen.generate_report('all', period)
-                if img: self.send_photo(chat_id, img, caption)
-                else: self.send_message(chat_id, caption)
-            else: self.send_photo(chat_id, REPORT_COVER_URL, caption)
+                if img: self.send_photo(chat_id, img, caption, platform=platform)
+                else: self.send_message(chat_id, caption, platform=platform)
+            else: self.send_photo(chat_id, REPORT_COVER_URL, caption, platform=platform)
         except Exception as e:
-            logger.error(f"Stats Error: {e}")
-            self.send_message(chat_id, f"❌ 统计失败: 数据库查询错误")
+            self.send_message(chat_id, f"❌ 统计失败: 数据库查询错误", platform=platform)
 
     def _daily_report_task(self):
-        chat_id = str(cfg.get("tg_chat_id", "wecom_only"))
+        chat_id = "sys_notify"
         where = "WHERE DateCreated >= date('now', '-1 day', 'start of day') AND DateCreated < date('now', 'start of day')"
         res = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}")
         count = res[0]['c'] if res else 0
         if count == 0:
             yesterday_str = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
             msg = (f"📅 <b>昨日日报 ({yesterday_str})</b>\n------------------\n😴 昨天服务器静悄悄，大家都去现充了吗？\n\n📊 活跃用户: 0 人\n⏳ 播放时长: 0 分钟")
-            self.send_message(chat_id, msg)
-        else: self._cmd_stats(chat_id, 'yesterday')
+            self.send_message(chat_id, msg, platform="all")
+        else: self._cmd_stats(chat_id, 'yesterday', platform="all")
 
-    def _cmd_now(self, cid):
+    def _cmd_now(self, cid, platform):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         try:
             res = requests.get(f"{host}/emby/Sessions?api_key={key}", timeout=5)
             sessions = [s for s in res.json() if s.get("NowPlayingItem")]
-            if not sessions: return self.send_message(cid, "🟢 当前无播放")
+            if not sessions: return self.send_message(cid, "🟢 当前无播放", platform=platform)
             msg = f"🟢 <b>正在播放 ({len(sessions)})</b>\n"
             for s in sessions:
                 title = s['NowPlayingItem'].get('Name')
                 pct = int(s.get('PlayState', {}).get('PositionTicks', 0) / s['NowPlayingItem'].get('RunTimeTicks', 1) * 100)
                 msg += f"\n👤 <b>{s.get('UserName')}</b> | 🔄 {pct}%\n📺 {title}\n"
-            self.send_message(cid, msg)
-        except: self.send_message(cid, "❌ 连接失败")
+            self.send_message(cid, msg, platform=platform)
+        except: self.send_message(cid, "❌ 连接失败", platform=platform)
 
-    def _cmd_recent(self, cid):
+    def _cmd_recent(self, cid, platform):
         try:
             rows = query_db("SELECT UserId, ItemName, DateCreated FROM PlaybackActivity ORDER BY DateCreated DESC LIMIT 10")
-            if not rows: return self.send_message(cid, "📭 无记录")
+            if not rows: return self.send_message(cid, "📭 无记录", platform=platform)
             msg = "📜 <b>最近播放</b>\n"
             for r in rows:
                 date = r['DateCreated'][:16].replace('T', ' ')
                 name = self._get_username(r['UserId'])
                 msg += f"\n⏰ {date} | {name}\n🎬 {r['ItemName']}\n"
-            self.send_message(cid, msg)
+            self.send_message(cid, msg, platform=platform)
         except Exception as e: 
-            logger.error(f"Recent Error: {e}")
-            self.send_message(cid, f"❌ 查询失败")
+            self.send_message(cid, f"❌ 查询失败", platform=platform)
 
-    def _cmd_check(self, cid):
+    def _cmd_check(self, cid, platform):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         start = time.time()
         try:
@@ -749,11 +763,11 @@ class TelegramBot:
                 info = res.json()
                 local = (info.get('LocalAddresses') or [info.get('LocalAddress')])[0]
                 wan = (info.get('RemoteAddresses') or [info.get('WanAddress')])[0]
-                self.send_message(cid, f"✅ <b>在线</b>\n延迟: {int((time.time()-start)*1000)}ms\n内网: {local}\n外网: {wan}")
-        except: self.send_message(cid, "❌ 离线")
+                self.send_message(cid, f"✅ <b>在线</b>\n延迟: {int((time.time()-start)*1000)}ms\n内网: {local}\n外网: {wan}", platform=platform)
+        except: self.send_message(cid, "❌ 离线", platform=platform)
 
-    def _cmd_help(self, cid):
-        self.send_message(cid, "🤖 /search, /stats, /weekly, /monthly, /now, /latest, /recent, /check")
+    def _cmd_help(self, cid, platform):
+        self.send_message(cid, "🤖 /search, /stats, /weekly, /monthly, /now, /latest, /recent, /check", platform=platform)
 
     def _scheduler_loop(self):
         while self.running:
@@ -781,8 +795,7 @@ class TelegramBot:
         except: pass
     
     def push_now(self, user_id, period, theme):
-        if not cfg.get("tg_chat_id"): return False
-        self._cmd_stats(str(cfg.get("tg_chat_id")), period)
+        self._cmd_stats("sys_notify", period, platform="all")
         return True
 
 bot = TelegramBot()
