@@ -7,6 +7,7 @@ import logging
 import urllib.parse
 import json 
 import re
+import ipaddress
 from collections import defaultdict
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter
@@ -26,6 +27,7 @@ class TelegramBot:
         self.offset = 0
         self.last_check_min = -1
         self.user_cache = {}
+        self.ip_cache = {} # 🔥 新增：IP 地址内存级缓存
         
         self.wecom_token = None
         self.wecom_token_expires = 0
@@ -48,7 +50,7 @@ class TelegramBot:
         self.library_thread = threading.Thread(target=self._library_notify_loop, daemon=True)
         self.library_thread.start()
         
-        print("🤖 Bot Service Started (Dual Channel Interactive Mode - Whitespace UI)")
+        print("🤖 Bot Service Started (Dual Channel Interactive Mode - V3 Ultimate)")
 
     def stop(self): self.running = False
 
@@ -80,16 +82,55 @@ class TelegramBot:
         except: pass
         return self.user_cache.get(user_id, "Unknown User")
 
+    # ================= 🔥 史诗级加强：双引擎 IP 定位与缓存 =================
     def _get_location(self, ip):
-        if not ip or ip in ['127.0.0.1', '::1', '0.0.0.0']: return "本地连接"
+        if not ip: return "未知位置"
+        
+        # 1. 严格过滤局域网/内网 IP (包含 IPv4 和 IPv6)
         try:
-            res = requests.get(f"http://ip-api.com/json/{ip}?lang=zh-CN", timeout=3)
-            if res.status_code == 200:
-                d = res.json()
-                if d.get('status') == 'success':
-                    return f"{d.get('country')} {d.get('regionName')} {d.get('city')}"
+            ip_obj = ipaddress.ip_address(ip)
+            if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
+                return "局域网 (本地直连)"
         except: pass
-        return "未知位置"
+
+        # 2. 引入内存级缓存
+        if ip in self.ip_cache:
+            return self.ip_cache[ip]
+
+        loc = "未知位置"
+        
+        # 3. 引擎 A: 太平洋电脑网 API (对国内极其精准，含 IPv6)
+        try:
+            res = requests.get(f"https://whois.pconline.com.cn/ipJson.jsp?ip={ip}&json=true", timeout=3)
+            res.encoding = 'gbk'
+            if res.status_code == 200:
+                data = res.json()
+                if data.get('addr') and "本机地址" not in data.get('addr'):
+                    loc = data.get('addr').strip()
+        except: pass
+
+        # 4. 引擎 B: ip-api 兜底查国外
+        if loc == "未知位置" or len(loc) < 2:
+            try:
+                res = requests.get(f"http://ip-api.com/json/{ip}?lang=zh-CN", timeout=3)
+                if res.status_code == 200:
+                    d = res.json()
+                    if d.get('status') == 'success':
+                        country = d.get('country', '')
+                        city = d.get('city', '')
+                        if country == "中国":
+                            loc = f"{d.get('regionName', '')} {city}".strip()
+                        else:
+                            loc = f"{country} {city}".strip()
+            except: pass
+
+        # 5. 写入缓存并控制容量 (保留 1000 条防止内存泄漏)
+        if loc and loc != "未知位置":
+            if len(self.ip_cache) > 1000:
+                self.ip_cache.clear()
+            self.ip_cache[ip] = loc
+            
+        return loc if loc else "未知位置"
 
     def _download_emby_image(self, item_id, img_type='Primary', image_tag=None):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -191,7 +232,6 @@ class TelegramBot:
                 title = lines[0]
                 if len(title.encode('utf-8')) > 120: title = title[:35] + "..."
                 
-                # 保留合理的段落换行 (去除多余空行，最多保留1个空行作为段落间隔)
                 raw_desc = '\n'.join(lines[1:]).strip()
                 desc = re.sub(r'\n{3,}', '\n\n', raw_desc)
                 if len(desc.encode('utf-8')) > 500: desc = desc[:150] + "..."
