@@ -31,10 +31,15 @@
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); 
             gap: 1.25rem;
         }
-        /* 🔥 媒体库封面尺寸回调到 300px，不至于过大，保留精致感 */
+        /* 🔥 媒体库封面尺寸微调至 280px，寻找最佳视觉比例 */
         .md-fluid-grid-lib {
             display: grid !important;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); 
+            gap: 1.5rem;
+        }
+        .md-fluid-grid-live {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); 
             gap: 1.5rem;
         }
     }
@@ -68,7 +73,7 @@
             <div class="text-xs md:text-sm text-gray-500 mt-1.5 font-bold uppercase tracking-wider" id="current-date">...</div>
         </div>
         
-        <div class="flex flex-wrap items-center justify-between md:justify-end gap-2 md:gap-3">
+        <div class="flex flex-wrap items-center justify-between md:justify-end gap-3 md:gap-4">
             <div class="relative z-20 w-full sm:w-auto">
                  <select id="dash-user-select" onchange="changeUser()" class="w-full sm:w-56 md:w-64 appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 py-3 pl-5 pr-10 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold transition cursor-pointer hover:border-blue-400">
                     <option value="all">🌏 全站统计数据</option>
@@ -76,35 +81,24 @@
                 <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500"><i class="fa-solid fa-chevron-down text-sm"></i></div>
             </div>
 
-            <div class="flex items-center gap-2">
-                <select id="ttl-select" onchange="updateTTL(this.value)" class="appearance-none px-3 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-600 dark:text-gray-300 shadow-sm outline-none cursor-pointer hover:border-blue-400 transition-all">
-                    <option value="3600">1h</option>
-                    <option value="43200">12h</option>
-                    <option value="86400">1d</option>
-                </select>
-                <button onclick="fetchCalendar(true)" id="refresh-btn" class="p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-600 dark:text-gray-300 shadow-sm transition-all active:scale-90 hover:text-blue-500">
-                    <i class="fa-solid fa-arrows-rotate"></i>
+            <div class="relative z-50">
+                <button onclick="toggleLiveDropdown()" id="live-btn" class="relative p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-600 dark:text-gray-300 shadow-sm hover:text-red-500 transition-all active:scale-90">
+                    <i class="fa-solid fa-satellite-dish"></i>
+                    <span id="live-badge" class="hidden absolute -top-1.5 -right-1.5 flex h-4 w-4">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-[9px] text-white items-center justify-center font-bold" id="live-count">0</span>
+                    </span>
                 </button>
                 
-                <div class="relative z-50">
-                    <button onclick="toggleLiveDropdown()" id="live-btn" class="relative p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-600 dark:text-gray-300 shadow-sm hover:text-red-500 transition-all active:scale-90">
-                        <i class="fa-solid fa-satellite-dish"></i>
-                        <span id="live-badge" class="hidden absolute -top-1.5 -right-1.5 flex h-4 w-4">
-                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                            <span class="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-[9px] text-white items-center justify-center font-bold" id="live-count">0</span>
-                        </span>
-                    </button>
-                    
-                    <div id="live-dropdown" class="hidden absolute right-0 mt-3 w-80 sm:w-96 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden transform opacity-0 scale-95 transition-all duration-200 origin-top-right">
-                        <div class="bg-gray-50 dark:bg-gray-900/50 px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
-                            <h4 class="text-sm font-black text-gray-800 dark:text-gray-200 tracking-wider flex items-center">
-                                <span class="w-1.5 h-1.5 rounded-full bg-red-500 mr-2 animate-pulse"></span>正在热播
-                            </h4>
-                            <span class="text-xs text-gray-500 font-bold" id="live-status-text">空闲中</span>
-                        </div>
-                        <div id="live-dropdown-list" class="max-h-[60vh] overflow-y-auto custom-scroll p-2 space-y-1">
-                            <div class="py-10 text-center text-xs text-gray-400 italic font-medium">当前无人观看</div>
-                        </div>
+                <div id="live-dropdown" class="hidden absolute right-0 mt-3 w-80 sm:w-96 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden transform opacity-0 scale-95 transition-all duration-200 origin-top-right">
+                    <div class="bg-gray-50 dark:bg-gray-900/50 px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                        <h4 class="text-sm font-black text-gray-800 dark:text-gray-200 tracking-wider flex items-center">
+                            <span class="w-1.5 h-1.5 rounded-full bg-red-500 mr-2 animate-pulse"></span>正在热播
+                        </h4>
+                        <span class="text-xs text-gray-500 font-bold" id="live-status-text">空闲中</span>
+                    </div>
+                    <div id="live-dropdown-list" class="max-h-[60vh] overflow-y-auto custom-scroll p-2 space-y-1">
+                        <div class="py-10 text-center text-xs text-gray-400 italic font-medium">当前无人观看</div>
                     </div>
                 </div>
             </div>
@@ -253,7 +247,7 @@
         window.open(targetUrl, '_blank');
     }
 
-    // 🔥 正在热播的弹窗 Toggle 逻辑
+    // 正在热播下拉菜单控制
     function toggleLiveDropdown() {
         const dropdown = document.getElementById('live-dropdown');
         if (dropdown.classList.contains('hidden')) {
@@ -330,7 +324,7 @@
         setInterval(fetchLive, 10000);
     }
 
-    // 🔥 重写的 fetchLive：数据将渲染到右上角的下拉悬浮窗中
+    // 🔥 正在热播数据：渲染到右上角悬浮窗内
     async function fetchLive() {
         try {
             const res = await fetch('/api/stats/live');
@@ -341,7 +335,6 @@
             const statusText = document.getElementById('live-status-text');
 
             if(json.status === 'success' && json.data.length > 0) {
-                // 激活指示器
                 badge.classList.remove('hidden');
                 countText.innerText = json.data.length;
                 statusText.innerText = `${json.data.length} 个设备同时在线`;
@@ -351,7 +344,6 @@
                     const item = s.NowPlayingItem || {};
                     const playState = s.PlayState || {};
                     const targetId = item.SeriesId || item.ParentId || s.ItemId || item.Id;
-                    // 使用 primary 竖版海报更适合紧凑列表
                     const imgUrl = `/api/proxy/image/${targetId}/primary`; 
                     const isTranscoding = playState.IsTranscoding || s.IsTranscoding;
                     const transcodeBadge = isTranscoding ? `<span class="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-400 text-[9px] font-black px-1.5 py-0.5 rounded tracking-widest border border-yellow-200 dark:border-yellow-700/50">转码</span>` : `<span class="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400 text-[9px] font-black px-1.5 py-0.5 rounded tracking-widest border border-green-200 dark:border-green-700/50">直通</span>`;
@@ -441,12 +433,13 @@
                 let html = '';
                 json.data.forEach(lib => {
                     const imgUrl = `/api/proxy/image/${lib.Id}/primary`; 
-                    // 🔥 彻底重构媒体库卡片 UI：移除过渡黑框，改为淡色蒙层和绝对居中文字
+                    // 🔥 彻底去除背景遮罩，文字放在底部正中间，并加上清晰的深色文字阴影确保能看清
                     html += `
-                    <div onclick="jumpToLibrary('${lib.Id}')" class="relative w-56 sm:w-64 md:w-full aspect-video flex-shrink-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-1 hover:ring-2 hover:ring-indigo-400/50 transition-all duration-300 group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
+                    <div onclick="jumpToLibrary('${lib.Id}')" class="relative w-52 sm:w-60 md:w-full aspect-video flex-shrink-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-1 hover:ring-2 hover:ring-indigo-400/50 transition-all duration-300 group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
                         <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
-                        <div class="absolute inset-0 bg-black/40 group-hover:bg-black/50 transition-colors duration-300 flex items-center justify-center p-4">
-                            <h4 class="text-white font-black text-lg md:text-xl drop-shadow-md truncate w-full text-center tracking-widest transform group-hover:scale-105 transition-transform duration-300">${lib.Name}</h4>
+                        <div class="absolute bottom-0 inset-x-0 p-3 pb-4 flex justify-center items-end bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                        <div class="absolute bottom-0 inset-x-0 p-3 pb-4 flex justify-center items-end">
+                            <h4 class="text-white font-black text-sm md:text-[17px] truncate w-full text-center tracking-widest transform group-hover:scale-105 transition-transform duration-300" style="text-shadow: 0px 2px 6px rgba(0,0,0,0.9), 0px 0px 2px rgba(0,0,0,1);">${lib.Name}</h4>
                         </div>
                     </div>`;
                 });
