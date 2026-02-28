@@ -5,3 +5,4 @@ jinja2
 python-multipart
 itsdangerous
 aiofiles
+pycryptodome==3.20.0

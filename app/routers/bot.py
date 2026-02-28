@@ -8,6 +8,10 @@ import base64
 import struct
 import hashlib
 import xml.etree.ElementTree as ET
+import logging
+
+logger = logging.getLogger("uvicorn")
+
 try:
     from Crypto.Cipher import AES
 except ImportError:
@@ -28,7 +32,6 @@ def api_save_bot_settings(data: BotSettingsModel, request: Request):
     cfg.set("enable_notify", data.enable_notify)
     cfg.set("enable_library_notify", data.enable_library_notify) 
     
-    # 🔥 保存所有企微高级参数
     cfg.set("wecom_corpid", data.wecom_corpid)
     cfg.set("wecom_corpsecret", data.wecom_corpsecret)
     cfg.set("wecom_agentid", data.wecom_agentid)
@@ -63,7 +66,7 @@ def api_test_wecom(request: Request):
         return {"status": "error", "message": "请填写完整的企业微信基础配置"}
     try:
         token_res = requests.get(f"{proxy_url}/cgi-bin/gettoken?corpid={corpid}&corpsecret={corpsecret}", timeout=5).json()
-        if token_res.get("errcode") != 0: return {"status": "error", "message": f"Token 失败: {token_res.get('errmsg')}"}
+        if token_res.get("errcode") != 0: return {"status": "error", "message": f"Token 获取失败: {token_res.get('errmsg')}"}
         access_token = token_res["access_token"]
         msg_res = requests.post(
             f"{proxy_url}/cgi-bin/message/send?access_token={access_token}",
@@ -83,34 +86,26 @@ def get_playback_url(item_id):
 
 @router.post("/api/bot/webhook/{token}")
 async def telegram_webhook(token: str, request: Request):
-    if token != cfg.get("tg_bot_token"):
-        return {"status": "error", "message": "Invalid Token"}
-        
+    if token != cfg.get("tg_bot_token"): return {"status": "error", "message": "Invalid Token"}
     data = await request.json()
-    
     if "message" in data and "text" in data["message"]:
         chat_id = data["message"]["chat"]["id"]
         text = data["message"]["text"]
-        
         if text.startswith("/search"):
             keyword = text.replace("/search", "").strip()
             if not keyword:
                 send_tg_msg(chat_id, "🔍 请输入关键词，例如: /search 你的名字")
             else:
                 items = search_emby(keyword)
-                if not items:
-                    send_tg_msg(chat_id, "TxT 未找到相关资源")
+                if not items: send_tg_msg(chat_id, "TxT 未找到相关资源")
                 else:
                     msg = f"🔍 搜索结果: {keyword}\n\n"
                     for item in items[:5]:
                         link = get_playback_url(item['Id'])
-                        msg += f"🎬 <b>{item['Name']}</b> ({item.get('ProductionYear', 'N/A')})\n"
-                        msg += f"🔗 <a href='{link}'>点击播放</a>\n\n"
+                        msg += f"🎬 <b>{item['Name']}</b> ({item.get('ProductionYear', 'N/A')})\n🔗 <a href='{link}'>点击播放</a>\n\n"
                     send_tg_msg(chat_id, msg)
-                    
         elif text == "/start":
             send_tg_msg(chat_id, "👋 欢迎使用 EmbyPulse 机器人！\n支持指令:\n/search <关键词> - 搜索资源")
-            
     return {"status": "success"}
 
 def search_emby(keyword):
@@ -125,14 +120,17 @@ def search_emby(keyword):
 def send_tg_msg(chat_id, text):
     token = cfg.get("tg_bot_token"); proxy = cfg.get("proxy_url")
     proxies = {"http": proxy, "https": proxy} if proxy else None
-    try:
-        requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json={"chat_id": chat_id,"text": text,"parse_mode": "HTML"}, proxies=proxies, timeout=10)
+    try: requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json={"chat_id": chat_id,"text": text,"parse_mode": "HTML"}, proxies=proxies, timeout=10)
     except: pass
 
-# ================= 🔥 企微 API 回调交互 (解密与响应) =================
+# ================= 🔥 企微 API 回调交互 (增强查错与防护版) =================
 def decrypt_wecom_data(encrypt_msg):
-    if not AES: raise Exception("未安装 pycryptodome 库，无法解密企微消息。")
-    aeskey = cfg.get("wecom_aeskey")
+    if not AES: 
+        raise Exception("环境缺少 pycryptodome 依赖，请在 requirements.txt 中添加并重新 build 镜像")
+    aeskey = cfg.get("wecom_aeskey") or ""
+    if not aeskey: 
+        raise Exception("系统未配置 wecom_aeskey")
+    
     aes_key_bytes = base64.b64decode(aeskey + "=")
     cipher = AES.new(aes_key_bytes, AES.MODE_CBC, aes_key_bytes[:16])
     decrypted = cipher.decrypt(base64.b64decode(encrypt_msg))
@@ -142,7 +140,7 @@ def decrypt_wecom_data(encrypt_msg):
     return decrypted[20:20+msg_len].decode('utf-8')
 
 def check_wecom_signature(msg_signature, timestamp, nonce, encrypt_msg):
-    token = cfg.get("wecom_token")
+    token = cfg.get("wecom_token") or ""
     sort_list = [token, timestamp, nonce, encrypt_msg]
     sort_list.sort()
     sha = hashlib.sha1()
@@ -152,11 +150,19 @@ def check_wecom_signature(msg_signature, timestamp, nonce, encrypt_msg):
 @router.get("/api/bot/wecom_webhook")
 async def wecom_webhook_get(msg_signature: str = "", timestamp: str = "", nonce: str = "", echostr: str = ""):
     try:
+        # 1. 验证签名
         if not check_wecom_signature(msg_signature, timestamp, nonce, echostr):
+            logger.error("WeCom Webhook: 签名校验不通过 (可能是 Token 不匹配)")
             return "Signature Error"
+        
+        # 2. 解密字符串
         msg = decrypt_wecom_data(echostr)
+        logger.info(f"WeCom Webhook: 验证成功，准备向企微放行")
         return Response(content=msg, media_type="text/plain")
-    except Exception as e: return str(e)
+        
+    except Exception as e: 
+        logger.error(f"WeCom Webhook 解析崩溃: {str(e)}")
+        return str(e)
 
 @router.post("/api/bot/wecom_webhook")
 async def wecom_webhook_post(request: Request, msg_signature: str = "", timestamp: str = "", nonce: str = ""):
@@ -175,10 +181,8 @@ async def wecom_webhook_post(request: Request, msg_signature: str = "", timestam
         msg_type = msg_tree.find("MsgType").text
         
         command_text = ""
-        # 接收文本指令 (例如: /search 蝙蝠侠)
         if msg_type == "text":
             command_text = msg_tree.find("Content").text
-        # 接收菜单点击事件
         elif msg_type == "event" and msg_tree.find("Event").text == "click":
             command_text = msg_tree.find("EventKey").text
             
@@ -187,4 +191,5 @@ async def wecom_webhook_post(request: Request, msg_signature: str = "", timestam
             
         return Response(content="success", media_type="text/plain")
     except Exception as e:
+        logger.error(f"WeCom Post 解析崩溃: {str(e)}")
         return "Error"
