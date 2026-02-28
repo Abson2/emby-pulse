@@ -1,52 +1,81 @@
 {% extends "layout.html" %}
-{% block title %}机器人助手 - EmbyPulse{% endblock %}
+{% block title %}消息通知 - EmbyPulse{% endblock %}
 {% block content %}
-<div class="max-w-4xl mx-auto w-full px-4 md:px-8 py-8 pb-24">
+<div class="max-w-6xl mx-auto w-full px-4 md:px-8 py-8 pb-24">
     
     <div class="flex items-center justify-between mb-8">
         <div>
-            <h1 class="text-2xl font-black text-gray-900 dark:text-white">机器人助手</h1>
-            <p class="text-xs text-gray-500 mt-1">Telegram 远程管理、状态监控与新资源通知</p>
+            <h1 class="text-2xl font-black text-gray-900 dark:text-white">通知与机器人</h1>
+            <p class="text-xs text-gray-500 mt-1">支持 Telegram 与企业微信双通道同步推送</p>
         </div>
         <button onclick="saveConfig()" id="save-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-200 dark:shadow-none transition flex items-center">
-            <i class="fa-solid fa-save mr-2"></i> 保存配置
+            <i class="fa-solid fa-save mr-2"></i> 保存所有配置
         </button>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6">
-            <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider mb-4 flex items-center">
-                <i class="fa-brands fa-telegram text-blue-500 mr-2"></i> 连接设置
-            </h3>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">Bot Token</label>
-                    <input type="password" id="tg_bot_token" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
-                    <p class="text-[10px] text-gray-400 mt-1">从 @BotFather 获取机器人身份令牌</p>
+        <div class="space-y-6">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider flex items-center">
+                        <i class="fa-brands fa-telegram text-blue-500 mr-2"></i> Telegram 机器人
+                    </h3>
+                    <button onclick="testConnection()" id="test-btn" class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 px-3 py-1.5 rounded-lg font-bold text-[10px] transition border border-blue-100 dark:border-blue-800">
+                        测试连接
+                    </button>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">Admin Chat ID</label>
-                    <div class="flex gap-2">
-                        <input type="text" id="tg_chat_id" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition" placeholder="123456789">
-                        <button onclick="testConnection()" id="test-btn" class="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 px-4 rounded-lg font-bold text-xs whitespace-nowrap transition border border-gray-200 dark:border-gray-600">
-                            测试连接
-                        </button>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">Bot Token</label>
+                        <input type="password" id="tg_bot_token" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
+                        <p class="text-[10px] text-gray-400 mt-1">从 @BotFather 获取机器人身份令牌</p>
                     </div>
-                    <p class="text-[10px] text-gray-400 mt-1">用于接收通知的 Telegram ID (仅此 ID 有权使用指令)</p>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">Admin Chat ID</label>
+                        <input type="text" id="tg_chat_id" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white transition" placeholder="123456789">
+                        <p class="text-[10px] text-gray-400 mt-1">用于接收通知的 Telegram ID (仅此 ID 有权使用指令)</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider flex items-center">
+                        <i class="fa-solid fa-building text-green-500 mr-2"></i> 企业微信 (自建应用)
+                    </h3>
+                    <button onclick="testWeComConnection()" id="test-wecom-btn" class="bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 hover:bg-green-100 px-3 py-1.5 rounded-lg font-bold text-[10px] transition border border-green-100 dark:border-green-800">
+                        测试连接
+                    </button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">企业 ID (CorpID)</label>
+                        <input type="text" id="wecom_corpid" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent dark:text-white transition" placeholder="wwxxxxxxxxx">
+                    </div>
+                    <div class="flex gap-4">
+                        <div class="flex-1">
+                            <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">应用 ID (AgentID)</label>
+                            <input type="text" id="wecom_agentid" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent dark:text-white transition" placeholder="1000002">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-2">应用 Secret (CorpSecret)</label>
+                        <input type="password" id="wecom_corpsecret" class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent dark:text-white transition" placeholder="获取的 Secret">
+                    </div>
                 </div>
             </div>
         </div>
 
         <div class="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6 h-fit">
             <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider mb-4 flex items-center">
-                <i class="fa-solid fa-toggle-on text-green-500 mr-2"></i> 功能开关
+                <i class="fa-solid fa-toggle-on text-purple-500 mr-2"></i> 功能开关
             </h3>
             
             <div class="flex items-center justify-between py-3 border-b border-gray-50 dark:border-gray-700/50">
                 <div>
-                    <h4 class="text-sm font-bold text-gray-800 dark:text-gray-200">启用机器人</h4>
-                    <p class="text-xs text-gray-400 mt-0.5">开启后可使用指令查询数据</p>
+                    <h4 class="text-sm font-bold text-gray-800 dark:text-gray-200">启用机器人底层引擎</h4>
+                    <p class="text-[10px] text-gray-400 mt-0.5">总开关：必须开启，通知才会生效</p>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" id="enable_bot" class="sr-only peer">
@@ -57,7 +86,7 @@
             <div class="flex items-center justify-between py-3 border-b border-gray-50 dark:border-gray-700/50">
                 <div>
                     <h4 class="text-sm font-bold text-gray-800 dark:text-gray-200">播放状态通知</h4>
-                    <p class="text-xs text-gray-400 mt-0.5">有人开始/停止播放时发送即时消息</p>
+                    <p class="text-[10px] text-gray-400 mt-0.5">有人开始/停止播放时发送即时消息</p>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" id="enable_notify" class="sr-only peer">
@@ -69,7 +98,7 @@
                 <div class="flex items-center justify-between">
                     <div>
                         <h4 class="text-sm font-bold text-gray-800 dark:text-gray-200">新资源入库通知</h4>
-                        <p class="text-xs text-gray-400 mt-0.5">Emby 添加新内容时自动发送海报</p>
+                        <p class="text-[10px] text-gray-400 mt-0.5">Emby 添加新内容时自动发送海报</p>
                     </div>
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" id="enable_library_notify" class="sr-only peer" onchange="toggleWebhookInfo(this)">
@@ -106,7 +135,7 @@
 
     <div class="mt-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6">
         <h3 class="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider mb-4">
-            <i class="fa-solid fa-terminal text-gray-400 mr-2"></i> 机器人指令集
+            <i class="fa-solid fa-terminal text-gray-400 mr-2"></i> 机器人指令集 (仅支持 Telegram)
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
@@ -167,8 +196,16 @@
             const json = await res.json();
             if(json.status === 'success') {
                 const d = json.data;
+                // TG 设置
                 document.getElementById('tg_bot_token').value = d.tg_bot_token || '';
                 document.getElementById('tg_chat_id').value = d.tg_chat_id || '';
+                
+                // 企业微信设置
+                document.getElementById('wecom_corpid').value = d.wecom_corpid || '';
+                document.getElementById('wecom_corpsecret').value = d.wecom_corpsecret || '';
+                document.getElementById('wecom_agentid').value = d.wecom_agentid || '';
+
+                // 开关状态
                 document.getElementById('enable_bot').checked = d.enable_bot || false;
                 document.getElementById('enable_notify').checked = d.enable_notify || false;
                 
@@ -208,6 +245,9 @@
         const payload = {
             tg_bot_token: document.getElementById('tg_bot_token').value,
             tg_chat_id: document.getElementById('tg_chat_id').value,
+            wecom_corpid: document.getElementById('wecom_corpid').value,
+            wecom_corpsecret: document.getElementById('wecom_corpsecret').value,
+            wecom_agentid: document.getElementById('wecom_agentid').value,
             enable_bot: document.getElementById('enable_bot').checked,
             enable_notify: document.getElementById('enable_notify').checked,
             enable_library_notify: document.getElementById('enable_library_notify').checked
@@ -242,6 +282,21 @@
             const res = await fetch('/api/bot/test', { method: 'POST' });
             const json = await res.json();
             alert(json.status === 'success' ? '✅ 测试消息已成功发送，请查收 Telegram！' : '❌ 发送失败: ' + json.message);
+        } catch(e) { alert('❌ 网络错误'); }
+        finally { btn.innerText = '测试连接'; btn.disabled = false; }
+    }
+
+    async function testWeComConnection() {
+        const btn = document.getElementById('test-wecom-btn');
+        btn.innerText = '发送中...';
+        btn.disabled = true;
+        
+        await saveConfig();
+
+        try {
+            const res = await fetch('/api/bot/test_wecom', { method: 'POST' });
+            const json = await res.json();
+            alert(json.status === 'success' ? '✅ 测试消息已成功发送，请查收企业微信！' : '❌ 发送失败: ' + json.message);
         } catch(e) { alert('❌ 网络错误'); }
         finally { btn.innerText = '测试连接'; btn.disabled = false; }
     }

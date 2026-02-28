@@ -21,6 +21,10 @@ class BotSettingsModel(BaseModel):
     enable_bot: bool
     enable_notify: bool
     enable_library_notify: Optional[bool] = False
+    # 🔥 新增：企业微信配置字段
+    wecom_corpid: Optional[str] = ""
+    wecom_corpsecret: Optional[str] = ""
+    wecom_agentid: Optional[str] = ""
 
 class PushRequestModel(BaseModel):
     user_id: str

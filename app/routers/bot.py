@@ -15,10 +15,16 @@ def api_get_bot_settings(request: Request):
 @router.post("/api/bot/settings")
 def api_save_bot_settings(data: BotSettingsModel, request: Request):
     if not request.session.get("user"): return {"status": "error"}
-    cfg.set("tg_bot_token", data.tg_bot_token); cfg.set("tg_chat_id", data.tg_chat_id)
+    cfg.set("tg_bot_token", data.tg_bot_token)
+    cfg.set("tg_chat_id", data.tg_chat_id)
     cfg.set("enable_bot", data.enable_bot)
     cfg.set("enable_notify", data.enable_notify)
     cfg.set("enable_library_notify", data.enable_library_notify) 
+    
+    # 🔥 新增：保存企业微信配置
+    cfg.set("wecom_corpid", data.wecom_corpid)
+    cfg.set("wecom_corpsecret", data.wecom_corpsecret)
+    cfg.set("wecom_agentid", data.wecom_agentid)
     
     bot.stop()
     if data.enable_bot: threading.Timer(1.0, bot.start).start()
@@ -34,6 +40,32 @@ def api_test_bot(request: Request):
         res = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json={"chat_id": chat_id, "text": "🎉 测试消息"}, proxies=proxies, timeout=10)
         return {"status": "success"} if res.status_code == 200 else {"status": "error", "message": f"API Error: {res.text}"}
     except Exception as e: return {"status": "error", "message": str(e)}
+
+# 🔥 新增：企业微信专用测试接口
+@router.post("/api/bot/test_wecom")
+def api_test_wecom(request: Request):
+    if not request.session.get("user"): return {"status": "error"}
+    corpid = cfg.get("wecom_corpid")
+    corpsecret = cfg.get("wecom_corpsecret")
+    agentid = cfg.get("wecom_agentid")
+    if not corpid or not corpsecret or not agentid:
+        return {"status": "error", "message": "请先填写完整的企业微信配置并保存"}
+    try:
+        token_res = requests.get(f"https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={corpid}&corpsecret={corpsecret}", timeout=5).json()
+        if token_res.get("errcode") != 0: return {"status": "error", "message": f"Token 失败: {token_res.get('errmsg')}"}
+        access_token = token_res["access_token"]
+        msg_res = requests.post(
+            f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={access_token}",
+            json={
+                "touser": "@all",
+                "msgtype": "markdown",
+                "agentid": int(agentid),
+                "markdown": {"content": "🎉 <font color=\"info\">企业微信通道测试成功！</font>\n\n> EmbyPulse 已成功接入此通道。"}
+            }, timeout=10).json()
+        if msg_res.get("errcode") == 0: return {"status": "success"}
+        else: return {"status": "error", "message": f"发送失败: {msg_res.get('errmsg')}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 # 🔥 新增辅助函数
 def get_playback_url(item_id):

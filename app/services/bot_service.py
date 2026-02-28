@@ -26,14 +26,21 @@ class TelegramBot:
         self.last_check_min = -1
         self.user_cache = {}
         
+        # 🔥 新增：企业微信 Token 缓存
+        self.wecom_token = None
+        self.wecom_token_expires = 0
+        
     def start(self):
         if self.running: return
-        if not cfg.get("tg_bot_token"): return
+        # 🔥 修改：只要配置了TG或配置了企业微信，就启动服务
+        if not cfg.get("tg_bot_token") and not cfg.get("wecom_corpid"): return
         self.running = True
         self._set_commands()
         
-        self.poll_thread = threading.Thread(target=self._polling_loop, daemon=True)
-        self.poll_thread.start()
+        # 🔥 仅当配置了TG时，才启动TG独有的长轮询监听指令
+        if cfg.get("tg_bot_token"):
+            self.poll_thread = threading.Thread(target=self._polling_loop, daemon=True)
+            self.poll_thread.start()
         
         self.schedule_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
         self.schedule_thread.start()
@@ -41,7 +48,7 @@ class TelegramBot:
         self.library_thread = threading.Thread(target=self._library_notify_loop, daemon=True)
         self.library_thread.start()
         
-        print("🤖 Bot Service Started (Cluster Mode - Native)")
+        print("🤖 Bot Service Started (Dual Channel: TG / WeCom)")
 
     def stop(self): self.running = False
 
@@ -99,33 +106,105 @@ class TelegramBot:
         except: pass
         return None
 
-    def send_photo(self, chat_id, photo_io, caption, parse_mode="HTML", reply_markup=None):
-        token = cfg.get("tg_bot_token")
-        if not token: return
+    # ================= 🔥 新增：企业微信核心发送引擎 =================
+    
+    def _get_wecom_token(self):
+        corpid = cfg.get("wecom_corpid"); corpsecret = cfg.get("wecom_corpsecret")
+        if not corpid or not corpsecret: return None
+        if self.wecom_token and time.time() < self.wecom_token_expires:
+            return self.wecom_token
         try:
-            url = f"https://api.telegram.org/bot{token}/sendPhoto"
-            data = {"chat_id": chat_id, "caption": caption, "parse_mode": parse_mode}
-            if reply_markup: data["reply_markup"] = json.dumps(reply_markup)
-            if isinstance(photo_io, str):
-                data['photo'] = photo_io
-                requests.post(url, data=data, proxies=self._get_proxies(), timeout=20)
-            else:
-                photo_io.seek(0)
-                files = {"photo": ("image.jpg", photo_io, "image/jpeg")}
-                requests.post(url, data=data, files=files, proxies=self._get_proxies(), timeout=30)
-        except Exception as e: 
-            logger.error(f"Send Photo Error: {e}")
-            self.send_message(chat_id, caption)
+            res = requests.get(f"https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={corpid}&corpsecret={corpsecret}", timeout=5).json()
+            if res.get("errcode") == 0:
+                self.wecom_token = res["access_token"]
+                self.wecom_token_expires = time.time() + res["expires_in"] - 60
+                return self.wecom_token
+        except Exception as e: logger.error(f"WeCom Token Error: {e}")
+        return None
+
+    def _html_to_wecom_md(self, html_text):
+        """将 TG 的 HTML 转为企微 Markdown"""
+        text = html_text.replace("<b>", "**").replace("</b>", "**")
+        text = text.replace("<i>", "").replace("</i>", "")
+        text = text.replace("<code>", "`").replace("</code>", "`")
+        text = text.replace("新入库", "<font color=\"info\">新入库</font>")
+        text = text.replace("开始播放", "<font color=\"info\">开始播放</font>")
+        text = text.replace("停止播放", "<font color=\"warning\">停止播放</font>")
+        return text
+
+    def _send_wecom_message(self, text):
+        token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
+        if not token or not agentid: return
+        try:
+            url = f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={token}"
+            requests.post(url, json={"touser": "@all", "msgtype": "markdown", "agentid": int(agentid), "markdown": {"content": self._html_to_wecom_md(text)}}, timeout=10)
+        except Exception as e: logger.error(f"WeCom Text Error: {e}")
+
+    def _send_wecom_photo(self, photo_bytes, text):
+        token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
+        if not token or not agentid: return
+        try:
+            # 上传临时素材
+            upload_url = f"https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token={token}&type=image"
+            files = {"media": ("image.jpg", photo_bytes, "image/jpeg")}
+            upload_res = requests.post(upload_url, files=files, timeout=15).json()
+            media_id = upload_res.get("media_id")
+            
+            if media_id:
+                send_img_url = f"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={token}"
+                requests.post(send_img_url, json={"touser": "@all", "msgtype": "image", "agentid": int(agentid), "image": {"media_id": media_id}}, timeout=10)
+            if text: self._send_wecom_message(text)
+        except Exception as e:
+            logger.error(f"WeCom Photo Error: {e}")
+            if text: self._send_wecom_message(text)
+
+    # ================= 🔥 升级：底层发送方法（双通道分发） =================
+
+    def send_photo(self, chat_id, photo_io, caption, parse_mode="HTML", reply_markup=None):
+        # 提取字节流，避免流被一次性消耗
+        photo_bytes = None
+        if isinstance(photo_io, str):
+            try: photo_bytes = requests.get(photo_io, timeout=10).content
+            except: pass
+        else:
+            photo_io.seek(0)
+            photo_bytes = photo_io.read()
+
+        # 1. 企微通道
+        if cfg.get("wecom_corpid"):
+            if photo_bytes: threading.Thread(target=self._send_wecom_photo, args=(photo_bytes, caption)).start()
+            else: threading.Thread(target=self._send_wecom_message, args=(caption,)).start()
+
+        # 2. TG通道
+        token = cfg.get("tg_bot_token")
+        if token and chat_id and chat_id != "wecom_only":
+            try:
+                url = f"https://api.telegram.org/bot{token}/sendPhoto"
+                data = {"chat_id": chat_id, "caption": caption, "parse_mode": parse_mode}
+                if reply_markup: data["reply_markup"] = json.dumps(reply_markup)
+                if photo_bytes:
+                    files = {"photo": ("image.jpg", io.BytesIO(photo_bytes), "image/jpeg")}
+                    requests.post(url, data=data, files=files, proxies=self._get_proxies(), timeout=30)
+                else:
+                    self.send_message(chat_id, caption)
+            except Exception as e: 
+                logger.error(f"TG Send Photo Error: {e}")
+                self.send_message(chat_id, caption)
 
     def send_message(self, chat_id, text, parse_mode="HTML"):
-        token = cfg.get("tg_bot_token")
-        if not token: return
-        try:
-            url = f"https://api.telegram.org/bot{token}/sendMessage"
-            requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode}, proxies=self._get_proxies(), timeout=10)
-        except Exception as e: logger.error(f"Send Message Error: {e}")
+        # 1. 企微通道
+        if cfg.get("wecom_corpid"):
+            threading.Thread(target=self._send_wecom_message, args=(text,)).start()
 
-    # ================= 🚀 修复后的入库逻辑 (时间聚类算法 - 原生版) =================
+        # 2. TG通道
+        token = cfg.get("tg_bot_token")
+        if token and chat_id and chat_id != "wecom_only":
+            try:
+                url = f"https://api.telegram.org/bot{token}/sendMessage"
+                requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode}, proxies=self._get_proxies(), timeout=10)
+            except Exception as e: logger.error(f"TG Send Message Error: {e}")
+
+    # ================= 🚀 以下是你原封不动的业务代码 =================
     
     def add_library_task(self, item):
         with self.library_lock:
@@ -158,7 +237,7 @@ class TelegramBot:
                 time.sleep(5)
 
     def _process_library_group(self, items):
-        if not cfg.get("enable_library_notify") or not cfg.get("tg_chat_id"): return
+        if not cfg.get("enable_library_notify"): return
         
         groups = defaultdict(list)
         for item in items:
@@ -258,7 +337,7 @@ class TelegramBot:
             return []
 
     def _push_episode_group(self, series_id, episodes):
-        cid = str(cfg.get("tg_chat_id"))
+        cid = str(cfg.get("tg_chat_id", "wecom_only"))
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         admin_id = self._get_admin_id()
         
@@ -305,7 +384,7 @@ class TelegramBot:
         else: self.send_photo(cid, REPORT_COVER_URL, caption)
 
     def _push_single_item(self, item):
-        cid = str(cfg.get("tg_chat_id"))
+        cid = str(cfg.get("tg_chat_id", "wecom_only"))
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         
         try:
@@ -340,12 +419,12 @@ class TelegramBot:
         if img_io: self.send_photo(cid, img_io, caption)
         else: self.send_photo(cid, REPORT_COVER_URL, caption)
 
-    # ================= 业务逻辑 (保持不变) =================
+    # ================= 业务逻辑 =================
 
     def push_playback_event(self, data, action="start"):
-        if not cfg.get("enable_notify") or not cfg.get("tg_chat_id"): return
+        if not cfg.get("enable_notify"): return
         try:
-            chat_id = str(cfg.get("tg_chat_id"))
+            chat_id = str(cfg.get("tg_chat_id", "wecom_only"))
             user = data.get("User", {})
             item = data.get("Item", {})
             session = data.get("Session", {})
@@ -381,6 +460,7 @@ class TelegramBot:
 
     def _set_commands(self):
         token = cfg.get("tg_bot_token")
+        if not token: return
         cmds = [{"command": "search", "description": "🔍 搜索资源"},
                 {"command": "stats", "description": "📊 今日日报"},
                 {"command": "weekly", "description": "📅 本周周报"},
@@ -561,7 +641,6 @@ class TelegramBot:
                     sub_type = "📺" if sub.get("Type") == "Series" else "🎬"
                     caption += f"{sub_type} {sub.get('Name')} {sub_year}\n"
             
-            # 🔥🔥🔥 核心修复：优先使用 emby_public_url
             base_url = cfg.get("emby_public_url") or cfg.get("emby_public_host") or host
             if base_url.endswith('/'): base_url = base_url[:-1]
             play_url = f"{base_url}/web/index.html#!/item?id={top.get('Id')}&serverId={top.get('ServerId')}"
@@ -623,8 +702,7 @@ class TelegramBot:
             self.send_message(chat_id, f"❌ 统计失败: 数据库查询错误")
 
     def _daily_report_task(self):
-        chat_id = str(cfg.get("tg_chat_id"))
-        if not chat_id: return
+        chat_id = str(cfg.get("tg_chat_id", "wecom_only"))
         where = "WHERE DateCreated >= date('now', '-1 day', 'start of day') AND DateCreated < date('now', 'start of day')"
         res = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}")
         count = res[0]['c'] if res else 0
@@ -685,7 +763,8 @@ class TelegramBot:
                     self.last_check_min = now.minute
                     if now.hour == 9 and now.minute == 0:
                         self._check_user_expiration()
-                        if cfg.get("tg_chat_id"): self._daily_report_task()
+                        if cfg.get("tg_chat_id") or cfg.get("wecom_corpid"): 
+                            self._daily_report_task()
                 time.sleep(5)
             except: time.sleep(60)
 
