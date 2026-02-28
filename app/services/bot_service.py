@@ -102,7 +102,8 @@ class TelegramBot:
                 url = f"{host}/emby/Items/{item_id}/Images/{img_type}?maxHeight=800&maxWidth=600&quality=90&api_key={key}"
             res = requests.get(url, timeout=15)
             if res.status_code == 200: return io.BytesIO(res.content)
-        except: pass
+        except Exception as e: 
+            logger.error(f"下载 Emby 海报失败: {str(e)}")
         return None
 
     # ================= 🔥 企微核心驱动 (图文兼容版) =================
@@ -180,6 +181,11 @@ class TelegramBot:
             upload_url = f"{proxy_url}/cgi-bin/media/uploadimg?access_token={token}"
             files = {"media": ("image.jpg", photo_bytes, "image/jpeg")}
             upload_res = requests.post(upload_url, files=files, timeout=15).json()
+            
+            if upload_res.get("errcode", 0) != 0:
+                logger.error(f"WeCom 图片上传失败: {upload_res}")
+                return self._send_wecom_message(html_text, touser)
+
             pic_url = upload_res.get("url")
             
             # 2. 格式化文本为卡片的标题和摘要
@@ -209,7 +215,10 @@ class TelegramBot:
                         ]
                     }
                 }
-                requests.post(send_msg_url, json=msg_data, timeout=10)
+                res = requests.post(send_msg_url, json=msg_data, timeout=10).json()
+                if res.get("errcode") != 0:
+                    logger.error(f"WeCom News 发送失败: {res}")
+                    self._send_wecom_message(html_text, touser)
             else:
                 self._send_wecom_message(html_text, touser)
         except Exception as e:
@@ -222,7 +231,7 @@ class TelegramBot:
         photo_bytes = None
         if isinstance(photo_io, str):
             try: photo_bytes = requests.get(photo_io, timeout=10).content
-            except: pass
+            except Exception as e: logger.error(f"下载备用底图失败: {e}")
         else:
             photo_io.seek(0)
             photo_bytes = photo_io.read()
@@ -268,7 +277,7 @@ class TelegramBot:
                     requests.post(url, json={"chat_id": tg_cid, "text": text, "parse_mode": parse_mode}, proxies=self._get_proxies(), timeout=10)
                 except Exception as e: pass
 
-    # ================= 以下业务逻辑保持原样 =================
+    # ================= 以下业务逻辑 =================
     
     def add_library_task(self, item):
         with self.library_lock:
@@ -411,7 +420,6 @@ class TelegramBot:
         overview = series_info.get("Overview", "暂无简介...") 
         if len(overview) > 150: overview = overview[:140] + "..."
         
-        # 注入跳转链接
         base_url = cfg.get("emby_public_url") or cfg.get("emby_host")
         if base_url.endswith('/'): base_url = base_url[:-1]
         play_url = f"{base_url}/web/index.html#!/item?id={series_id}&serverId={series_info.get('ServerId','')}"
@@ -426,8 +434,9 @@ class TelegramBot:
         img_io = self._download_emby_image(series_id, 'Primary')
         if not img_io: img_io = self._download_emby_image(series_id, 'Backdrop') 
         
-        if img_io: self.send_photo("sys_notify", img_io, caption, platform="all")
-        else: self.send_photo("sys_notify", REPORT_COVER_URL, caption, platform="all")
+        # 🔥 强制兜底
+        if not img_io: img_io = REPORT_COVER_URL
+        self.send_photo("sys_notify", img_io, caption, platform="all")
 
     def _push_single_item(self, item):
         key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
@@ -448,7 +457,6 @@ class TelegramBot:
         type_cn = "电影"; type_icon = "🎬"
         if type_raw in ["Series", "Episode"]: type_cn = "剧集"; type_icon = "📺"
         
-        # 注入跳转链接
         base_url = cfg.get("emby_public_url") or cfg.get("emby_host")
         if base_url.endswith('/'): base_url = base_url[:-1]
         play_url = f"{base_url}/web/index.html#!/item?id={item['Id']}&serverId={item.get('ServerId','')}"
@@ -461,8 +469,10 @@ class TelegramBot:
                    f"<a href='{play_url}'>点击播放</a>")
         
         img_io = self._download_emby_image(item['Id'], 'Primary')
-        if img_io: self.send_photo("sys_notify", img_io, caption, platform="all")
-        else: self.send_photo("sys_notify", REPORT_COVER_URL, caption, platform="all")
+        
+        # 🔥 强制兜底
+        if not img_io: img_io = REPORT_COVER_URL
+        self.send_photo("sys_notify", img_io, caption, platform="all")
 
     def push_playback_event(self, data, action="start"):
         if not cfg.get("enable_notify"): return
@@ -493,8 +503,11 @@ class TelegramBot:
             img_io = self._download_emby_image(target_id, 'Primary') 
             if not img_io: img_io = self._download_emby_image(item.get("Id"), 'Backdrop')
             
-            if img_io: self.send_photo("sys_notify", img_io, msg, platform="all")
-            else: self.send_message("sys_notify", msg, platform="all")
+            # 🔥 新增：当无法从 Emby 拉取图片时，强行塞一张底图，触发微信的图文卡片发送逻辑！
+            if not img_io:
+                img_io = REPORT_COVER_URL
+            
+            self.send_photo("sys_notify", img_io, msg, platform="all")
         except Exception as e:
             logger.error(f"Playback Push Error: {e}")
 
@@ -663,8 +676,9 @@ class TelegramBot:
             
             keyboard = {"inline_keyboard": [[{"text": "▶️ 立即播放", "url": play_url}]]}
             img_io = self._download_emby_image(top.get("Id"), 'Primary')
-            if img_io: self.send_photo(chat_id, img_io, caption, reply_markup=keyboard, platform=platform)
-            else: self.send_photo(chat_id, REPORT_COVER_URL, caption, reply_markup=keyboard, platform=platform)
+            
+            if not img_io: img_io = REPORT_COVER_URL
+            self.send_photo(chat_id, img_io, caption, reply_markup=keyboard, platform=platform)
         except Exception as e:
             self.send_message(chat_id, "❌ 搜索时发生错误", platform=platform)
 
