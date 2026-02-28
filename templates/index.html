@@ -31,15 +31,10 @@
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); 
             gap: 1.25rem;
         }
-        /* 🔥 进一步放大媒体库封面：基准宽度提升至 320px */
+        /* 🔥 媒体库封面尺寸回调到 300px，不至于过大，保留精致感 */
         .md-fluid-grid-lib {
             display: grid !important;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); 
-            gap: 1.5rem;
-        }
-        .md-fluid-grid-live {
-            display: grid !important;
-            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); 
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
             gap: 1.5rem;
         }
     }
@@ -72,20 +67,48 @@
             <h2 class="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 dark:text-white tracking-tight">数据概览</h2>
             <div class="text-xs md:text-sm text-gray-500 mt-1.5 font-bold uppercase tracking-wider" id="current-date">...</div>
         </div>
-        <div class="w-full md:w-auto relative z-30">
-             <select id="dash-user-select" onchange="changeUser()" class="w-full md:w-64 appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 py-3 pl-5 pr-10 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold transition cursor-pointer hover:border-blue-400">
-                <option value="all">🌏 全站统计数据</option>
-            </select>
-            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500"><i class="fa-solid fa-chevron-down text-sm"></i></div>
-        </div>
-    </div>
+        
+        <div class="flex flex-wrap items-center justify-between md:justify-end gap-2 md:gap-3">
+            <div class="relative z-20 w-full sm:w-auto">
+                 <select id="dash-user-select" onchange="changeUser()" class="w-full sm:w-56 md:w-64 appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 py-3 pl-5 pr-10 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold transition cursor-pointer hover:border-blue-400">
+                    <option value="all">🌏 全站统计数据</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500"><i class="fa-solid fa-chevron-down text-sm"></i></div>
+            </div>
 
-    <div id="live-section" class="hidden animate-fade-in">
-        <div class="flex items-center gap-2 mb-4 px-1">
-            <span class="relative flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span></span>
-            <h3 class="text-base md:text-lg font-black text-gray-900 dark:text-white tracking-wide">正在热播</h3>
+            <div class="flex items-center gap-2">
+                <select id="ttl-select" onchange="updateTTL(this.value)" class="appearance-none px-3 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-600 dark:text-gray-300 shadow-sm outline-none cursor-pointer hover:border-blue-400 transition-all">
+                    <option value="3600">1h</option>
+                    <option value="43200">12h</option>
+                    <option value="86400">1d</option>
+                </select>
+                <button onclick="fetchCalendar(true)" id="refresh-btn" class="p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-600 dark:text-gray-300 shadow-sm transition-all active:scale-90 hover:text-blue-500">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+                
+                <div class="relative z-50">
+                    <button onclick="toggleLiveDropdown()" id="live-btn" class="relative p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-600 dark:text-gray-300 shadow-sm hover:text-red-500 transition-all active:scale-90">
+                        <i class="fa-solid fa-satellite-dish"></i>
+                        <span id="live-badge" class="hidden absolute -top-1.5 -right-1.5 flex h-4 w-4">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-[9px] text-white items-center justify-center font-bold" id="live-count">0</span>
+                        </span>
+                    </button>
+                    
+                    <div id="live-dropdown" class="hidden absolute right-0 mt-3 w-80 sm:w-96 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-2xl overflow-hidden transform opacity-0 scale-95 transition-all duration-200 origin-top-right">
+                        <div class="bg-gray-50 dark:bg-gray-900/50 px-5 py-3 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                            <h4 class="text-sm font-black text-gray-800 dark:text-gray-200 tracking-wider flex items-center">
+                                <span class="w-1.5 h-1.5 rounded-full bg-red-500 mr-2 animate-pulse"></span>正在热播
+                            </h4>
+                            <span class="text-xs text-gray-500 font-bold" id="live-status-text">空闲中</span>
+                        </div>
+                        <div id="live-dropdown-list" class="max-h-[60vh] overflow-y-auto custom-scroll p-2 space-y-1">
+                            <div class="py-10 text-center text-xs text-gray-400 italic font-medium">当前无人观看</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div id="live-container" class="flex overflow-x-auto hide-scrollbar pb-4 snap-x md-fluid-grid-live md:overflow-visible"></div>
     </div>
 
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-8">
@@ -223,13 +246,43 @@
         window.open(targetUrl, '_blank');
     }
 
-    // 🔥 完美解决跳转看到封面而不是内容的问题：改用 videos 路由，并传入 parentId
+    // 针对媒体库使用 videos 通用路由
     function jumpToLibrary(libraryId) {
         if (!embyBaseUrl) { alert("提示: 未在设置中配置 Emby 地址。"); return; }
         const targetUrl = `${embyBaseUrl}/web/index.html#!/videos?serverId=${embyServerId}&parentId=${libraryId}`;
         window.open(targetUrl, '_blank');
     }
 
+    // 🔥 正在热播的弹窗 Toggle 逻辑
+    function toggleLiveDropdown() {
+        const dropdown = document.getElementById('live-dropdown');
+        if (dropdown.classList.contains('hidden')) {
+            dropdown.classList.remove('hidden');
+            setTimeout(() => {
+                dropdown.classList.remove('opacity-0', 'scale-95');
+                dropdown.classList.add('opacity-100', 'scale-100');
+            }, 10);
+        } else {
+            dropdown.classList.remove('opacity-100', 'scale-100');
+            dropdown.classList.add('opacity-0', 'scale-95');
+            setTimeout(() => {
+                dropdown.classList.add('hidden');
+            }, 200);
+        }
+    }
+
+    // 点击空白处关闭悬浮窗
+    document.addEventListener('click', (event) => {
+        const dropdown = document.getElementById('live-dropdown');
+        const btn = document.getElementById('live-btn');
+        if (!dropdown.classList.contains('hidden') && !dropdown.contains(event.target) && !btn.contains(event.target)) {
+            dropdown.classList.remove('opacity-100', 'scale-100');
+            dropdown.classList.add('opacity-0', 'scale-95');
+            setTimeout(() => { dropdown.classList.add('hidden'); }, 200);
+        }
+    });
+
+    // 自动计算网格列数，实现绝对完美的“2 排展示”
     function applyTwoRowLimit() {
         if (window.innerWidth < 768) return; 
         
@@ -248,9 +301,7 @@
         });
     }
 
-    const resizeObserver = new ResizeObserver(() => {
-        applyTwoRowLimit();
-    });
+    const resizeObserver = new ResizeObserver(() => { applyTwoRowLimit(); });
     resizeObserver.observe(document.body);
 
     document.getElementById('current-date').innerText = new Date().toLocaleDateString('zh-CN', {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'});
@@ -279,47 +330,63 @@
         setInterval(fetchLive, 10000);
     }
 
+    // 🔥 重写的 fetchLive：数据将渲染到右上角的下拉悬浮窗中
     async function fetchLive() {
         try {
             const res = await fetch('/api/stats/live');
             const json = await res.json();
-            const container = document.getElementById('live-container');
-            const section = document.getElementById('live-section');
+            const listContainer = document.getElementById('live-dropdown-list');
+            const badge = document.getElementById('live-badge');
+            const countText = document.getElementById('live-count');
+            const statusText = document.getElementById('live-status-text');
+
             if(json.status === 'success' && json.data.length > 0) {
+                // 激活指示器
+                badge.classList.remove('hidden');
+                countText.innerText = json.data.length;
+                statusText.innerText = `${json.data.length} 个设备同时在线`;
+                
                 let html = '';
                 json.data.forEach(s => {
                     const item = s.NowPlayingItem || {};
                     const playState = s.PlayState || {};
                     const targetId = item.SeriesId || item.ParentId || s.ItemId || item.Id;
-                    const imgUrl = `/api/proxy/image/${targetId}/backdrop`;
+                    // 使用 primary 竖版海报更适合紧凑列表
+                    const imgUrl = `/api/proxy/image/${targetId}/primary`; 
                     const isTranscoding = playState.IsTranscoding || s.IsTranscoding;
-                    const transcodeBadge = isTranscoding ? `<span class="bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300 text-[10px] md:text-xs font-black px-2 py-0.5 rounded shadow-sm ml-2 tracking-widest">转码</span>` : `<span class="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-[10px] md:text-xs font-black px-2 py-0.5 rounded shadow-sm ml-2 tracking-widest">直通</span>`;
+                    const transcodeBadge = isTranscoding ? `<span class="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-400 text-[9px] font-black px-1.5 py-0.5 rounded tracking-widest border border-yellow-200 dark:border-yellow-700/50">转码</span>` : `<span class="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400 text-[9px] font-black px-1.5 py-0.5 rounded tracking-widest border border-green-200 dark:border-green-700/50">直通</span>`;
                     const title = item.SeriesName ? `${item.SeriesName} - ${item.Name}` : (item.Name || '未知内容');
                     let percentage = 0;
                     if (item.RunTimeTicks && item.RunTimeTicks > 0) { percentage = Math.round((playState.PositionTicks / item.RunTimeTicks) * 100); }
                     
                     html += `
-                    <div onclick="jumpToEmby('${targetId}')" class="flex-shrink-0 w-[280px] sm:w-96 md:w-full bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-red-50 dark:border-red-500/20 overflow-hidden flex relative snap-center group hover:shadow-2xl hover:-translate-y-1 hover:ring-2 hover:ring-red-400/50 transition-all duration-300 cursor-pointer">
-                        <div class="w-5/12 bg-gray-100 dark:bg-gray-700 relative overflow-hidden">
-                            <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
+                    <div onclick="jumpToEmby('${targetId}')" class="flex gap-3 p-3 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-xl transition-all cursor-pointer group">
+                        <div class="w-16 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-gray-800 shadow-sm relative">
+                            <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
+                            <div class="absolute inset-0 ring-1 ring-inset ring-black/10 rounded-lg"></div>
                         </div>
-                        <div class="w-7/12 p-4 flex flex-col justify-between">
-                            <div>
-                                <div class="flex items-center mb-2">
-                                    <span class="text-xs font-black text-gray-500 dark:text-gray-400 flex items-center truncate"><i class="fa-solid fa-user mr-1.5"></i>${s.UserName || s.User || '未知'}</span>
-                                    ${transcodeBadge}
-                                </div>
-                                <h4 class="text-sm md:text-base font-black text-gray-900 dark:text-gray-100 line-clamp-2 leading-snug">${title}</h4>
+                        <div class="flex flex-col justify-center flex-1 min-w-0">
+                            <div class="flex items-center justify-between mb-1.5">
+                                <span class="text-[11px] font-black text-gray-500 dark:text-gray-400 truncate pr-2"><i class="fa-solid fa-user mr-1 text-gray-400"></i>${s.UserName || s.User || '未知'}</span>
+                                ${transcodeBadge}
                             </div>
-                            <div class="mt-4">
-                                <div class="flex justify-between text-[10px] md:text-xs text-gray-400 mb-2 font-bold tracking-wide"><span class="truncate pr-2">${s.DeviceName || s.Device || '未知'}</span><span>${percentage}%</span></div>
-                                <div class="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden"><div class="bg-red-500 h-2 rounded-full transition-all duration-1000" style="width: ${percentage}%"></div></div>
+                            <h4 class="text-sm font-black text-gray-800 dark:text-gray-200 truncate mb-2.5 leading-tight group-hover:text-blue-500 transition-colors">${title}</h4>
+                            <div class="flex items-center gap-2.5">
+                                <span class="text-[10px] text-gray-400 truncate max-w-[80px] font-bold">${s.DeviceName || s.Device || '未知'}</span>
+                                <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
+                                    <div class="bg-indigo-500 h-1.5 rounded-full transition-all duration-1000" style="width: ${percentage}%"></div>
+                                </div>
+                                <span class="text-[10px] font-black text-indigo-500 w-7 text-right">${percentage}%</span>
                             </div>
                         </div>
                     </div>`;
                 });
-                container.innerHTML = html; section.classList.remove('hidden');
-            } else { section.classList.add('hidden'); }
+                listContainer.innerHTML = html; 
+            } else { 
+                badge.classList.add('hidden'); 
+                statusText.innerText = `空闲中`;
+                listContainer.innerHTML = `<div class="py-12 text-center text-xs text-gray-400 italic font-medium"><i class="fa-solid fa-bed block text-2xl mb-2 opacity-50"></i>当前暂无播放</div>`;
+            }
         } catch(e) { console.error("Live Error:", e); }
     }
 
@@ -346,20 +413,6 @@
         initTrendChart(userId, currentTrendDim); 
     }
 
-    function switchTrend(dim) {
-        currentTrendDim = dim;
-        const userId = document.getElementById('dash-user-select').value;
-        ['day', 'week', 'month'].forEach(d => {
-            const btn = document.getElementById(`trend-btn-${d}`);
-            if(d === dim) {
-                btn.className = "px-4 py-1.5 rounded-md bg-white dark:bg-gray-600 shadow-sm text-gray-900 dark:text-white font-bold transition";
-            } else {
-                btn.className = "px-4 py-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:text-white transition";
-            }
-        });
-        initTrendChart(userId, dim);
-    }
-    
     async function fetchDashboardData(userId) {
         try {
             const response = await fetch(`/api/stats/dashboard?user_id=${userId}`);
@@ -388,12 +441,12 @@
                 let html = '';
                 json.data.forEach(lib => {
                     const imgUrl = `/api/proxy/image/${lib.Id}/primary`; 
-                    // 🔥 放大手机端封面尺寸，提升海报展示质感
+                    // 🔥 彻底重构媒体库卡片 UI：移除过渡黑框，改为淡色蒙层和绝对居中文字
                     html += `
-                    <div onclick="jumpToLibrary('${lib.Id}')" class="relative w-64 sm:w-80 md:w-full aspect-video flex-shrink-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-1.5 hover:ring-2 hover:ring-indigo-400/50 transition-all duration-300 group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
+                    <div onclick="jumpToLibrary('${lib.Id}')" class="relative w-56 sm:w-64 md:w-full aspect-video flex-shrink-0 rounded-2xl overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-1 hover:ring-2 hover:ring-indigo-400/50 transition-all duration-300 group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
                         <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
-                        <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex items-end p-4 sm:p-5">
-                            <h4 class="text-white font-black text-base sm:text-xl md:text-2xl drop-shadow-lg truncate w-full tracking-wide">${lib.Name}</h4>
+                        <div class="absolute inset-0 bg-black/40 group-hover:bg-black/50 transition-colors duration-300 flex items-center justify-center p-4">
+                            <h4 class="text-white font-black text-lg md:text-xl drop-shadow-md truncate w-full text-center tracking-widest transform group-hover:scale-105 transition-transform duration-300">${lib.Name}</h4>
                         </div>
                     </div>`;
                 });
