@@ -48,7 +48,7 @@ class TelegramBot:
         self.library_thread = threading.Thread(target=self._library_notify_loop, daemon=True)
         self.library_thread.start()
         
-        print("🤖 Bot Service Started (Dual Channel Interactive Mode - V2 UI)")
+        print("🤖 Bot Service Started (Dual Channel Interactive Mode - Whitespace UI)")
 
     def stop(self): self.running = False
 
@@ -105,7 +105,7 @@ class TelegramBot:
             pass
         return None
 
-    # ================= 🔥 企微核心洗稿引擎 =================
+    # ================= 🔥 企微核心洗稿引擎 (留白版) =================
     
     def _get_wecom_token(self):
         corpid = cfg.get("wecom_corpid"); corpsecret = cfg.get("wecom_corpsecret")
@@ -119,7 +119,7 @@ class TelegramBot:
                 self.wecom_token = res["access_token"]
                 self.wecom_token_expires = time.time() + res["expires_in"] - 60
                 return self.wecom_token
-        except Exception as e: logger.error(f"WeCom Token Error: {e}")
+        except Exception as e: pass
         return None
 
     def _html_to_wecom_md(self, html_text, inline_keyboard=None):
@@ -128,7 +128,7 @@ class TelegramBot:
         text = text.replace("<code>", "`").replace("</code>", "`")
         text = re.sub(r"<a\s+href=['\"](.*?)['\"]>(.*?)</a>", r"[\2](\1)", text)
         if inline_keyboard and "inline_keyboard" in inline_keyboard:
-            text += "\n\n───────────────\n"
+            text += "\n\n"
             for row in inline_keyboard["inline_keyboard"]:
                 for btn in row:
                     if "text" in btn and "url" in btn:
@@ -182,15 +182,19 @@ class TelegramBot:
         except Exception as e: pass
 
         try:
-            plain_text = re.sub(r'<[^>]+>', '', html_text)
-            lines = [line.strip() for line in plain_text.split('\n') if line.strip()]
+            plain_text = re.sub(r'<[^>]+>', '', html_text).strip()
+            lines = [line.strip() for line in plain_text.split('\n')]
             
-            title = lines[0] if lines else "EmbyPulse 通知"
-            if len(title.encode('utf-8')) > 120: title = title[:35] + "..."
+            title = "EmbyPulse 通知"
+            desc = ""
+            if lines:
+                title = lines[0]
+                if len(title.encode('utf-8')) > 120: title = title[:35] + "..."
                 
-            desc_lines = [line for line in lines[1:] if '─────' not in line]
-            desc = '\n'.join(desc_lines)
-            if len(desc.encode('utf-8')) > 500: desc = desc[:150] + "..."
+                # 保留合理的段落换行 (去除多余空行，最多保留1个空行作为段落间隔)
+                raw_desc = '\n'.join(lines[1:]).strip()
+                desc = re.sub(r'\n{3,}', '\n\n', raw_desc)
+                if len(desc.encode('utf-8')) > 500: desc = desc[:150] + "..."
 
             jump_url = cfg.get("emby_public_url") or cfg.get("emby_host") or "https://emby.media"
             if inline_keyboard and "inline_keyboard" in inline_keyboard:
@@ -229,10 +233,9 @@ class TelegramBot:
         except Exception as e:
             if html_text: self._send_wecom_message(html_text, inline_keyboard, touser)
 
-    # ================= 🚀 底层双通道路由分发 (双排图支持) =================
+    # ================= 🚀 底层双通道路由分发 =================
 
     def send_photo(self, chat_id, photo_io, caption, parse_mode="HTML", reply_markup=None, platform="all", wecom_photo_io=None):
-        # 提取主图流 (默认供给 TG)
         photo_bytes = None
         if isinstance(photo_io, str):
             try: photo_bytes = requests.get(photo_io, timeout=10).content
@@ -241,7 +244,6 @@ class TelegramBot:
             photo_io.seek(0)
             photo_bytes = photo_io.read()
 
-        # 提取企微专用图片流 (如果不为空，优先取它，否则退回使用主图流)
         wecom_photo_bytes = photo_bytes
         if wecom_photo_io is not None and wecom_photo_io != photo_io:
             if isinstance(wecom_photo_io, str):
@@ -251,12 +253,10 @@ class TelegramBot:
                 wecom_photo_io.seek(0)
                 wecom_photo_bytes = wecom_photo_io.read()
 
-        # 企微通道分发
         if platform in ["all", "wecom"] and cfg.get("wecom_corpid"):
             touser = chat_id if platform == "wecom" else cfg.get("wecom_touser", "@all")
             threading.Thread(target=self._send_wecom_photo, args=(wecom_photo_bytes, caption, reply_markup, touser)).start()
 
-        # TG通道分发
         if platform in ["all", "tg"] and cfg.get("tg_bot_token"):
             tg_cid = chat_id if platform == "tg" else cfg.get("tg_chat_id")
             if tg_cid:
@@ -287,7 +287,7 @@ class TelegramBot:
                     requests.post(url, json=data, proxies=self._get_proxies(), timeout=10)
                 except Exception as e: pass
 
-    # ================= 业务排版逻辑 =================
+    # ================= 业务排版逻辑 (极致留白版) =================
     
     def add_library_task(self, item):
         with self.library_lock:
@@ -436,13 +436,11 @@ class TelegramBot:
         if base_url.endswith('/'): base_url = base_url[:-1]
         play_url = f"{base_url}/web/index.html#!/item?id={series_id}&serverId={series_info.get('ServerId','')}"
 
-        caption = (f"📺 <b>新入库 剧集</b>\n"
-                   f"───────────────\n"
+        caption = (f"📺 <b>新入库 剧集</b>\n\n"
                    f"📌 <b>{series_name}</b> ({year})\n"
                    f"🏷 季集：S{str(season_idx).zfill(2)} {title_suffix}\n"
                    f"⭐ 评分：{rating} / 10\n"
-                   f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-                   f"───────────────\n"
+                   f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
                    f"📝 <b>剧情简介：</b>\n{overview}")
 
         keyboard = {"inline_keyboard": [[{"text": "▶️ 立即播放", "url": play_url}]]}
@@ -450,7 +448,6 @@ class TelegramBot:
         primary_io = self._download_emby_image(series_id, 'Primary')
         backdrop_io = self._download_emby_image(series_id, 'Backdrop') 
         
-        # 🔥 双端海报智能分流引擎
         tg_img = primary_io or backdrop_io or REPORT_COVER_URL
         wecom_img = backdrop_io or primary_io or REPORT_COVER_URL
         
@@ -478,12 +475,10 @@ class TelegramBot:
         if base_url.endswith('/'): base_url = base_url[:-1]
         play_url = f"{base_url}/web/index.html#!/item?id={item['Id']}&serverId={item.get('ServerId','')}"
 
-        caption = (f"{type_icon} <b>新入库 {type_cn}</b>\n"
-                   f"───────────────\n"
+        caption = (f"{type_icon} <b>新入库 {type_cn}</b>\n\n"
                    f"📌 <b>{name}</b> ({year})\n"
                    f"⭐ 评分：{rating} / 10\n"
-                   f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-                   f"───────────────\n"
+                   f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
                    f"📝 <b>剧情简介：</b>\n{overview}")
         
         keyboard = {"inline_keyboard": [[{"text": "▶️ 立即播放", "url": play_url}]]}
@@ -514,8 +509,7 @@ class TelegramBot:
             emoji = "▶️" if action == "start" else "⏹️"; act = "开始播放" if action == "start" else "停止播放"
             ip = session.get("RemoteEndPoint", "127.0.0.1"); loc = self._get_location(ip)
             
-            msg = (f"{emoji} <b>【{user.get('Name')}】{act}</b>\n"
-                   f"───────────────\n"
+            msg = (f"{emoji} <b>【{user.get('Name')}】{act}</b>\n\n"
                    f"🎬 <b>{title}</b>{ep_info}\n"
                    f"📚 类型：{type_cn}\n"
                    f"🌐 地址：{ip} ({loc})\n"
@@ -603,7 +597,7 @@ class TelegramBot:
             items = res.json()
             if not items: return self.send_message(cid, "📭 最近没有新入库的资源", platform=platform)
 
-            msg = "🆕 <b>最近入库 (Top 8)</b>\n───────────────\n"
+            msg = "🆕 <b>最近入库 (Top 8)</b>\n\n"
             count = 0
             for i in items:
                 if count >= 8: break
@@ -694,12 +688,11 @@ class TelegramBot:
 
             caption = (f"{type_icon} <b>{name}</b> {year_str}\n"
                        f"⭐️ {rating}  |  🎭 {genres}\n"
-                       f"💿 {info_line}\n"
-                       f"───────────────\n"
+                       f"💿 {info_line}\n\n"
                        f"📝 <b>剧情简介：</b>\n{overview}\n")
             
             if len(items) > 1:
-                caption += "───────────────\n🔎 <b>其他结果：</b>\n"
+                caption += "\n🔎 <b>其他结果：</b>\n"
                 for i, sub in enumerate(items[1:]):
                     sub_year = f"({sub.get('ProductionYear')})" if sub.get('ProductionYear') else ""
                     sub_type = "📺" if sub.get("Type") == "Series" else "🎬"
@@ -757,16 +750,13 @@ class TelegramBot:
             yesterday_date = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%m-%d")
             title_display = f"{title_cn} ({yesterday_date})" if period == 'yesterday' else title_cn
             
-            caption = (f"📊 <b>EmbyPulse {title_display}</b>\n"
-                       f"───────────────\n"
+            caption = (f"📊 <b>EmbyPulse {title_display}</b>\n\n"
                        f"📈 <b>数据大盘</b>\n"
                        f"▶️ 总播放量：{plays} 次\n"
                        f"⏱️ 活跃时长：{hours} 小时\n"
-                       f"👥 活跃人数：{users} 人\n"
-                       f"───────────────\n"
+                       f"👥 活跃人数：{users} 人\n\n"
                        f"🏆 <b>活跃用户 Top 5</b>\n"
-                       f"{user_str}"
-                       f"───────────────\n"
+                       f"{user_str}\n"
                        f"🔥 <b>热门内容 Top 10</b>\n"
                        f"{top_content}")
             
@@ -785,8 +775,7 @@ class TelegramBot:
         count = res[0]['c'] if res else 0
         if count == 0:
             yesterday_str = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-            msg = (f"📅 <b>昨日日报 ({yesterday_str})</b>\n"
-                   f"───────────────\n"
+            msg = (f"📅 <b>昨日日报 ({yesterday_str})</b>\n\n"
                    f"😴 昨天服务器静悄悄，大家都去现充了吗？\n\n"
                    f"📊 活跃用户：0 人\n"
                    f"⏳ 播放时长：0 小时")
@@ -800,7 +789,7 @@ class TelegramBot:
             sessions = [s for s in res.json() if s.get("NowPlayingItem")]
             if not sessions: return self.send_message(cid, "🟢 当前无播放", platform=platform)
             
-            msg = f"🟢 <b>当前正在播放 ({len(sessions)})</b>\n───────────────\n"
+            msg = f"🟢 <b>当前正在播放 ({len(sessions)})</b>\n\n"
             for s in sessions:
                 title = s['NowPlayingItem'].get('Name')
                 pct = int(s.get('PlayState', {}).get('PositionTicks', 0) / s['NowPlayingItem'].get('RunTimeTicks', 1) * 100)
@@ -813,7 +802,7 @@ class TelegramBot:
             rows = query_db("SELECT UserId, ItemName, DateCreated FROM PlaybackActivity ORDER BY DateCreated DESC LIMIT 10")
             if not rows: return self.send_message(cid, "📭 无记录", platform=platform)
             
-            msg = "📜 <b>最近播放记录 (Top 10)</b>\n───────────────\n"
+            msg = "📜 <b>最近播放记录 (Top 10)</b>\n\n"
             for r in rows:
                 date = r['DateCreated'][:16].replace('T', ' ')
                 name = self._get_username(r['UserId'])
@@ -832,8 +821,7 @@ class TelegramBot:
                 local = (info.get('LocalAddresses') or [info.get('LocalAddress')])[0]
                 wan = (info.get('RemoteAddresses') or [info.get('WanAddress')])[0]
                 
-                msg = (f"✅ <b>Emby 服务器状态：在线</b>\n"
-                       f"───────────────\n"
+                msg = (f"✅ <b>Emby 服务器状态：在线</b>\n\n"
                        f"⚡️ 响应延迟：{int((time.time()-start)*1000)} ms\n"
                        f"🏠 内网地址：{local}\n"
                        f"🌍 外网地址：{wan}")
