@@ -11,7 +11,7 @@ logger = logging.getLogger("uvicorn")
 templates = Jinja2Templates(directory="templates")
 router = APIRouter()
 
-# 🔥 获取应用版本号 (没读到就显示开发版)
+# 🔥 获取应用版本号
 APP_VERSION = os.environ.get("APP_VERSION", "1.2.0.Dev")
 
 def check_login(request: Request):
@@ -24,7 +24,7 @@ def check_login(request: Request):
 async def index(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     
-    # 🔥 获取 Emby 基础地址和 ServerId，用于前端点击海报实现深度跳转
+    # 🔥 获取 Emby 基础地址和 ServerId，用于前端跳转
     emby_url = cfg.get("emby_public_url") or cfg.get("emby_public_host") or cfg.get("emby_host") or ""
     if emby_url.endswith('/'): emby_url = emby_url[:-1]
     

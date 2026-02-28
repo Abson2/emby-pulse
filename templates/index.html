@@ -27,7 +27,7 @@
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); 
         }
         
-        /* 🔥 电脑端流式网格 (Fluid Grid) 核心逻辑：告别边缘留白 */
+        /* 🔥 电脑端流式网格：完美填满屏幕，不再有空隙 */
         .md-fluid-grid-poster {
             display: grid !important;
             grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
@@ -45,7 +45,6 @@
         }
     }
 
-    /* === 手机端紧凑样式优化 === */
     @media (max-width: 767px) {
         .mobile-borderless {
             background: transparent !important;
@@ -91,7 +90,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="p-2.5 sm:p-4 md:p-8 space-y-4 sm:space-y-6 md:space-y-8 pb-24 max-w-[2000px] mx-auto">
+<div class="w-full px-2 sm:px-4 md:px-8 py-4 md:py-6 pb-24 max-w-[2500px] mx-auto space-y-4 sm:space-y-6 md:space-y-8">
     
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         <div>
@@ -195,17 +194,27 @@
     let trendChart = null; 
     let currentTrendDim = 'day'; 
 
-    // 🔥 接收后端传来的 Emby 基础地址和 ServerId
     const embyBaseUrl = "{{ emby_url }}";
     const embyServerId = "{{ server_id }}";
 
-    // 🔥 统一的深层跳转跳转函数
+    // 针对单个视频、剧集的跳转路由
     function jumpToEmby(itemId) {
         if (!embyBaseUrl) {
             alert("提示: 未在设置中配置 Emby 地址，无法跳转。");
             return;
         }
         const targetUrl = `${embyBaseUrl}/web/index.html#!/item?id=${itemId}&serverId=${embyServerId}`;
+        window.open(targetUrl, '_blank');
+    }
+
+    // 🔥 针对媒体库文件夹的专属跳转路由 (修复白屏问题)
+    function jumpToLibrary(libraryId) {
+        if (!embyBaseUrl) {
+            alert("提示: 未在设置中配置 Emby 地址，无法跳转。");
+            return;
+        }
+        // Emby 官方针对媒体库文件夹的正确跳转路由格式
+        const targetUrl = `${embyBaseUrl}/web/index.html#!/movies.html?topParentId=${libraryId}&serverId=${embyServerId}`;
         window.open(targetUrl, '_blank');
     }
 
@@ -254,7 +263,6 @@
                     let percentage = 0;
                     if (item.RunTimeTicks && item.RunTimeTicks > 0) { percentage = Math.round((playState.PositionTicks / item.RunTimeTicks) * 100); }
                     
-                    // 🔥 添加跳转事件、悬停放大特效和手指指针
                     html += `
                     <div onclick="jumpToEmby('${targetId}')" class="flex-shrink-0 w-[260px] sm:w-80 md:w-full bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-red-50 dark:border-red-500/20 overflow-hidden flex relative snap-center group hover:shadow-xl hover:-translate-y-1 hover:ring-2 hover:ring-red-400/50 transition-all duration-300 cursor-pointer">
                         <div class="w-2/5 bg-gray-100 dark:bg-gray-700 relative">
@@ -345,9 +353,9 @@
                 let html = '';
                 json.data.forEach(lib => {
                     const imgUrl = `/api/proxy/image/${lib.Id}/primary`; 
-                    // 🔥 添加跳转事件和悬停特效
+                    // 🔥 使用独立的 jumpToLibrary 解决媒体库目录的跳转白屏问题
                     html += `
-                    <div onclick="jumpToEmby('${lib.Id}')" class="relative w-44 sm:w-60 md:w-full aspect-video flex-shrink-0 rounded-xl sm:rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 hover:ring-2 hover:ring-indigo-400/50 transition-all duration-300 group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
+                    <div onclick="jumpToLibrary('${lib.Id}')" class="relative w-44 sm:w-60 md:w-full aspect-video flex-shrink-0 rounded-xl sm:rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 hover:ring-2 hover:ring-indigo-400/50 transition-all duration-300 group cursor-pointer snap-center bg-gray-200 dark:bg-gray-800">
                         <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700" onerror="this.src='https://img.hotimg.com/a444d32a033994d5b.png'">
                         <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-3 sm:p-5">
                             <h4 class="text-white font-bold text-sm sm:text-lg md:text-xl drop-shadow-md truncate w-full tracking-wide">${lib.Name}</h4>
@@ -362,7 +370,8 @@
     async function fetchLatest() {
         const container = document.getElementById('latest-container');
         try {
-            const res = await fetch('/api/stats/latest?limit=10');
+            // 🔥 将请求数量从 10 提升到 21，满足宽屏显示需求，自动铺满网格
+            const res = await fetch('/api/stats/latest?limit=21');
             const json = await res.json();
             if (json.status === 'success' && json.data.length > 0) {
                 let html = '';
@@ -371,7 +380,6 @@
                     const title = item.SeriesName ? `${item.SeriesName} - ${item.Name}` : item.Name;
                     const metaInfo = [item.Year, item.Rating ? `⭐${item.Rating}` : ''].filter(Boolean).join(' • '); 
                     
-                    // 🔥 添加跳转事件和精美悬停特效
                     html += `
                     <div onclick="jumpToEmby('${item.Id}')" class="group relative w-24 sm:w-28 md:w-full flex-shrink-0 cursor-pointer snap-center hover:-translate-y-1 transition-all duration-300">
                         <div class="aspect-[2/3] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative shadow-sm group-hover:shadow-xl group-hover:ring-2 group-hover:ring-blue-400/50 transition-all border border-gray-100 dark:border-gray-700/50">
@@ -395,11 +403,11 @@
             const json = await res.json();
             if (json.status === 'success' && json.data.length > 0) {
                 let html = '';
-                json.data.slice(0, 10).forEach(item => {
+                // 🔥 将渲染数量截断放宽到 21，告别右侧难看的缺口空白
+                json.data.slice(0, 21).forEach(item => {
                     const displayTitle = item.DisplayName || item.ItemName;
                     const imgUrl = `/api/proxy/image/${item.ItemId}/primary`;
                     
-                    // 🔥 添加跳转事件和精美悬停特效
                     html += `
                     <div onclick="jumpToEmby('${item.ItemId}')" class="group relative w-24 sm:w-28 md:w-full flex-shrink-0 cursor-pointer snap-center hover:-translate-y-1 transition-all duration-300">
                         <div class="aspect-[2/3] rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 relative shadow-sm group-hover:shadow-xl group-hover:ring-2 group-hover:ring-green-400/50 transition-all border border-gray-100 dark:border-gray-700/50">
