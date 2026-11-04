@@ -1,0 +1,25 @@
+# 白名单式构建上下文：只有下列运行时文件能进入镜像
+*
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!run.py
+!app/
+!app/**
+!templates/
+!templates/**
+!static/
+!static/**
+
+# 运行期状态与本地文件一律排除
+**/__pycache__/
+**/__pycache__/**
+**/*.pyc
+**/*.pyo
+**/*.db
+**/*.db-*
+**/*.sqlite*
+**/*.bak*
+**/*.log
+# 白名单已天然排除根下 config/、data/、.env、.git 等所有非运行时文件。
+# 不再写 `config/` 这类宽泛规则，避免误伤 app/infra/config/ 源码目录。

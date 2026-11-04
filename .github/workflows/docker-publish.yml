@@ -1,0 +1,150 @@
+name: Build and publish hardened image
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  # GHCR 要求镜像名全小写
+  IMAGE_NAME: ghcr.io/abson2/emby-pulse-hardened
+
+jobs:
+  verify:
+    name: 凭证扫描 / 补丁断言 / 语法检查
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 扫描凭证与个人配置
+        run: python tools/check-no-secrets.py .
+
+      - name: 断言 5 项加固改动生效
+        run: python tools/verify_patches.py .
+
+      - name: 编译全部应用源码
+        run: python -m compileall -q app/
+
+      - name: 校验 compose 与 workflow 可被解析
+        run: |
+          python -m pip install --quiet pyyaml
+          python - <<'PY'
+          import yaml
+          for p in ("docker-compose.yml", ".github/workflows/docker-publish.yml"):
+              with open(p, encoding="utf-8") as f:
+                  d = yaml.safe_load(f)
+              assert isinstance(d, dict), p
+              print("yaml ok:", p)
+          c = yaml.safe_load(open("docker-compose.yml", encoding="utf-8"))
+          imgs = [s.get("image", "") for s in c["services"].values()]
+          assert any(i.startswith("ghcr.io/abson2/emby-pulse-hardened") for i in imgs), "compose 必须引用自己的镜像"
+          print("compose image ok")
+          PY
+
+  build:
+    name: 构建 / 冒烟 / 推送 GHCR
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 容器冒烟：默认拒绝鉴权 / 服务可用
+        run: |
+          set -e
+          docker run -d --name ep-smoke -p 10307:10307 \
+            -e AUTH_GATE_MODE=enforce \
+            -e WEBHOOK_ALLOW_QUERY_TOKEN=0 \
+            "${{ env.IMAGE_NAME }}:latest"
+
+          ok=0
+          for i in $(seq 1 45); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' \
+              http://127.0.0.1:10307/api/login || true)
+            if [ "$code" != "000" ]; then ok=1; break; fi
+            sleep 2
+          done
+          if [ "$ok" != "1" ]; then
+            echo "容器未能启动，日志如下："
+            docker logs ep-smoke || true
+            exit 1
+          fi
+          echo "service is up (first HTTP code=$code)"
+
+          # 曾被通报「谁来都能进」的接口，现在必须被网关拦下
+          for p in /api/history/stats /api/pwa/config /api/auth/settings; do
+            c=$(curl -s -o /tmp/body -w '%{http_code}' "http://127.0.0.1:10307$p")
+            echo "GET $p -> $c"
+            if [ "$c" != "401" ] && [ "$c" != "403" ]; then
+              echo "FAIL: 未鉴权接口仍可匿名访问: $p ($c)"
+              cat /tmp/body || true
+              exit 1
+            fi
+          done
+
+          # 管理端写接口未登录应被拦截，且不能是 CSRF 403
+          c=$(curl -s -o /tmp/body -w '%{http_code}' -X POST \
+            -H 'Content-Type: application/json' \
+            -H 'Origin: http://127.0.0.1:10307' \
+            -H 'X-Forwarded-Proto: https' \
+            -d '{}' http://127.0.0.1:10307/api/manage/user/new)
+          echo "POST /api/manage/user/new (anon) -> $c"
+          if [ "$c" != "401" ] && [ "$c" != "403" ]; then
+            echo "FAIL: 管理接口未登录可访问 ($c)"
+            exit 1
+          fi
+          if grep -q 'Origin 不匹配' /tmp/body; then
+            echo "FAIL: 反代下仍触发 CSRF Origin 不匹配"
+            exit 1
+          fi
+
+          echo "SMOKE PASSED"
+          docker logs ep-smoke 2>&1 | tail -30 || true
+
+      - name: 清理
+        if: always()
+        run: docker rm -f ep-smoke || true

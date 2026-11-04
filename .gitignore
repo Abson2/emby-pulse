@@ -1,0 +1,44 @@
+# ===== 运行期配置 / 数据：一律不入库 =====
+.env
+.env.*
+!.env.example
+# 只忽略仓库根下的运行期目录；不能用 `config/`，
+# 否则会误伤源码目录 app/infra/config/（20 个源码文件）
+/config/
+/data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.bak
+*.bak-*
+*.dump
+*.sql
+config.json
+*.log
+
+# ===== 凭证 / 密钥（不使用宽泛的 *secret*，避免误伤源码文件）=====
+*.pem
+*.key
+*.p12
+*.pfx
+*.secret
+secrets.json
+secrets.yaml
+id_rsa*
+credentials*
+token*.txt
+
+# ===== Python / 构建产物 =====
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+build/
+*.egg-info/
+
+# ===== 编辑器 / 系统 =====
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

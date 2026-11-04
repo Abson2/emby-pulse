@@ -1,0 +1,57 @@
+# emby-pulse 安全加固发行版 — 最小部署编排（参考格式）
+# 本文件独立编写，不引用上游 compose，不包含任何主机路径、内网地址或真实配置。
+# 配置与数据使用 bind mount（./config、./data），运行时内容不会进入代码仓库或镜像。
+
+name: embypulse-pro
+
+services:
+  embypulse-pro:
+    image: ghcr.io/abson2/emby-pulse-hardened:latest
+    container_name: embypulse-pro
+    restart: unless-stopped
+
+    ports:
+      - "10307:10307"   # 管理端口（建议仅内网暴露）
+      - "10308:10308"   # 用户端口（可对外）
+
+    volumes:
+      - ./config:/workspace/config
+      - ./data:/workspace/data
+      # - /path/to/emby/data:/emby-data
+
+    environment:
+      - TZ=Asia/Shanghai
+      - EMBY_HOST=${EMBY_HOST}
+      # Cloudflare Tunnel 回源经 docker-proxy，uvicorn 默认只信任 127.0.0.1，
+      # 会忽略 X-Forwarded-Proto: https，使 CSRF 把期望源算成 http://域名，
+      # 与浏览器 https://域名 不匹配。信任内网代理来源以修正 scheme。
+      - "FORWARDED_ALLOW_IPS=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      # 问题 4：默认拒绝的 API 鉴权网关
+      - AUTH_GATE_MODE=enforce
+      # 问题 3：禁止在 URL 中明文传递 webhook token
+      - WEBHOOK_ALLOW_QUERY_TOKEN=0
+
+    env_file:
+      - ./.env
+      # - PORT=10307
+      # - REQUEST_PORT=10308
+      # - DB_PATH=/emby-data/playback_reporting.db
+      # - CORS_ORIGINS=https://example.com
+      # - FORCE_MIGRATE=1
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10307/api/auth/settings', timeout=5)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
