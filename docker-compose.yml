@@ -33,6 +33,7 @@ services:
 
     env_file:
       - ./.env
+      # TgtoDrive 地址经此注入：在本地 .env 设置 TGTODRIVE_URL（host 网络下指向宿主桥网关:12366）
       # - PORT=10307
       # - REQUEST_PORT=10308
       # - DB_PATH=/emby-data/playback_reporting.db
