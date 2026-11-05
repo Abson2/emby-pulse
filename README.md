@@ -242,6 +242,8 @@ TgtoDrive 通常以 `host` 网络模式运行（默认端口 `12366`），**不�
 
 ### 4.7 插件 B（TgtoDrive 侧完结清理）怎么启用
 
+> ⚠️ **插件 B 与 EMBYPULSE 插件页里的「求片同步 TgtoDrive 白名单」是两个不同框架的插件，不要互相导入**：前者是 TgtoDrive 单文件插件（`tgtdrive-monitor/plugin.py`，用 `PLUGIN_MANIFEST` + `run`），后者是 EMBYPULSE 插件（`app/plugins/tg_whitelist_sync/plugin.py`，用 `PluginBase`）。把后者当 `sync.py` 塞进 TgtoDrive 会因缺少 `PLUGIN_MANIFEST` 直接报错。
+
 插件 B **不包含在 EMBYPULSE 镜像里**，需单独装到 **TgtoDrive 容器**内，由 TgtoDrive 的 OpenAPI 按计划周期调用。完整步骤、参数表与运行逻辑见 `tgtdrive-monitor/README.md`，要点：
 
 1. 把 `tgtdrive-monitor/plugin.py` 放进 TgtoDrive 插件目录（按 TgtoDrive 的插件命名要求放置，例如 `emby-pulse-monitor.py` 或对应插件 id 的目录）；

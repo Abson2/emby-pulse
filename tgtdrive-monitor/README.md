@@ -1,5 +1,9 @@
 # 求片完结关键词清理（TgtoDrive 插件）
 
+> ⚠️ **这是 TgtoDrive 插件，不是 EMBYPULSE 插件。** 本文件使用 TgtoDrive 的「单文件插件协议」（`PLUGIN_MANIFEST` 常量字典 + `run(params, context)` 函数），**必须装到 TgtoDrive 容器内**由 OpenAPI 按计划周期调用。
+>
+> **不要和 EMBYPULSE 侧的「求片同步」插件混淆**：那个插件在仓库 `app/plugins/tg_whitelist_sync/plugin.py`，基于 EMBYPULSE 自己的 `PluginBase` 框架，**没有** `PLUGIN_MANIFEST`，运行在 EMBYPULSE 里，**绝不能导入 TgtoDrive**（导入必报"必须在顶层定义唯一的 PLUGIN_MANIFEST"）。两个插件是两个不同框架的产物，互不可移植。
+
 运行在 **TgtoDrive 容器内**的 OpenAPI 插件，与 EMBYPULSE 侧的「求片同步 TgtoDrive 白名单」插件（插件 A）配合，形成"推送 + 清理"的闭环。
 
 ## 分工
