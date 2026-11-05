@@ -17,6 +17,9 @@
 config.json
 *.log
 
+# 插件运行态持久化文件（由 tg_whitelist_sync 写盘，含运行统计，非源码）
+tg_whitelist_sync_state.json
+
 # ===== 凭证 / 密钥（不使用宽泛的 *secret*，避免误伤源码文件）=====
 *.pem
 *.key

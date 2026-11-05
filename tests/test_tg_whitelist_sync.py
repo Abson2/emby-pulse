@@ -1,5 +1,5 @@
 """
-求片同步 TgtoDrive 白名单插件 —— 回归 / 生命周期测试（v1.2.0）
+求片同步 TgtoDrive 白名单插件 —— 回归 / 生命周期测试（v1.3.0）
 
 不依赖真实 app / Emby / TgtoDrive，通过注入假模块与可控 transport 验证：
 - 阶段A：审批后写入白名单，全量覆盖不冲掉现有规则（坑①），丢弃陈旧 raw_regex（坑②）
@@ -443,6 +443,35 @@ _os.environ.pop("TGTODRIVE_URL", None)
 check(rb({}) == "http://filehost:12366", "本地配置文件 base_url 生效")
 _os.environ.pop("EMBYPULSE_CONFIG_DIR", None)
 
+# 运行态持久化：save/load 回读一致（跨重启后面板仍可读到历史，便于观测）
+_d2 = _tf.mkdtemp()
+_sp = _os.path.join(_d2, "tg_whitelist_sync_state.json")
+_inst = mod.TgWhitelistSyncPlugin()
+_inst._state_file = _sp
+_inst._last_run = "2026-11-05 12:00:00"
+_inst._last_result = "本轮待处理 2，新增写入 1，已存在跳过 1，置状态2 2 条"
+_inst._last_ingest_run = "2026-11-05 12:05:00"
+_inst._last_cleanup_run = "2026-11-05 12:10:00"
+_inst._stats = {"total": 2, "success": 1, "failed": 0, "skipped": 1}
+_inst._save_state()
+_inst2 = mod.TgWhitelistSyncPlugin()
+_inst2._state_file = _sp
+_inst2._load_state()
+check(_inst2._last_run == "2026-11-05 12:00:00", "状态持久化：last_run 回读一致")
+check(_inst2._last_result == "本轮待处理 2，新增写入 1，已存在跳过 1，置状态2 2 条", "状态持久化：last_result 回读一致")
+check(_inst2._last_ingest_run == "2026-11-05 12:05:00", "状态持久化：last_ingest_run 回读一致")
+check(_inst2._last_cleanup_run == "2026-11-05 12:10:00", "状态持久化：last_cleanup_run 回读一致")
+check(_inst2._stats.get("total") == 2 and _inst2._stats.get("skipped") == 1, "状态持久化：stats 回读一致")
+
+# 未显式指定时，状态文件路径回落到配置目录（不报错、命名正确）
+_rf = mod.TgWhitelistSyncPlugin()
+_rf._state_file = None
+_rfp = _rf._resolve_state_file()
+check(isinstance(_rfp, str) and _rfp.endswith("tg_whitelist_sync_state.json"), "状态文件路径回落到配置目录")
+
+# /status 接口接线了 ingest/cleanup 运行时间戳字段（源码级校验）
+check('"last_ingest_run": self._last_ingest_run' in src, "status 接口返回 last_ingest_run")
+check('"last_cleanup_run": self._last_cleanup_run' in src, "status 接口返回 last_cleanup_run")
 
 print(f"\n==== 结果：通过 {PASS} / 失败 {FAIL} ====")
 sys.exit(1 if FAIL else 0)

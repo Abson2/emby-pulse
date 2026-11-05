@@ -159,7 +159,7 @@ CSRFMiddleware._expected_origins() 只给出 http://<你的域名>
 
 ## ✨ 四、本项目独有特性：求片 → TgtoDrive 自动同步插件（本次更新）
 
-> 插件 id：`tg_whitelist_sync`，版本 `v1.2.0`，作者 Abson2。这是本独立仓库**相对上游的独有扩展**，上游并不具备。
+> 插件 id：`tg_whitelist_sync`，版本 `v1.3.0`，作者 Abson2。这是本独立仓库**相对上游的独有扩展**，上游并不具备。
 
 ### 4.1 它解决什么问题
 
@@ -414,7 +414,7 @@ docker compose up -d
 │   ├── bootstrap/middleware.py           ★ 注册鉴权网关
 │   ├── domains/system/webhook.py         ★ 问题 3
 │   ├── bot/bot.py                        ★ 问题 3/5
-│   └── plugins/tg_whitelist_sync/plugin.py   ★ 独有特性：求片→TgtoDrive 同步（v1.2.0）
+│   └── plugins/tg_whitelist_sync/plugin.py   ★ 独有特性：求片→TgtoDrive 同步（v1.3.0）
 ├── templates/settings.html        ★ 问题 3/5，完整模板
 ├── tests/test_tg_whitelist_sync.py    独有特性插件单元测试（38 项）
 ├── docs/tg-whitelist-sync-design.md    独有特性设计文档

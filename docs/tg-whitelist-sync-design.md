@@ -393,3 +393,13 @@ EMBYPULSE 侧插件 `app/plugins/tg_whitelist_sync/plugin.py` 已实现并通过
 - [ ] TgtoDrive 白名单接口信息：从你实例 OpenAPI 页抄，或给我飞牛 NAS 的 TgtoDrive 地址:端口（我可取规范），或授权我 `docker pull walkingd/tgto123:latest` 提取内部 API。
 - [ ] 完结策略：提交即完结(2) 还是 先待入库(7) 再对账？
 - [ ] 处理范围：仅待审批(0) 还是 全部待同步(0/1/4/7)？
+
+---
+
+## 八、管理与可观测性（v1.3.0）
+
+- **管理面板**：插件启用后，EMBYPULSE「插件」页该插件卡片新增「同步面板」按钮。面板展示运行状态（运行中/线程存活/已配置/TgtoDrive 地址/场景/触发时点/累计统计/特性2·特性1 开关/清理期限/各阶段最近结果），并提供四个手动动作：**测试连接 / 立即同步 / 入库流转 / 清理监控**；下方列出「待同步工单预览」。四个动作分别调用 `POST /api/plugins/tg_whitelist_sync/{test_connection,sync_now,ingest_now,cleanup_now}`，均需管理员登录。特性1/特性2 不再"无感运行"，可在界面直接观测与触发。
+- **运行态持久化**：每次轮询（阶段 A/B/C）结束后，把最近运行信息写盘到配置目录 `tg_whitelist_sync_state.json`（仅运行统计与最近结果，不含任何凭证/个人数据）。容器重启后面板仍可读到历史，便于排查"为什么没同步/没清理"。
+- **状态接口**：`GET /api/plugins/tg_whitelist_sync/status` 返回上述全部字段（含 `last_ingest_run` / `last_cleanup_run` 时间戳），面板与人工排查共用同一数据源。
+
+> 通信地址多层解析（UI > `TGTODRIVE_URL` > `config/tgtodrive.json` > 默认宿主网关）与全量覆盖/raw_regex/只动 `kw_` 前缀规则等约束，见上文第四节，未变。

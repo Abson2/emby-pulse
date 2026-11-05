@@ -645,6 +645,53 @@
     </div>
 </div>
 
+<!-- 求片 → TgtoDrive 同步面板 -->
+<div id="tgwhitelist-panel-modal" class="fixed inset-0 z-[200] hidden items-center justify-center p-4 backdrop-blur-sm transition-opacity duration-300 opacity-0" onclick="if(event.target===this) closeTgWhitelistSyncPanel()">
+    <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] transform transition-transform duration-300 scale-95 border border-gray-100 dark:border-white/10" id="tgwhitelist-panel-content">
+        <div class="px-6 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-black/20 rounded-t-2xl shrink-0">
+            <h3 class="text-[16px] font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-sky-500 to-cyan-500 flex items-center justify-center">
+                    <i class="fa-solid fa-tower-broadcast text-white text-[11px]"></i>
+                </div>
+                求片 → TgtoDrive 同步
+            </h3>
+            <button onclick="closeTgWhitelistSyncPanel()" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-5 overflow-y-auto mac-scrollbar flex-1 space-y-5">
+            <!-- 运行状态 -->
+            <div class="bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5 p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h4 class="text-[13px] font-bold text-gray-700 dark:text-gray-300"><i class="fa-solid fa-circle-info mr-2 text-sky-500"></i>运行状态</h4>
+                    <button onclick="refreshTgWhitelistStatus()" class="text-[11px] text-gray-400 hover:text-brand-500 transition-colors"><i class="fa-solid fa-rotate mr-1"></i>刷新</button>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-[12px]" id="tgwhitelist-status-grid">
+                    <div class="text-center py-6 text-gray-400 col-span-full"><i class="fa-solid fa-spinner fa-spin mr-2"></i>加载中...</div>
+                </div>
+            </div>
+
+            <!-- 操作栏 -->
+            <div class="flex flex-wrap items-center gap-2">
+                <button id="tgwhitelist-btn-test" onclick="tgTestConnection()" class="text-[12px] font-bold text-white px-3.5 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 transition-all active:scale-95 flex items-center gap-1.5 shadow-lg shadow-emerald-500/20"><i class="fa-solid fa-plug"></i>测试连接</button>
+                <button id="tgwhitelist-btn-sync" onclick="tgSyncNow()" class="text-[12px] font-bold text-white px-3.5 py-2 rounded-lg bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 transition-all active:scale-95 flex items-center gap-1.5 shadow-lg shadow-sky-500/20"><i class="fa-solid fa-arrow-up-from-bracket"></i>立即同步</button>
+                <button id="tgwhitelist-btn-ingest" onclick="tgIngestNow()" class="text-[12px] font-bold text-white px-3.5 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 transition-all active:scale-95 flex items-center gap-1.5 shadow-lg shadow-indigo-500/20"><i class="fa-solid fa-download"></i>入库流转</button>
+                <button id="tgwhitelist-btn-cleanup" onclick="tgCleanupNow()" class="text-[12px] font-bold text-white px-3.5 py-2 rounded-lg bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 transition-all active:scale-95 flex items-center gap-1.5 shadow-lg shadow-rose-500/20"><i class="fa-solid fa-broom"></i>清理监控</button>
+            </div>
+            <div id="tgwhitelist-action-msg" class="text-[12px] text-gray-500 dark:text-gray-400 min-h-[18px]"></div>
+
+            <!-- 待同步预览 -->
+            <div class="bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5 overflow-hidden">
+                <div class="px-4 py-3 border-b border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-100/50 dark:bg-black/10">
+                    <h4 class="text-[13px] font-bold text-gray-700 dark:text-gray-300"><i class="fa-solid fa-list mr-2 text-sky-500"></i>待同步工单预览</h4>
+                    <span class="text-[11px] text-gray-500" id="tgwhitelist-preview-count">共 0 条</span>
+                </div>
+                <div id="tgwhitelist-preview-list" class="max-h-[280px] overflow-y-auto mac-scrollbar">
+                    <div class="text-center py-8 text-gray-400 text-[12px]"><i class="fa-solid fa-spinner fa-spin mr-2"></i>加载中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 智能合集管理面板 -->
 <div id="smart-collections-panel-modal" class="fixed inset-0 z-[200] hidden items-center justify-center p-4 backdrop-blur-sm transition-opacity duration-300 opacity-0" onclick="if(event.target===this) closeSmartCollectionsPanel()">
     <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] transform transition-transform duration-300 scale-95 border border-gray-100 dark:border-white/10" id="smart-collections-panel-content">
@@ -1513,6 +1560,7 @@
                         ${p.id === 'library_cover' && p.enabled ? '<button onclick="openLibraryCoverPanel()" class="text-[12px] font-bold text-gray-500 hover:text-pink-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-images mr-1.5"></i>面板</button>' : ''}
                         ${p.id === 'smart_collections' && p.enabled ? '<button onclick="openSmartCollectionsPanel()" class="text-[12px] font-bold text-gray-500 hover:text-purple-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-layer-group mr-1.5"></i>管理</button>' : ''}
                         ${p.id === 'auto_expire' && p.enabled ? '<button onclick="openAutoExpirePanel()" class="text-[12px] font-bold text-gray-500 hover:text-amber-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-clock mr-1.5"></i>面板</button>' : ''}
+                        ${p.id === 'tg_whitelist_sync' && p.enabled ? '<button onclick="openTgWhitelistSyncPanel()" class="text-[12px] font-bold text-gray-500 hover:text-sky-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-tower-broadcast mr-1.5"></i>同步面板</button>' : ''}
                         ${p.id === 'emby_restart' && p.enabled ? '<button onclick="openEmbyRestartPanel()" class="text-[12px] font-bold text-gray-500 hover:text-orange-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-rotate mr-1.5"></i>面板</button>' : ''}
                         ${p.id === 'view_report' && p.enabled ? '<button onclick="openViewReportPanel()" class="text-[12px] font-bold text-gray-500 hover:text-blue-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-chart-line mr-1.5"></i>面板</button>' : ''}
                         ${p.id === 'cover_generator' && p.enabled ? '<button onclick="openCoverGeneratorPanel()" class="text-[12px] font-bold text-gray-500 hover:text-purple-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i>生成</button>' : ''}
@@ -2052,6 +2100,116 @@
         modal.classList.add('opacity-0'); content.classList.add('scale-95');
         setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
     }
+
+    // ==========================================
+    // 求片 → TgtoDrive 同步面板
+    // ==========================================
+    function openTgWhitelistSyncPanel() {
+        const modal = document.getElementById('tgwhitelist-panel-modal');
+        const content = document.getElementById('tgwhitelist-panel-content');
+        modal.classList.remove('hidden'); modal.classList.add('flex');
+        setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
+        refreshTgWhitelistStatus();
+        loadTgWhitelistPreview();
+    }
+    function closeTgWhitelistSyncPanel() {
+        const modal = document.getElementById('tgwhitelist-panel-modal');
+        const content = document.getElementById('tgwhitelist-panel-content');
+        modal.classList.add('opacity-0'); content.classList.add('scale-95');
+        setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
+    }
+
+    const TGWS_BASE = '/api/plugins/tg_whitelist_sync';
+
+    async function refreshTgWhitelistStatus() {
+        const grid = document.getElementById('tgwhitelist-status-grid');
+        grid.innerHTML = '<div class="text-center py-6 text-gray-400 col-span-full"><i class="fa-solid fa-spinner fa-spin mr-2"></i>加载中...</div>';
+        try {
+            const res = await (await fetch(TGWS_BASE + '/status')).json();
+            if (res.status !== 'success') {
+                grid.innerHTML = '<div class="text-center py-6 text-red-400 col-span-full">获取状态失败：' + escapeHtml(res.message || '') + '</div>';
+                return;
+            }
+            const d = res.data || {};
+            const yn = v => v ? '<span class="text-emerald-500 font-bold">开</span>' : '<span class="text-gray-400">关</span>';
+            const stat = (label, value) =>
+                '<div class="bg-white dark:bg-[#2C2C2E] rounded-lg px-3 py-2 border border-gray-100 dark:border-white/5">' +
+                '<div class="text-[10px] text-gray-400 mb-0.5">' + label + '</div>' +
+                '<div class="text-gray-700 dark:text-gray-200 font-medium truncate" title="' + escapeHtml(String(value)) + '">' + escapeHtml(String(value)) + '</div></div>';
+            const s = d.stats || {};
+            grid.innerHTML =
+                stat('运行状态', (d.running ? '运行中' : '未运行') + (d.thread_alive ? ' · 线程存活' : '')) +
+                stat('已配置', d.configured ? '是' : '否') +
+                stat('TgtoDrive 地址', d.base_url || '-') +
+                stat('场景', d.scene || '-') +
+                stat('触发时点', d.trigger_mode || '-') +
+                stat('最近同步', d.last_run || '尚未运行') +
+                stat('同步结果', d.last_result || '-') +
+                stat('累计统计', '共' + (s.total||0) + ' / 成功' + (s.success||0) + ' / 跳过' + (s.skipped||0) + ' / 失败' + (s.failed||0)) +
+                stat('特性2 自动入库', yn(d.auto_ingest_enabled)) +
+                stat('特性1 完结清理', yn(d.auto_cleanup_enabled)) +
+                stat('清理期限', (d.cleanup_days||5) + ' 天') +
+                stat('入库检测', d.last_ingest_result || '尚未运行') +
+                stat('清理结果', d.last_cleanup_result || '尚未运行');
+        } catch(e) {
+            grid.innerHTML = '<div class="text-center py-6 text-red-400 col-span-full">请求异常</div>';
+        }
+    }
+
+    async function loadTgWhitelistPreview() {
+        const list = document.getElementById('tgwhitelist-preview-list');
+        const countEl = document.getElementById('tgwhitelist-preview-count');
+        list.innerHTML = '<div class="text-center py-8 text-gray-400 text-[12px]"><i class="fa-solid fa-spinner fa-spin mr-2"></i>加载中...</div>';
+        try {
+            const res = await (await fetch(TGWS_BASE + '/preview')).json();
+            if (res.status !== 'success') {
+                list.innerHTML = '<div class="text-center py-8 text-red-400 text-[12px]">获取失败：' + escapeHtml(res.message||'') + '</div>';
+                return;
+            }
+            const items = res.data || [];
+            countEl.textContent = '共 ' + (res.count||0) + ' 条';
+            if (!items.length) {
+                list.innerHTML = '<div class="text-center py-8 text-gray-400 text-[12px]">当前没有符合触发条件的待同步工单</div>';
+                return;
+            }
+            list.innerHTML = items.map(it => {
+                const kw = it.keyword ? '<span class="text-sky-500">' + escapeHtml(it.keyword) + '</span>' : '<span class="text-gray-400">（无关键词）</span>';
+                return '<div class="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 text-[12px]">' +
+                    '<div class="min-w-0 flex-1"><div class="text-gray-700 dark:text-gray-200 truncate">' + escapeHtml(it.title||'') + '</div>' +
+                    '<div class="text-[10px] text-gray-400 mt-0.5">TMDB ' + escapeHtml(String(it.tmdb_id)) + ' · ' + kw + '</div></div>' +
+                    '<div class="shrink-0 ml-3"><span class="text-[10px] px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500">' + escapeHtml(String(it.status_text||it.status)) + '</span></div></div>';
+            }).join('');
+        } catch(e) {
+            list.innerHTML = '<div class="text-center py-8 text-red-400 text-[12px]">请求异常</div>';
+        }
+    }
+
+    async function tgAction(path, msg, btnId) {
+        const btn = btnId ? document.getElementById(btnId) : null;
+        if (btn) { btn.disabled = true; btn.classList.add('opacity-60'); }
+        const msgEl = document.getElementById('tgwhitelist-action-msg');
+        msgEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>' + escapeHtml(msg) + ' ...';
+        try {
+            const res = await (await fetch(TGWS_BASE + '/' + path, { method: 'POST' })).json();
+            if (res.status === 'success') {
+                let extra = '';
+                if (res.data && res.data.result) extra = '：' + escapeHtml(String(res.data.result));
+                msgEl.innerHTML = '<span class="text-emerald-500"><i class="fa-solid fa-circle-check mr-1"></i>' + escapeHtml(res.message||'成功') + extra + '</span>';
+            } else {
+                msgEl.innerHTML = '<span class="text-red-500"><i class="fa-solid fa-circle-xmark mr-1"></i>' + escapeHtml(res.message||'失败') + '</span>';
+            }
+        } catch(e) {
+            msgEl.innerHTML = '<span class="text-red-500"><i class="fa-solid fa-circle-xmark mr-1"></i>请求异常</span>';
+        } finally {
+            if (btn) { btn.disabled = false; btn.classList.remove('opacity-60'); }
+            refreshTgWhitelistStatus();
+        }
+    }
+    function tgTestConnection() { tgAction('test_connection', '测试连接中', 'tgwhitelist-btn-test'); }
+    function tgSyncNow() { tgAction('sync_now', '同步中', 'tgwhitelist-btn-sync'); }
+    function tgIngestNow() { tgAction('ingest_now', '入库流转检测中', 'tgwhitelist-btn-ingest'); }
+    function tgCleanupNow() { tgAction('cleanup_now', '清理中', 'tgwhitelist-btn-cleanup'); }
+
 
     // ==========================================
     // Emby 自动重启面板

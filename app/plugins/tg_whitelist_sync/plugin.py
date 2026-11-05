@@ -1,5 +1,5 @@
 """
-求片同步 TgtoDrive 关键词白名单插件（v1.2.0）
+求片同步 TgtoDrive 关键词白名单插件（v1.3.0）
 =============================================
 
 全生命周期：
@@ -476,7 +476,7 @@ class TgWhitelistSyncPlugin(PluginBase):
     description = "把审批通过的求片按 TMDB 编号写入 TgtoDrive 频道监控关键词白名单，并置工单完结"
     icon = "fa-tower-broadcast"
     icon_color = "from-sky-500 to-cyan-500"
-    version = "1.2.0"
+    version = "1.3.0"
     author = "Abson2"
     permissions = ["db:read", "db:write", "network:out"]
 
@@ -490,8 +490,74 @@ class TgWhitelistSyncPlugin(PluginBase):
         self._stats = {"total": 0, "success": 0, "failed": 0, "skipped": 0}
         self._last_ingest_result = None
         self._last_cleanup_result = None
+        self._last_ingest_run = None
+        self._last_cleanup_run = None
         self._emby_uid_cache = (None, 0.0)
+        self._state_file = None
+        self._load_state()
         self._setup_routes()
+
+    # ------------------------------------------------------------ 运行态持久化
+    def _resolve_state_file(self):
+        """解析状态文件路径（配置目录内）。"""
+        if self._state_file:
+            return self._state_file
+        candidate_dirs = [
+            os.environ.get("EMBYPULSE_CONFIG_DIR", ""),
+            "/app/config",
+            "config",
+            ".",
+        ]
+        for d in candidate_dirs:
+            if d and os.path.isdir(d):
+                self._state_file = os.path.join(d, "tg_whitelist_sync_state.json")
+                return self._state_file
+        self._state_file = "tg_whitelist_sync_state.json"
+        return self._state_file
+
+    def _load_state(self):
+        """从配置目录读回最近运行信息（仅统计与结果，不含任何凭证/个人数据）。"""
+        try:
+            p = self._resolve_state_file()
+            if p and os.path.isfile(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    s = json.load(f)
+                self._last_run = s.get("last_run", None)
+                self._last_result = s.get("last_result", None)
+                self._last_ingest_result = s.get("last_ingest_result", None)
+                self._last_cleanup_result = s.get("last_cleanup_result", None)
+                self._last_ingest_run = s.get("last_ingest_run", None)
+                self._last_cleanup_run = s.get("last_cleanup_run", None)
+                self._stats = s.get(
+                    "stats", {"total": 0, "success": 0, "failed": 0, "skipped": 0}
+                )
+        except Exception:
+            pass
+
+    def _save_state(self):
+        """把最近运行信息落盘，便于重启后面板仍可读到历史。"""
+        try:
+            p = self._resolve_state_file()
+            d = os.path.dirname(p)
+            if d and not os.path.isdir(d):
+                os.makedirs(d, exist_ok=True)
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "last_run": self._last_run,
+                        "last_result": self._last_result,
+                        "last_ingest_result": self._last_ingest_result,
+                        "last_cleanup_result": self._last_cleanup_result,
+                        "last_ingest_run": self._last_ingest_run,
+                        "last_cleanup_run": self._last_cleanup_run,
+                        "stats": self._stats,
+                        "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    },
+                    f,
+                    ensure_ascii=False,
+                )
+        except Exception:
+            pass
 
     # ------------------------------------------------------------ 配置表单
     def get_config_schema(self):
@@ -674,6 +740,8 @@ class TgWhitelistSyncPlugin(PluginBase):
             except Exception as e:  # 单轮异常不终止线程
                 logger.error(f"[求片同步] 轮询异常: {e}", exc_info=True)
                 self.log(f"轮询异常: {e}", "error")
+            finally:
+                self._save_state()
 
             cfg = self._get_config()
             try:
@@ -696,6 +764,8 @@ class TgWhitelistSyncPlugin(PluginBase):
                     self._ingest_once()
                 except Exception as e:
                     logger.error(f"[求片同步] 自动入库检测异常: {e}", exc_info=True)
+                finally:
+                    self._save_state()
                 last_ingest = now
             # 阶段C：已入库(默认2) 且超过清理天数 -> 删除 TgtoDrive 关键词监控
             if now - last_cleanup >= cleanup_interval:
@@ -703,6 +773,8 @@ class TgWhitelistSyncPlugin(PluginBase):
                     self._cleanup_once()
                 except Exception as e:
                     logger.error(f"[求片同步] 关键词清理异常: {e}", exc_info=True)
+                finally:
+                    self._save_state()
                 last_cleanup = now
 
             if self._stop_event.wait(interval):
@@ -1002,6 +1074,7 @@ class TgWhitelistSyncPlugin(PluginBase):
             if not dry_run
             else "[试运行] 未实际改动"
         )
+        self._last_ingest_run = time.strftime("%Y-%m-%d %H:%M:%S")
         if moved:
             logger.info(f"[求片同步] {self._last_ingest_result}")
 
@@ -1110,6 +1183,7 @@ class TgWhitelistSyncPlugin(PluginBase):
         self._last_cleanup_result = f"已清理 {removed} 条已完结关键词监控（>{cleanup_days}天）"
         logger.info(f"[求片同步] {self._last_cleanup_result}")
         self.log(self._last_cleanup_result, "info")
+        self._last_cleanup_run = time.strftime("%Y-%m-%d %H:%M:%S")
 
     # ------------------------------------------------------------ HTTP 路由
     def _setup_routes(self):
@@ -1146,6 +1220,8 @@ class TgWhitelistSyncPlugin(PluginBase):
                     "cleanup_days": cfg.get("cleanup_days") or 5,
                     "last_ingest_result": self._last_ingest_result,
                     "last_cleanup_result": self._last_cleanup_result,
+                    "last_ingest_run": self._last_ingest_run,
+                    "last_cleanup_run": self._last_cleanup_run,
                 },
             }
 
