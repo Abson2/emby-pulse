@@ -240,6 +240,16 @@ TgtoDrive 通常以 `host` 网络模式运行（默认端口 `12366`），**不�
 
 更完整的技术细节（接口结构、字段名映射 `RULE_FIELD`、鉴权兜底、回归测试）见仓库 `docs/tg-whitelist-sync-design.md`。字段名 `resolution / picture_effect / year / must_include` 系依据 TgtoDrive UI 表单推断，若与实际不符，仅改 `RULE_FIELD` 一处常量即可（无需动其他代码）。
 
+### 4.7 插件 B（TgtoDrive 侧完结清理）怎么启用
+
+插件 B **不包含在 EMBYPULSE 镜像里**，需单独装到 **TgtoDrive 容器**内，由 TgtoDrive 的 OpenAPI 按计划周期调用。完整步骤、参数表与运行逻辑见 `tgtdrive-monitor/README.md`，要点：
+
+1. 把 `tgtdrive-monitor/plugin.py` 放进 TgtoDrive 插件目录（按 TgtoDrive 的插件命名要求放置，例如 `emby-pulse-monitor.py` 或对应插件 id 的目录）；
+2. 在 TgtoDrive 插件管理中启用，填写 `tgtdrive_base_url`（容器内通常用回环 `http://127.0.0.1:12366`）、`tgtdrive_token`、`emby_url` / `emby_key`（用于判定入库），并设置运行周期（建议每天一次或每 6 小时一次）；
+3. 纯标准库、无需额外依赖；**只删本插件写入的 `kw_` 规则，绝不碰你在页面里手动配置的其他关键词**；`cleanup_days` 设为 `0` 可关闭清理。
+
+> 地址约定：本目录不在凭证扫描豁免名单内，故插件 B 一律只用回环地址 `127.0.0.1`，不出现任何内网 IP 或第三方域名；若 TgtoDrive / Emby 不在回环上，请在 TgtoDrive 插件配置里改成实际可达地址。
+
 ---
 
 ## 🚀 五、快速部署（推荐：直接拉取镜像）
@@ -447,4 +457,4 @@ docker compose up -d
 | `WEBHOOK_ALLOW_QUERY_TOKEN` | `0` | 是否兼容旧的 `?token=` 传参 |
 | `TZ` / `HTTP_PORT` | `Asia/Shanghai` / `10307` | 时区 / 宿主机端口 |
 
-完整说明见 `SECURITY.md`；`.env` 各字段获取方式见 **第五节 5.1**。插件自身的运行期配置（TgtoDrive 令牌、场景、特性 1/2 开关、轮询间隔等）在 EMBYPULSE「插件」页内填写，不通过环境变量，详见 **第四节 4.4**。
+完整说明见 `SECURITY.md`；`.env` 各字段获取方式见 **第五节 5.1**。插件 A 自身的运行期配置（TgtoDrive 令牌 / 场景 / 筛选字段 / 轮询兜底间隔 / 触发状态 / 试运行等）在 EMBYPULSE「插件」页内填写，不通过环境变量，详见 **第四节 4.4**。配套清理插件 B 的安装与参数见 `tgtdrive-monitor/README.md`（需装到 TgtoDrive 容器内运行）。
