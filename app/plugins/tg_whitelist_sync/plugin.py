@@ -275,19 +275,43 @@ class TgtoDriveClient:
         return None
 
     @staticmethod
+    def _find_rules_container(cfg, key="rules"):
+        """在 GET 返回里递归定位 rules 列表所在的容器与子键。
+
+        返回 (container_dict, subkey)；找不到时 (None, None)。
+        兼容顶层 {rules:[...]}、嵌套 {data:{rules:[...]}} 以及其它任意层级，
+        避免因为 TgtoDrive 返回信封结构变化而拿不到现有规则（否则会被当成空场景整体覆盖）。
+        """
+        if isinstance(cfg, dict):
+            if key in cfg and isinstance(cfg[key], list):
+                return cfg, key
+            for k, v in cfg.items():
+                res = TgtoDriveClient._find_rules_container(v, key)
+                if res[0] is not None:
+                    return res
+        return None, None
+
+    @staticmethod
     def _extract_rules(cfg):
-        """从 GET 返回里稳妥取出 rules 数组。"""
-        if not isinstance(cfg, dict):
-            return []
-        rules = cfg.get("rules")
-        if isinstance(rules, list):
-            return rules
-        data = cfg.get("data")
-        if isinstance(data, dict):
-            r = data.get("rules")
-            if isinstance(r, list):
-                return r
+        """从 GET 返回里稳妥取出 rules 数组（兼容顶层 / 嵌套结构）。"""
+        container, subkey = TgtoDriveClient._find_rules_container(cfg)
+        if container is not None:
+            rules = container.get(subkey)
+            if isinstance(rules, list):
+                return rules
         return []
+
+    @staticmethod
+    def _strip_raw_regex(cfg):
+        """递归删除 raw_regex / advanced_raw_regex 键（后端信 rules 不信正则）。"""
+        if isinstance(cfg, dict):
+            cfg.pop("raw_regex", None)
+            cfg.pop("advanced_raw_regex", None)
+            for v in cfg.values():
+                TgtoDriveClient._strip_raw_regex(v)
+        elif isinstance(cfg, list):
+            for v in cfg:
+                TgtoDriveClient._strip_raw_regex(v)
 
     # -------------------------------------------------------- 读
     def get_config(self):
@@ -341,7 +365,9 @@ class TgtoDriveClient:
             rule[RULE_FIELD["effect"]] = rf["effect"]
         req = (rf.get("required") or "").strip()
         if req:
-            rule[RULE_FIELD["required"]] = req
+            # 必包含关键词的字段名由配置 rule_required_field 决定（默认 must_include，
+            # 系依据 TgtoDrive UI 推断；若实际抓包字段名不同，改配置即可，无需动代码）
+            rule[item.get("rule_required_field") or RULE_FIELD["required"]] = req
         return rule
 
     # -------------------------------------------------------- 合并写（核心，永不删除）
@@ -351,13 +377,28 @@ class TgtoDriveClient:
         **关键保证**：只把本插件要写的新规则合并进去，**完整保留所有已存在的规则
         （含用户通过 TgtoDrive 页面手动添加的其它关键词）**，绝不删除任何用户规则。
 
+        安全护栏：若 GET 成功返回但无法从响应中解析出 rules（接口版本 / scene /
+        鉴权不匹配导致结构未知），**中止推送**而非冒险覆盖现有规则——宁可本次不写入，
+        也绝不让用户已有的频道监控关键词被冲掉。
+
         返回 dict: {ok, added[], skipped[], changed, detail}
-        - added  : 本次新写入的规则 id
-        - skipped: 已存在（按 id 幂等）被跳过的规则 id
-        - GET 或 POST 失败会抛 TgtoDriveError；调用方据此决定是否置工单完结。
         """
         cfg = self.get_config()
-        existing = self._extract_rules(cfg)
+
+        container, subkey = self._find_rules_container(cfg)
+        if container is None:
+            # 找不到 rules 容器：区分「真·空场景(404 返回 {})」与「未知结构」
+            if cfg:
+                raise TgtoDriveError(
+                    "GET 返回无法解析出 rules（可能为接口版本 / scene / 鉴权不匹配），"
+                    "为安全起见中止推送，避免覆盖现有规则。"
+                    "请提供 /api/visual-filter/config 的真实返回样本以便修正字段名/信封结构。"
+                )
+            # 真正空场景：从零创建
+            cfg = {"scene": self.scene, "rules": []}
+            container, subkey = cfg, "rules"
+
+        existing = list(container.get(subkey) or [])
         existing_ids = {self._safe_id(r) for r in existing}
 
         new_rules = []
@@ -382,20 +423,18 @@ class TgtoDriveClient:
                 "detail": "白名单已包含所有目标，无需改动",
             }
 
-        # 坑①：先保留所有现有规则，仅追加新的 kw_ 规则 —— 绝不删除任何已有规则
+        # 坑①：保留所有现有规则（含用户规则），仅追加新的 kw_ 规则 —— 绝不删除任何已有规则
         merged = list(existing) + new_rules
+        container[subkey] = merged
 
-        # 坑②：后端信 rules 不信 raw_regex，丢掉陈旧的 raw_regex 让其重新编译
-        payload = dict(cfg) if isinstance(cfg, dict) else {}
-        payload["scene"] = self.scene
-        payload["rules"] = merged
-        payload.pop("raw_regex", None)
-        payload.pop("advanced_raw_regex", None)
+        # 坑②：后端信 rules 不信 raw_regex，递归丢弃陈旧正则让其重新编译
+        self._strip_raw_regex(cfg)
+        cfg["scene"] = self.scene
 
         try:
             resp = requests.post(
                 self._url(),
-                json=payload,
+                json=cfg,
                 headers=self._headers(),
                 timeout=self.timeout,
             )
@@ -578,6 +617,13 @@ class TgWhitelistSyncPlugin(PluginBase):
                 "hint": "规则必须包含的关键词（如 265=H.265/HEVC），留空表示不限制",
             },
             {
+                "key": "rule_required_field",
+                "label": "规则·必含字段名（高级，默认 must_include）",
+                "type": "text",
+                "placeholder": "must_include",
+                "hint": "TgtoDrive 规则对象中『必包含关键词』对应的字段名，系依据其 UI 推断；若实际抓包字段名不同（如 required_keywords/include），改此处即可，无需改代码",
+            },
+            {
                 "key": "check_interval",
                 "label": "轮询兜底间隔（分钟）",
                 "type": "number",
@@ -720,6 +766,13 @@ class TgWhitelistSyncPlugin(PluginBase):
             "effect": (cfg.get("rule_effect") or "all").strip(),
             "required": (cfg.get("rule_required_keyword") or "").strip(),
         }
+        # 必包含关键词写进规则对象的「字段名」可配置（TgtoDrive 实际字段名未知时由此修正）
+        rule_required_field = (cfg.get("rule_required_field") or RULE_FIELD["required"]).strip() or RULE_FIELD["required"]
+        if rule_fields["required"]:
+            logger.info(
+                f"[求片同步] 必包含关键词将写入字段名 {rule_required_field}={rule_fields['required']!r}"
+                f"（如 TgtoDrive 实际字段名不同，请在插件配置『必含字段名』中修正）"
+            )
 
         client = TgtoDriveClient(base, token, endpoint, scene, cookie, logger=logger)
 
@@ -752,6 +805,7 @@ class TgWhitelistSyncPlugin(PluginBase):
                 "status": _as_int(_row_get(row, "status")),
                 "keyword": keyword,
                 "rule_fields": rule_fields,
+                "rule_required_field": rule_required_field,
             })
 
         if not items:

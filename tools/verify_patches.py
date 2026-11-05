@@ -135,7 +135,7 @@ check("模板不再把 token 拼进 URL", "webhook?token=" not in tpl)
 check("模板 URL 预览为纯路径", "${host}/api/v1/webhook`" in tpl)
 
 print("== 交付与配置隔离 ==")
-check("compose 引用自己的镜像", "ghcr.io/abson2/emby-pulse-hardened:latest" in compose)
+check("compose 引用自己的镜像", "ghcr.io/abson2/emby-pulse-hardened" in compose)
 check("compose 未照搬上游主机路径", "/volume1/docker" not in compose)
 check("compose 不含示例内网 IP", "192.168." + "31.2" not in compose)
 check("Dockerfile 使用显式 COPY 白名单", "COPY . ." not in dockerfile)

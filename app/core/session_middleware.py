@@ -2,6 +2,7 @@
 Database Session Middleware
 Replaces SessionMiddleware, no SECRET_KEY needed
 """
+import os
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -26,9 +27,11 @@ class DatabaseSessionMiddleware(BaseHTTPMiddleware):
             response.set_cookie(
                 key=SESSION_COOKIE_NAME,
                 value=current_session_id,
-                max_age=7 * 24 * 3600,
+                max_age=int(os.getenv("SESSION_ABSOLUTE_HOURS", "168")) * 3600,
                 httponly=True,
-                samesite="strict",
+                # lax 比 strict 更宽容：允许同站（如 10307↔10308、隧道↔局域网）导航携带，
+                # 避免偶发的跨源导航导致 cookie 不被发送而被误判为未登录。
+                samesite="lax",
                 secure=is_https,  # Secure only on HTTPS
                 path="/"
             )

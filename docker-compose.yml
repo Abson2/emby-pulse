@@ -6,7 +6,8 @@ name: embypulse-pro
 
 services:
   embypulse-pro:
-    image: ghcr.io/abson2/emby-pulse-hardened:latest
+    # 版本锁定：默认拉取 1.6.0；可在 .env 设置 IMAGE_TAG 指定历史版本（如 v1.5.0）或 latest
+    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.6.0}
     container_name: embypulse-pro
     restart: unless-stopped
 

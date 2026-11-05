@@ -1,3 +1,4 @@
+import os
 import secrets
 import time
 import logging
@@ -15,8 +16,13 @@ from app.infra.db.session_dao import (
 
 SESSION_TABLE = "sessions"
 SESSION_COOKIE_NAME = "session_id"
-SESSION_MAX_AGE = 24 * 3600  # 24小时（空闲超时）
-SESSION_ABSOLUTE_MAX_AGE = 7 * 24 * 3600  # 7天（绝对超时）
+# 空闲超时（默认 24 小时）；可通过环境变量 SESSION_IDLE_HOURS 调整（单位：小时）。
+# 注意：本应用代码层面最短也是 24 小时，若出现「几分钟就被踢」属基础设施问题
+# （容器/进程周期性重启冲掉会话库、或上游 Cloudflare Access / 反代自带更短超时），
+# 调整此处无效，需从部署侧排查。
+SESSION_MAX_AGE = int(os.getenv("SESSION_IDLE_HOURS", "24")) * 3600
+# 绝对超时（默认 7 天）；可通过环境变量 SESSION_ABSOLUTE_HOURS 调整（单位：小时）。
+SESSION_ABSOLUTE_MAX_AGE = int(os.getenv("SESSION_ABSOLUTE_HOURS", "168")) * 3600
 _session_cleanup_started = False
 _session_cleanup_lock = threading.Lock()
 _session_cleanup_stop_event = threading.Event()

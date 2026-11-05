@@ -15,7 +15,7 @@ logger = logging.getLogger("uvicorn")
 
 # Token 配置
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_HOURS = 24  # Token 有效期：24 小时
+JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "24"))  # Token 有效期（小时），可经环境变量调整
 
 JWT_SECRET = os.getenv("JWT_SECRET_KEY", "") or SECRET_KEY
 if not JWT_SECRET:
