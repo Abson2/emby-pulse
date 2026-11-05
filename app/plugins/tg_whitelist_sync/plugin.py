@@ -1,23 +1,36 @@
 """
-求片同步 TgtoDrive 关键词白名单插件（v1.3.0）
+求片同步 TgtoDrive 关键词白名单插件（v2.0.0）
 =============================================
 
-全生命周期：
-- 阶段A：审批通过 → 写入 TgtoDrive 频道监控关键词（已完结工单触发）。
-- 阶段B（特性2）：待入库(7) 且 Emby 媒体库已有该影视 → 自动流转为已入库(2)。
-- 阶段C（特性1）：已入库(默认 status=2) 且超过清理天数(默认5) → 删除对应 TgtoDrive 关键词监控。
+本插件**只负责把求片推送进 TgtoDrive，绝不删除任何规则**。
 
+职责边界（与插件 B 的分工）
+---------------------------
+- 插件 A（本文件，运行在 EMBYPULSE 侧）：把工单大厅里**审批通过 / 手动接单**的求片，
+  按 TMDB 编号写入飞牛上 TgtoDrive 的「光鸭云盘 → 频道监控配置 → 关键词过滤 → 关键词白名单」，
+  触发 tg 频道监控入库。**只写不删**：合并写入时完整保留用户已有的其它关键词。
+- 插件 B（运行在 TgtoDrive 容器内，仓库 tgtdrive-monitor/）：按「影视已入库 Emby」判定完结，
+  完结满 cleanup_days(默认5) 天后，删除本插件写入的 kw_ 前缀关键词。清理权完全交给插件 B。
 
-把 EMBYPULSE 工单大厅中**已审批通过**的求片（以 TMDB 编号识别），自动写入飞牛上
-TgtoDrive 的「光鸭云盘 → 频道监控配置 → 关键词过滤 → 关键词白名单」，
-触发 tg 频道监控入库，再把对应 EMBYPULSE 求片工单置为「完结(status=2)」。
+为什么 A 不删
+--------------
+早期版本在 EMBYPULSE 侧做"完结清理"，因全量覆盖写会冲掉用户通过 TgtoDrive 页面手动添加的
+关键词（坑①）。清理是 TgtoDrive 侧的事，交给插件 B 在 TgtoDrive 容器内执行，避免跨容器误删。
 
-业务时点（重要）
-----------------
-只处理**审批通过后**的工单。EMBYPULSE 中管理员审批通过会执行
-`update_status(tid, sn, 1)`，即 status 由 0(待审批) → 1(下载中)。
-因此本插件的默认触发条件是 status == 1，而不是用户提交时的 0。
-未审批的工单（status=0）一律不碰，避免未经审核就占用 tg 频道监控。
+触发方式：事件驱动 + 轻量轮询兜底
+---------------------------------
+- **事件驱动（主路径）**：工单大厅管理员点「手动接单 / 审批通过」时，management_router 会
+  异步调用本插件的 `push_items(candidates, set_status_on_success=1)`，点完立即推送，不等轮询。
+  - 审批通过(approve) → status=1（自动下载中），并推送；
+  - 手动接单(manual)  → status=4（手动接单中），并推送；推送成功后流转为 status=1（自动下载中）；
+  - 审批拒绝(reject)  → 不推送，流程流转为 status=3（已拒绝）。
+- **入库流转**由 EMBYPULSE 核心负责：Emby webhook 触发 `auto_finish_request` 把 status 置 2
+  （已入库）并通知管理员/用户。本插件不重复实现。
+- **轻量轮询兜底**：后台每 check_interval 分钟扫描一次 status∈(1,4) 的工单补推，仅作容错。
+
+推送的每条规则除 {id, title, keywords[]} 外，按配置带筛选字段：
+分辨率(rule_resolution, 默认 4k) / 画面效果(rule_effect, 默认 all=全部效果) /
+年份(取自 TMDB，自动填写) / 必包含关键词(rule_required_keyword, 默认 265=H.265/HEVC)。
 
 TgtoDrive 写入接口（基于 8.8.27 实测，不走官方 Python 插件路线）
 ---------------------------------------------------------------
@@ -25,7 +38,7 @@ TgtoDrive 写入接口（基于 8.8.27 实测，不走官方 Python 插件路线
 
     POST /api/visual-filter/config
 
-请求体结构（场景 key 用 `scene` 字段区隔，光鸭为 `ENV_FILTER_GUANGYA`）：
+请求体（场景 key 用 `scene` 字段区隔，光鸭为 `ENV_FILTER_GUANGYA`）：
 
     {
       "scene": "ENV_FILTER_GUANGYA",
@@ -36,20 +49,11 @@ TgtoDrive 写入接口（基于 8.8.27 实测，不走官方 Python 插件路线
       "advanced_raw_regex": ""
     }
 
-三个必须知道的坑（已在本插件内处理）：
+两个必须知道的坑（已在本插件内处理）：
 1. **全量覆盖，不是 append**：直接 POST 一条会把现有规则全冲掉。
-   所以强制 `GET 当前 scene → 合并 → 整体 POST`。
+   所以强制 `GET 当前 scene → 合并 → 整体 POST`，且**完整保留非 kw_ 的用户规则**。
 2. **后端信 rules 不信 raw_regex**：绝不手拼 raw_regex，只维护 rules 数组，
    丢弃 GET 回来的陈旧 raw_regex，让后端按 rules 重新编译。
-3. **页面"添加"按钮不发请求，只有"保存并回写"才发**：我们是后端直接 POST，
-   不走页面按钮，所以无此坑；但注意单次 POST 即整体落盘。
-
-写入的每条规则除 {id, title, keywords[]} 外，还会按配置带筛选字段：
-分辨率(rule_resolution, 默认 4k) / 画面效果(rule_effect, 默认 all=全部效果) /
-年份(取自 TMDB，自动填写) / 必包含关键词(rule_required_keyword, 默认 265=H.265/HEVC)。
-字段名映射集中在模块常量 RULE_FIELD；TgtoDrive 的 OpenAPI 规范未导出 rules[]
-内部字段结构，字段名系依据 UI 表单推断，若与实际不符请以「手动建一条规则后 GET
-该 scene 配置」抓包为准，仅改 RULE_FIELD 一处即可。
 
 鉴权：优先 `Authorization: Bearer <OpenAPI 令牌>`（系统工具→实用工具→OpenAPI 创建）；
 若白名单接口只认网页会话，可用 `tgtdrive_cookie` 配置自签 session（兜底）。
@@ -81,13 +85,15 @@ except Exception:  # 部分部署未配置媒体服务器时仍可加载插件
 
 logger = logging.getLogger("uvicorn")
 
-# 待同步状态集合：下载中(1) / 手动接单(4) / 待入库(7)
-# 注意：不含 0(待审批) —— 需求要求「审批后再触发」，未审批不占用 tg 频道监控。
-PENDING_STATUS = (1, 4, 7)
+# 待同步状态集合：下载中(1) / 手动接单(4)
+# 注意：不含 0(待审批) —— 需求要求「审批后再触发」，未审批不占用 tg 频道监控；
+# 不含 7(待入库) —— 7 表示内容已转存完等待 Emby 入库，入库流转由核心 auto_finish 负责。
+PENDING_STATUS = (1, 4)
 
-# 审批通过后 EMBYPULSE 写入的状态码（management_router.batch_manage_action:
-# action="approve" -> update_status(tid, sn, 1)）
+# 审批通过后 EMBYPULSE 写入的状态码（management_router: approve -> update_status(tid, sn, 1)）
 STATUS_APPROVED = 1
+# 推送成功后工单流转到的状态（自动下载中）。
+STATUS_AUTO_DOWNLOADING = 1
 
 # TgtoDrive visual-filter 白名单写入路径（8.8.27 实测）
 VISUAL_FILTER_ENDPOINT = "/api/visual-filter/config"
@@ -106,9 +112,7 @@ STATUS_TEXT = {
     7: "待入库",
 }
 
-# 自动入库检测最小间隔（秒）：避免每轮轮询都打 Emby 检索接口
-INGEST_MIN_INTERVAL = 1800  # 30 分钟
-# 本插件写入的监控规则 id 前缀：清理时只动这些，绝不波及用户其他关键词
+# 本插件写入的监控规则 id 前缀：插件 B 清理时只动这些，绝不波及用户其他关键词
 RULE_ID_PREFIX = "kw_"
 
 # 光鸭白名单「规则对象」字段名映射。
@@ -130,6 +134,8 @@ class TgtoDriveError(Exception):
 
 # Docker 默认桥网关：host 网络模式的 TgtoDrive 从 bridge 网络的 EMBYPULSE 看过去，
 # 稳定地址是宿主网关 172.17.0.1，而非 NAS 的 LAN IP（后者会因 DHCP / 换网而变）。
+# 注意：本文件位于 app/ 目录，受 check-no-secrets 的 DOMAIN_EXEMPT_TOP 豁免，
+# 此处字面量 IP 不会触发凭证扫描。其它目录（如 tgtdrive-monitor/）一律只用 127.0.0.1。
 DEFAULT_TGTODRIVE_URL = "http://172.17.0.1:12366"
 
 
@@ -225,7 +231,7 @@ class TgtoDriveClient:
     config/tgtodrive.json > 默认值，便于容器变动时一处修改即可恢复通信。
 
     写入策略：GET 当前 scene 配置 → 合并 rules → 整体 POST（全量覆盖）。
-    这样绝不会冲掉用户已在页面里配置的其他关键词。
+    这样绝不会冲掉用户已在页面里配置的其他关键词（**本插件永不删除**）。
     """
 
     def __init__(self, base_url, token, endpoint, scene=DEFAULT_SCENE,
@@ -338,16 +344,18 @@ class TgtoDriveClient:
             rule[RULE_FIELD["required"]] = req
         return rule
 
-    # -------------------------------------------------------- 合并写（核心）
+    # -------------------------------------------------------- 合并写（核心，永不删除）
     def merge_and_save(self, items):
         """读-合并-写：把 items 追加进当前 scene 白名单，整体 POST 覆盖。
+
+        **关键保证**：只把本插件要写的新规则合并进去，**完整保留所有已存在的规则
+        （含用户通过 TgtoDrive 页面手动添加的其它关键词）**，绝不删除任何用户规则。
 
         返回 dict: {ok, added[], skipped[], changed, detail}
         - added  : 本次新写入的规则 id
         - skipped: 已存在（按 id 幂等）被跳过的规则 id
         - GET 或 POST 失败会抛 TgtoDriveError；调用方据此决定是否置工单完结。
         """
-        # 坑①：先 GET 现有规则
         cfg = self.get_config()
         existing = self._extract_rules(cfg)
         existing_ids = {self._safe_id(r) for r in existing}
@@ -374,6 +382,7 @@ class TgtoDriveClient:
                 "detail": "白名单已包含所有目标，无需改动",
             }
 
+        # 坑①：先保留所有现有规则，仅追加新的 kw_ 规则 —— 绝不删除任何已有规则
         merged = list(existing) + new_rules
 
         # 坑②：后端信 rules 不信 raw_regex，丢掉陈旧的 raw_regex 让其重新编译
@@ -410,43 +419,6 @@ class TgtoDriveClient:
             "detail": f"已追加 {len(added_ids)} 条规则",
         }
 
-    # -------------------------------------------------------- 删除（清理）
-    def remove_rules(self, ids):
-        """从当前 scene 白名单中删除指定 id 的规则（整体 POST 覆盖）。
-
-        只删除传入的 id，绝不波及用户其他关键词；返回实际删除条数，无匹配则 0。
-        """
-        cfg = self.get_config()
-        existing = self._extract_rules(cfg)
-        id_set = set(ids or [])
-        kept = [
-            r for r in existing
-            if not (isinstance(r, dict) and r.get("id") in id_set)
-        ]
-        removed_count = len(existing) - len(kept)
-        if removed_count == 0:
-            return 0
-        payload = dict(cfg) if isinstance(cfg, dict) else {}
-        payload["scene"] = self.scene
-        payload["rules"] = kept
-        # 坑②：后端信 rules 不信 raw_regex，丢弃陈旧 raw_regex 让其重新编译
-        payload.pop("raw_regex", None)
-        payload.pop("advanced_raw_regex", None)
-        try:
-            resp = requests.post(
-                self._url(),
-                json=payload,
-                headers=self._headers(),
-                timeout=self.timeout,
-            )
-        except requests.RequestException as e:
-            raise TgtoDriveError(f"POST 配置失败: {e}") from e
-        if not (200 <= resp.status_code < 300):
-            raise TgtoDriveError(
-                f"删除规则 HTTP {resp.status_code}: {resp.text[:200]}"
-            )
-        return removed_count
-
     # -------------------------------------------------------- 探测
     def health_check(self):
         """探测连通性（GET base_url，只判可达）。"""
@@ -473,10 +445,10 @@ class TgtoDriveClient:
 class TgWhitelistSyncPlugin(PluginBase):
     id = "tg_whitelist_sync"
     name = "求片同步 TgtoDrive 白名单"
-    description = "把审批通过的求片按 TMDB 编号写入 TgtoDrive 频道监控关键词白名单，并置工单完结"
+    description = "仅推送：把审批通过/手动接单的求片按 TMDB 写入 TgtoDrive 频道监控白名单（分辨率4k/全部效果/年份TMDB/必含265）；清理交由 TgtoDrive 侧插件"
     icon = "fa-tower-broadcast"
     icon_color = "from-sky-500 to-cyan-500"
-    version = "1.3.0"
+    version = "2.0.0"
     author = "Abson2"
     permissions = ["db:read", "db:write", "network:out"]
 
@@ -488,11 +460,6 @@ class TgWhitelistSyncPlugin(PluginBase):
         self._last_run = None
         self._last_result = None
         self._stats = {"total": 0, "success": 0, "failed": 0, "skipped": 0}
-        self._last_ingest_result = None
-        self._last_cleanup_result = None
-        self._last_ingest_run = None
-        self._last_cleanup_run = None
-        self._emby_uid_cache = (None, 0.0)
         self._state_file = None
         self._load_state()
         self._setup_routes()
@@ -524,10 +491,6 @@ class TgWhitelistSyncPlugin(PluginBase):
                     s = json.load(f)
                 self._last_run = s.get("last_run", None)
                 self._last_result = s.get("last_result", None)
-                self._last_ingest_result = s.get("last_ingest_result", None)
-                self._last_cleanup_result = s.get("last_cleanup_result", None)
-                self._last_ingest_run = s.get("last_ingest_run", None)
-                self._last_cleanup_run = s.get("last_cleanup_run", None)
                 self._stats = s.get(
                     "stats", {"total": 0, "success": 0, "failed": 0, "skipped": 0}
                 )
@@ -546,10 +509,6 @@ class TgWhitelistSyncPlugin(PluginBase):
                     {
                         "last_run": self._last_run,
                         "last_result": self._last_result,
-                        "last_ingest_result": self._last_ingest_result,
-                        "last_cleanup_result": self._last_cleanup_result,
-                        "last_ingest_run": self._last_ingest_run,
-                        "last_cleanup_run": self._last_cleanup_run,
                         "stats": self._stats,
                         "updated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
                     },
@@ -620,32 +579,21 @@ class TgWhitelistSyncPlugin(PluginBase):
             },
             {
                 "key": "check_interval",
-                "label": "轮询间隔（分钟）",
+                "label": "轮询兜底间隔（分钟）",
                 "type": "number",
                 "placeholder": "5",
-                "hint": "每隔多少分钟扫描一次待处理工单，默认 5",
+                "hint": "后台每隔多少分钟扫描一次待推送工单作为兜底，默认 5；事件驱动（工单大厅接单）为主路径",
             },
             {
                 "key": "trigger_mode",
-                "label": "触发时点",
+                "label": "轮询兜底的触发状态",
                 "type": "select",
                 "options": [
-                    {"value": "approved_only", "label": "仅审批通过后（推荐）— status=1"},
-                    {"value": "approved_and_manual", "label": "审批通过 + 手动接单 — status=1,4"},
+                    {"value": "approved_and_manual", "label": "审批通过 + 手动接单 — status=1,4（推荐）"},
+                    {"value": "approved_only", "label": "仅审批通过 — status=1"},
                     {"value": "all_pending", "label": "全部待同步 — status=1,4,7"},
-                    {"value": "include_unapproved", "label": "包含未审批 — status=0,1,4,7（不推荐）"},
                 ],
-                "hint": "默认只处理审批通过后的工单（status=1）。未审批工单不会写入 tg 频道监控",
-            },
-            {
-                "key": "mark_status",
-                "label": "提交成功后的工单状态",
-                "type": "select",
-                "options": [
-                    {"value": 2, "label": "已完成(2) — 直接完结"},
-                    {"value": 7, "label": "待入库(7) — 等入库确认"},
-                ],
-                "hint": "默认完结为 2；选 7 则等实际入库后另做对账（注意 7 仍在待同步集合，会持续被跳过）",
+                "hint": "仅影响后台轮询兜底；无论此处如何设置，工单大厅点「手动接单/审批通过」都会立即事件驱动推送",
             },
             {
                 "key": "dry_run",
@@ -659,49 +607,6 @@ class TgWhitelistSyncPlugin(PluginBase):
                 "type": "toggle",
                 "hint": "开启后插件运行结果会发送到全局通知",
             },
-            {
-                "key": "auto_ingest_enabled",
-                "label": "自动入库流转（特性2）",
-                "type": "toggle",
-                "hint": "开启后：待入库(7) 工单若 Emby 库已有该影视，自动流转为已入库(2)",
-            },
-            {
-                "key": "ingest_interval",
-                "label": "入库检测间隔（分钟）",
-                "type": "number",
-                "placeholder": "30",
-                "hint": "每隔多少分钟扫描一次待入库工单并比对 Emby 库，默认 30",
-            },
-            {
-                "key": "auto_cleanup_enabled",
-                "label": "完结关键词清理（特性1）",
-                "type": "toggle",
-                "hint": "开启后：已入库且超过清理天数的工单，自动删除其 TgtoDrive 关键词监控",
-            },
-            {
-                "key": "cleanup_days",
-                "label": "清理期限（天）",
-                "type": "number",
-                "placeholder": "5",
-                "hint": "工单完结后多少天删除对应关键词监控，默认 5；设 0 关闭清理",
-            },
-            {
-                "key": "cleanup_interval",
-                "label": "清理扫描间隔（分钟）",
-                "type": "number",
-                "placeholder": "60",
-                "hint": "每隔多少分钟扫描一次待清理关键词，默认 60",
-            },
-            {
-                "key": "cleanup_done_status",
-                "label": "触发清理的完结状态",
-                "type": "select",
-                "options": [
-                    {"value": 2, "label": "已完成/已入库(2)"},
-                    {"value": 7, "label": "待入库(7)"},
-                ],
-                "hint": "达到该状态且超过清理天数即删除关键词；默认 2（已入库）",
-            },
         ]
 
     # ------------------------------------------------------------ 生命周期
@@ -714,7 +619,7 @@ class TgWhitelistSyncPlugin(PluginBase):
             target=self._loop, daemon=True, name="tg-whitelist-sync"
         )
         self._thread.start()
-        logger.info("[求片同步] 插件已启用，后台轮询启动")
+        logger.info("[求片同步] 插件已启用，后台轮询兜底启动（主路径为事件驱动）")
 
     def on_disable(self):
         self._running = False
@@ -726,15 +631,12 @@ class TgWhitelistSyncPlugin(PluginBase):
             self._thread = None
         logger.info("[求片同步] 插件已禁用")
 
-    # ------------------------------------------------------------ 轮询主循环
+    # ------------------------------------------------------------ 轮询主循环（仅推送兜底）
     def _loop(self):
         # 启动后稍等，避免与 EMBYPULSE 自身初始化抢资源
         if self._stop_event.wait(30):
             return
-        last_ingest = 0.0
-        last_cleanup = 0.0
         while self._running and self._enabled:
-            # 阶段A：审批通过 -> 写入 TgtoDrive 关键词监控
             try:
                 self._sync_once()
             except Exception as e:  # 单轮异常不终止线程
@@ -748,34 +650,6 @@ class TgWhitelistSyncPlugin(PluginBase):
                 interval = max(1, int(cfg.get("check_interval") or 5)) * 60
             except (TypeError, ValueError):
                 interval = 300
-            try:
-                ingest_interval = max(5, int(cfg.get("ingest_interval") or 30)) * 60
-            except (TypeError, ValueError):
-                ingest_interval = 1800
-            try:
-                cleanup_interval = max(10, int(cfg.get("cleanup_interval") or 60)) * 60
-            except (TypeError, ValueError):
-                cleanup_interval = 3600
-
-            now = time.time()
-            # 阶段B：待入库(7) 且 Emby 已有该影视 -> 自动流转为已入库(2)
-            if now - last_ingest >= ingest_interval:
-                try:
-                    self._ingest_once()
-                except Exception as e:
-                    logger.error(f"[求片同步] 自动入库检测异常: {e}", exc_info=True)
-                finally:
-                    self._save_state()
-                last_ingest = now
-            # 阶段C：已入库(默认2) 且超过清理天数 -> 删除 TgtoDrive 关键词监控
-            if now - last_cleanup >= cleanup_interval:
-                try:
-                    self._cleanup_once()
-                except Exception as e:
-                    logger.error(f"[求片同步] 关键词清理异常: {e}", exc_info=True)
-                finally:
-                    self._save_state()
-                last_cleanup = now
 
             if self._stop_event.wait(interval):
                 return
@@ -783,23 +657,50 @@ class TgWhitelistSyncPlugin(PluginBase):
     # ------------------------------------------------------------ 同步策略
     @staticmethod
     def _allowed_status(trigger_mode):
-        """按触发时点返回允许同步的状态集合。
+        """按轮询兜底触发时点返回允许同步的状态集合。
 
-        默认 approved_only：只处理审批通过后的工单（status=1）。
+        默认 approved_and_manual：处理审批通过(1) 与手动接单(4)。
         """
-        mode = (trigger_mode or "approved_only").strip()
+        mode = (trigger_mode or "approved_and_manual").strip()
         if mode == "approved_only":
-            return (STATUS_APPROVED,)            # 仅审批通过（默认）
-        if mode == "approved_and_manual":
-            return (STATUS_APPROVED, 4)          # 审批通过 + 手动接单
+            return (STATUS_APPROVED,)            # 仅审批通过
         if mode == "all_pending":
-            return PENDING_STATUS                # 待同步全集（不含未审批）
-        if mode == "include_unapproved":
-            return (0,) + PENDING_STATUS         # 含未审批（不推荐）
-        return (STATUS_APPROVED,)
+            return PENDING_STATUS + (7,)        # 含待入库
+        # 默认 approved_and_manual
+        return PENDING_STATUS
 
-    # ------------------------------------------------------------ 单轮同步
+    # ------------------------------------------------------------ 轮询兜底：扫描待推送工单
     def _sync_once(self):
+        """后台轮询兜底：扫描 status∈允许集合 的工单并推送。
+
+        事件驱动（工单大厅接单）是主路径，这里仅作容错补推。
+        """
+        cfg = self._get_config()
+        allowed = self._allowed_status(cfg.get("trigger_mode"))
+        candidates = []
+        for r in list_all_requests():
+            st = _as_int(_row_get(r, "status"))
+            if st not in allowed:
+                continue
+            candidates.append((_row_get(r, "tmdb_id"), _row_get(r, "season")))
+        if not candidates:
+            self._last_result = "无待同步工单"
+            return
+        self.push_items(candidates, set_status_on_success=STATUS_AUTO_DOWNLOADING)
+
+    # ------------------------------------------------------------ 事件驱动入口（核心）
+    def push_items(self, candidates, set_status_on_success=STATUS_AUTO_DOWNLOADING):
+        """事件驱动入口：把给定工单候选（list of (tmdb_id, season)）推送到 TgtoDrive 白名单。
+
+        - 合并写入，**绝不删除**任何已有规则（含用户规则）。
+        - 推送成功后把工单置为 set_status_on_success（默认 1=自动下载中）。
+        - 推送失败仅记录日志，不改动工单状态（保留 4 手动接单中等管理员重试）。
+        - dry_run 开启时只记录不写库、不改状态、不写 TgtoDrive。
+        返回 dict: {ok, added[], skipped[], changed, detail}
+        """
+        if not candidates:
+            return {"ok": True, "added": [], "skipped": [], "changed": False,
+                    "detail": "无候选工单"}
         cfg = self._get_config()
         base = _resolve_base_url(cfg)
         token = (cfg.get("tgtdrive_token") or "").strip()
@@ -807,17 +708,11 @@ class TgWhitelistSyncPlugin(PluginBase):
         scene = (cfg.get("tgtdrive_scene") or DEFAULT_SCENE).strip()
         endpoint = (cfg.get("whitelist_endpoint") or VISUAL_FILTER_ENDPOINT).strip()
         dry_run = cfg.get("dry_run") in (True, "true", "1", 1)
-        allowed = self._allowed_status(cfg.get("trigger_mode"))
-        try:
-            mark_status = int(cfg.get("mark_status") or 2)
-        except (TypeError, ValueError):
-            mark_status = 2
-
         if not base or not endpoint:
-            msg = "TgtoDrive 地址或白名单接口未配置，跳过本轮"
+            msg = "TgtoDrive 地址或白名单接口未配置，跳过推送"
             self._last_result = msg
             logger.info(f"[求片同步] {msg}")
-            return
+            return {"ok": False, "detail": msg}
 
         # 规则级筛选字段（取值来自配置，字段名由 RULE_FIELD 映射）
         rule_fields = {
@@ -828,30 +723,24 @@ class TgWhitelistSyncPlugin(PluginBase):
 
         client = TgtoDriveClient(base, token, endpoint, scene, cookie, logger=logger)
 
-        rows = list_all_requests()
-        candidates = []
-        for r in rows:
-            # 用列名取值，不用位置下标：DAO 返回 DataRow（带列名的 dict），
-            # 位置下标会随 SELECT 列序变化而静默错位（实测列序已与注释版不同）。
-            if _as_int(_row_get(r, "status")) not in allowed:
-                continue
-            candidates.append(r)
-
-        if not candidates:
-            self._last_result = "无待同步工单"
-            return
-
         items = []
-        for r in candidates:
-            tmdb_id = _row_get(r, "tmdb_id")
-            media_type = _row_get(r, "media_type")
-            title = _row_get(r, "title")
-            year = _row_get(r, "year")
-            season = _row_get(r, "season")
-            episodes = _row_get(r, "episodes") or ""
-            if tmdb_id is None:
+        for pair in candidates:
+            try:
+                tmdb_id = int(pair[0]); season = int(pair[1])
+            except (TypeError, ValueError, IndexError):
                 continue
-            keyword = self._build_keyword(title, media_type, year, season, episodes)
+            try:
+                row = get_media_request(tmdb_id, season)
+            except Exception as e:
+                logger.warning(f"[求片同步] 查工单失败 tmdb={tmdb_id} s={season}: {e}")
+                continue
+            if not row:
+                continue
+            title = _row_get(row, "title")
+            media_type = _row_get(row, "media_type")
+            year = _row_get(row, "year")
+            eps = _row_get(row, "episodes") or ""
+            keyword = self._build_keyword(title, media_type, year, season, eps)
             if not keyword:
                 continue
             items.append({
@@ -860,14 +749,15 @@ class TgWhitelistSyncPlugin(PluginBase):
                 "year": year,
                 "season": season,
                 "title": title,
-                "status": _row_get(r, "status"),
+                "status": _as_int(_row_get(row, "status")),
                 "keyword": keyword,
                 "rule_fields": rule_fields,
             })
 
         if not items:
-            self._last_result = "无可用关键词的待同步工单"
-            return
+            self._last_result = "无可用关键词的候选工单"
+            return {"ok": True, "added": [], "skipped": [], "changed": False,
+                    "detail": "无可用关键词的候选工单"}
 
         if dry_run:
             for it in items:
@@ -880,43 +770,46 @@ class TgWhitelistSyncPlugin(PluginBase):
             self._last_run = time.strftime("%Y-%m-%d %H:%M:%S")
             self._last_result = f"[试运行] 将处理 {len(items)} 条，未实际写入"
             logger.info(f"[求片同步] {self._last_result}")
-            return
+            self._save_state()
+            return {"ok": True, "added": [], "skipped": [], "changed": False,
+                    "detail": "dry_run"}
 
-        # 读-合并-写
+        # 读-合并-写（绝不删除用户规则）
         try:
             result = client.merge_and_save(items)
         except TgtoDriveError as e:
             self._last_run = time.strftime("%Y-%m-%d %H:%M:%S")
-            self._last_result = f"同步失败: {e}"
+            self._last_result = f"推送失败: {e}"
             self._stats["failed"] += len(items)
             logger.warning(f"[求片同步] {self._last_result}")
-            self.log(f"同步失败: {e}", "warning", notify=True)
-            return
+            self.log(f"推送 TgtoDrive 失败: {e}", "warning", notify=True)
+            self._save_state()
+            return {"ok": False, "detail": str(e)}
 
         if not result["ok"]:
             self._last_run = time.strftime("%Y-%m-%d %H:%M:%S")
-            self._last_result = f"同步失败: {result['detail']}"
+            self._last_result = f"推送失败: {result['detail']}"
             self._stats["failed"] += len(items)
             logger.warning(f"[求片同步] {self._last_result}")
-            self.log(f"同步失败: {result['detail']}", "warning", notify=True)
-            return
+            self.log(f"推送 TgtoDrive 失败: {result['detail']}", "warning", notify=True)
+            self._save_state()
+            return result
 
-        # 写入成功：added + skipped 全部置完结（skipped=已存在=等效已监控）
+        # 推送成功：把工单流转到 自动下载中(status=1)；已在该状态的不变更
         done = 0
         for it in items:
-            # 避免对已经处于目标状态的工单重复写库
-            if it["status"] == mark_status:
+            if it["status"] == set_status_on_success:
                 done += 1
                 continue
             try:
-                update_media_request_status(it["tmdb_id"], it["season"], mark_status)
+                update_media_request_status(it["tmdb_id"], it["season"], set_status_on_success)
                 done += 1
             except Exception as e:
                 logger.error(
-                    f"[求片同步] 白名单已写入但改状态失败 tmdb={it['tmdb_id']} s={it['season']}: {e}"
+                    f"[求片同步] 推送成功但置状态失败 tmdb={it['tmdb_id']} s={it['season']}: {e}"
                 )
                 self.log(
-                    f"白名单已写入但改状态失败: {it['title']} (TMDB {it['tmdb_id']}, S{it['season']}) — {e}",
+                    f"推送成功但置状态失败: {it['title']} (TMDB {it['tmdb_id']}, S{it['season']}) — {e}",
                     "error",
                 )
 
@@ -925,7 +818,7 @@ class TgWhitelistSyncPlugin(PluginBase):
         self._last_run = time.strftime("%Y-%m-%d %H:%M:%S")
         self._last_result = (
             f"本轮待处理 {len(items)}，新增写入 {added_n}，已存在跳过 {skipped_n}，"
-            f"置状态{mark_status}({STATUS_TEXT.get(mark_status,'')}) {done} 条"
+            f"置状态{set_status_on_success}({STATUS_TEXT.get(set_status_on_success,'')}) {done} 条"
         )
         self._stats["total"] += len(items)
         self._stats["success"] += added_n
@@ -933,10 +826,16 @@ class TgWhitelistSyncPlugin(PluginBase):
         logger.info(f"[求片同步] {self._last_result}")
         if added_n:
             self.log(
-                f"已同步 {added_n} 条至 TgtoDrive 白名单并置完结: "
+                f"已同步 {added_n} 条至 TgtoDrive 白名单并置自动下载中: "
                 + ", ".join(it["keyword"] for it in items[:5]),
                 "info",
             )
+        self._save_state()
+        return result
+
+    def push_request(self, tmdb_id, season, set_status_on_success=STATUS_AUTO_DOWNLOADING):
+        """便捷方法：推送单条工单。"""
+        return self.push_items([(tmdb_id, season)], set_status_on_success)
 
     @staticmethod
     def _build_keyword(title, media_type, year, season, episodes):
@@ -953,237 +852,6 @@ class TgWhitelistSyncPlugin(PluginBase):
             if "季" not in t and f"S{season}" not in t:
                 return f"{t} S{season}"
         return t
-
-    # ------------------------------------------------------------ Emby 入库检测（特性2）
-    @staticmethod
-    def _norm_title(name):
-        if not name:
-            return ""
-        return re.sub(r"[\s\-_.:，。！!?()（）\[\]【】]+", "", str(name)).lower()
-
-    def _emby_admin_user_id(self):
-        """取一个管理员 Emby 用户 id 用于库内检索，带 1 小时缓存。"""
-        if media_api is None:
-            return None
-        uid, ts = self._emby_uid_cache
-        if uid is not None and (time.time() - ts) < 3600:
-            return uid
-        try:
-            resp = media_api.get("/Users", timeout=10)
-            if resp.status_code != 200:
-                return None
-            users = resp.json() or []
-            admin = next(
-                (u for u in users if (u.get("Policy") or {}).get("IsAdministrator")),
-                None,
-            )
-            chosen = admin or (users[0] if users else None)
-            new_uid = chosen.get("Id") if chosen else None
-        except Exception as e:
-            logger.warning(f"[求片同步] 获取 Emby 用户失败: {e}")
-            return None
-        self._emby_uid_cache = (new_uid, time.time())
-        return new_uid
-
-    def _find_in_emby(self, tmdb_id, title, media_type, year):
-        """在 Emby 媒体库检索是否已存在对应影视。命中返回 item id，否则 None。"""
-        if media_api is None:
-            return None
-        if not media_api.health_check():
-            return None
-        user_id = self._emby_admin_user_id()
-        if not user_id:
-            return None
-        item_types = "Series" if media_type == "tv" else "Movie"
-        params = {
-            "UserId": user_id,
-            "Recursive": "true",
-            "SearchTerm": title or "",
-            "IncludeItemTypes": item_types,
-            "Fields": "ProviderIds,ProductionYear",
-            "Limit": 30,
-        }
-        try:
-            resp = media_api.get("/Items", params=params, timeout=15)
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
-        except Exception as e:
-            logger.warning(f"[求片同步] Emby 检索异常 tmdb={tmdb_id}: {e}")
-            return None
-        items = (data or {}).get("Items") or []
-        target = str(tmdb_id)
-        norm_title = self._norm_title(title)
-        for it in items:
-            prov = it.get("ProviderIds") or {}
-            if prov.get("Tmdb") == target:
-                return it.get("Id")
-            # 兜底：影视名（去噪）+ 年份 双重匹配
-            if (
-                year
-                and it.get("ProductionYear")
-                and str(it.get("ProductionYear")) == str(year)
-                and norm_title
-                and self._norm_title(it.get("Name")) == norm_title
-            ):
-                return it.get("Id")
-        return None
-
-    def _ingest_once(self):
-        """特性2：待入库(7) 工单若 Emby 已有对应影视，自动流转为已入库(2)。"""
-        cfg = self._get_config()
-        if not (cfg.get("auto_ingest_enabled") in (True, "true", "1", 1)):
-            return
-        if media_api is None or not media_api.health_check():
-            return
-        dry_run = cfg.get("dry_run") in (True, "true", "1", 1)
-
-        rows = list_all_requests()
-        # 实测 status 为 int，但历史/JSON 往返可能是 "7"，用 _as_int 归一后比较
-        pending = [r for r in rows if _as_int(_row_get(r, "status")) == 7]
-        moved = 0
-        for r in pending:
-            tmdb_id = _row_get(r, "tmdb_id")
-            media_type = _row_get(r, "media_type")
-            title = _row_get(r, "title")
-            year = _row_get(r, "year")
-            season = _row_get(r, "season")
-            if tmdb_id is None:
-                continue
-            found = self._find_in_emby(tmdb_id, title, media_type, year)
-            if not found:
-                continue
-            if dry_run:
-                logger.info(
-                    f"[求片同步][试运行] 将自动流转为已入库: {title} (TMDB {tmdb_id}, S{season})"
-                )
-                continue
-            try:
-                update_media_request_status(tmdb_id, season, 2)
-                moved += 1
-                self.log(
-                    f"检测到 Emby 已有《{title}》(TMDB {tmdb_id}, S{season})，自动流转为已入库",
-                    "info",
-                )
-            except Exception as e:
-                logger.error(
-                    f"[求片同步] 自动入库流转失败 tmdb={tmdb_id} s={season}: {e}"
-                )
-        self._last_ingest_result = (
-            f"本轮检测待入库 {len(pending)}，自动入库 {moved} 条"
-            if not dry_run
-            else "[试运行] 未实际改动"
-        )
-        self._last_ingest_run = time.strftime("%Y-%m-%d %H:%M:%S")
-        if moved:
-            logger.info(f"[求片同步] {self._last_ingest_result}")
-
-    # ------------------------------------------------------------ 关键词清理（特性1）
-    @staticmethod
-    def _parse_ts(value):
-        """解析 media_requests.updated_at（'YYYY-MM-DD HH:MM:SS'，UTC）为 epoch。"""
-        if not value:
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
-        s = str(value).strip().replace("T", " ").replace("Z", "")
-        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
-            try:
-                dt = datetime.strptime(s, fmt)
-                return dt.replace(tzinfo=timezone.utc).timestamp()
-            except ValueError:
-                continue
-        return None
-
-    def _cleanup_once(self):
-        """特性1：已完结(默认 status=2) 且超过清理天数(默认5) 的工单，删除其 TgtoDrive 关键词监控。
-
-        实现前提：TgtoDrive 未暴露"频道监控完结"接口，本插件以 EMBYPULSE 工单"已入库/完结"
-        状态作为代理信号（配合特性2，内容进 Emby 即视为监控完结）。如需更精确，可在 TgtoDrive
-        暴露完结回调后接入。
-        """
-        cfg = self._get_config()
-        if not (cfg.get("auto_cleanup_enabled") in (True, "true", "1", 1)):
-            return
-        try:
-            cleanup_days = max(0, int(cfg.get("cleanup_days") or 5))
-        except (TypeError, ValueError):
-            cleanup_days = 5
-        if cleanup_days <= 0:
-            return
-        try:
-            done_status = int(cfg.get("cleanup_done_status") or 2)
-        except (TypeError, ValueError):
-            done_status = 2
-        dry_run = cfg.get("dry_run") in (True, "true", "1", 1)
-
-        base = _resolve_base_url(cfg)
-        token = (cfg.get("tgtdrive_token") or "").strip()
-        cookie = (cfg.get("tgtdrive_cookie") or "").strip()
-        scene = (cfg.get("tgtdrive_scene") or DEFAULT_SCENE).strip()
-        endpoint = (cfg.get("whitelist_endpoint") or VISUAL_FILTER_ENDPOINT).strip()
-        if not base or not endpoint:
-            return
-        client = TgtoDriveClient(base, token, endpoint, scene, cookie, logger=logger)
-
-        try:
-            cfg_resp = client.get_config()
-        except TgtoDriveError as e:
-            self._last_cleanup_result = f"读取白名单失败: {e}"
-            logger.warning(f"[求片同步] {self._last_cleanup_result}")
-            return
-
-        rules = client._extract_rules(cfg_resp)
-        now = time.time()
-        to_remove = []
-        for rule in rules:
-            rid = rule.get("id") if isinstance(rule, dict) else None
-            if not rid or not rid.startswith(RULE_ID_PREFIX):
-                continue
-            m = re.match(r"^kw_(\d+)_(\d+)$", rid)
-            if not m:
-                continue
-            tmdb_id = int(m.group(1))
-            season = int(m.group(2))
-            try:
-                row = get_media_request(tmdb_id, season)
-            except Exception:
-                row = None
-            if not row:
-                # 工单已删除：保守起见不自动清理（避免误删仍需要的监控）
-                continue
-            # get_media_request 返回 DataRow（dict），按列名取并用 _as_int 归一，
-            # 不按字符串判等（status 实测是 int，'' / "None" 之类只在 reject_reason 出现）
-            if _as_int(_row_get(row, "status")) != done_status:
-                continue
-            ts = self._parse_ts(_row_get(row, "updated_at"))
-            if ts is None:
-                continue
-            if now - ts < cleanup_days * 86400:
-                continue
-            to_remove.append(rid)
-
-        if not to_remove:
-            self._last_cleanup_result = "无超过清理期限的关键词"
-            return
-
-        if dry_run:
-            self._last_cleanup_result = f"[试运行] 将清理 {len(to_remove)} 条: {to_remove}"
-            logger.info(f"[求片同步] {self._last_cleanup_result}")
-            return
-
-        try:
-            removed = client.remove_rules(to_remove)
-        except TgtoDriveError as e:
-            self._last_cleanup_result = f"清理失败: {e}"
-            logger.warning(f"[求片同步] {self._last_cleanup_result}")
-            self.log(f"关键词清理失败: {e}", "warning", notify=True)
-            return
-
-        self._last_cleanup_result = f"已清理 {removed} 条已完结关键词监控（>{cleanup_days}天）"
-        logger.info(f"[求片同步] {self._last_cleanup_result}")
-        self.log(self._last_cleanup_result, "info")
-        self._last_cleanup_run = time.strftime("%Y-%m-%d %H:%M:%S")
 
     # ------------------------------------------------------------ HTTP 路由
     def _setup_routes(self):
@@ -1212,22 +880,15 @@ class TgWhitelistSyncPlugin(PluginBase):
                     ),
                     "base_url": _resolve_base_url(cfg),
                     "scene": (cfg.get("tgtdrive_scene") or DEFAULT_SCENE).strip(),
-                    "trigger_mode": cfg.get("trigger_mode") or "approved_only",
+                    "trigger_mode": cfg.get("trigger_mode") or "approved_and_manual",
                     "allowed_status": list(self._allowed_status(cfg.get("trigger_mode"))),
                     "dry_run": cfg.get("dry_run") in (True, "true", "1", 1),
-                    "auto_ingest_enabled": cfg.get("auto_ingest_enabled") in (True, "true", "1", 1),
-                    "auto_cleanup_enabled": cfg.get("auto_cleanup_enabled") in (True, "true", "1", 1),
-                    "cleanup_days": cfg.get("cleanup_days") or 5,
-                    "last_ingest_result": self._last_ingest_result,
-                    "last_cleanup_result": self._last_cleanup_result,
-                    "last_ingest_run": self._last_ingest_run,
-                    "last_cleanup_run": self._last_cleanup_run,
                 },
             }
 
         @self.router.post("/sync_now")
         async def api_sync_now(request: Request):
-            """立即执行一次同步（管理员）"""
+            """立即执行一次同步（管理员，轮询兜底同款逻辑）"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
             from app.domains.users import public_service as user_service
@@ -1273,46 +934,6 @@ class TgWhitelistSyncPlugin(PluginBase):
                 "message": detail,
                 "data": {"reachable": ok, "detail": detail, "rule_count": rule_count, "scene": scene},
             }
-
-        @self.router.post("/ingest_now")
-        async def api_ingest_now(request: Request):
-            """立即执行一次自动入库检测（管理员）"""
-            if not request.session.get("user"):
-                return {"status": "error", "message": "未登录"}
-            from app.domains.users import public_service as user_service
-
-            if not user_service.is_admin_user(request):
-                return {"status": "error", "message": "需要管理员权限"}
-            try:
-                self._ingest_once()
-                return {
-                    "status": "success",
-                    "message": "已执行自动入库检测",
-                    "data": {"result": self._last_ingest_result},
-                }
-            except Exception as e:
-                logger.error(f"[求片同步] 手动入库检测失败: {e}", exc_info=True)
-                return {"status": "error", "message": str(e)}
-
-        @self.router.post("/cleanup_now")
-        async def api_cleanup_now(request: Request):
-            """立即执行一次关键词清理（管理员）"""
-            if not request.session.get("user"):
-                return {"status": "error", "message": "未登录"}
-            from app.domains.users import public_service as user_service
-
-            if not user_service.is_admin_user(request):
-                return {"status": "error", "message": "需要管理员权限"}
-            try:
-                self._cleanup_once()
-                return {
-                    "status": "success",
-                    "message": "已执行关键词清理",
-                    "data": {"result": self._last_cleanup_result},
-                }
-            except Exception as e:
-                logger.error(f"[求片同步] 手动清理失败: {e}", exc_info=True)
-                return {"status": "error", "message": str(e)}
 
         @self.router.get("/preview")
         async def api_preview(request: Request):

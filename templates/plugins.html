@@ -673,8 +673,6 @@
             <div class="flex flex-wrap items-center gap-2">
                 <button id="tgwhitelist-btn-test" onclick="tgTestConnection()" class="text-[12px] font-bold text-white px-3.5 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-600 hover:to-green-600 transition-all active:scale-95 flex items-center gap-1.5 shadow-lg shadow-emerald-500/20"><i class="fa-solid fa-plug"></i>测试连接</button>
                 <button id="tgwhitelist-btn-sync" onclick="tgSyncNow()" class="text-[12px] font-bold text-white px-3.5 py-2 rounded-lg bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 transition-all active:scale-95 flex items-center gap-1.5 shadow-lg shadow-sky-500/20"><i class="fa-solid fa-arrow-up-from-bracket"></i>立即同步</button>
-                <button id="tgwhitelist-btn-ingest" onclick="tgIngestNow()" class="text-[12px] font-bold text-white px-3.5 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-500 hover:from-indigo-600 hover:to-blue-600 transition-all active:scale-95 flex items-center gap-1.5 shadow-lg shadow-indigo-500/20"><i class="fa-solid fa-download"></i>入库流转</button>
-                <button id="tgwhitelist-btn-cleanup" onclick="tgCleanupNow()" class="text-[12px] font-bold text-white px-3.5 py-2 rounded-lg bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 transition-all active:scale-95 flex items-center gap-1.5 shadow-lg shadow-rose-500/20"><i class="fa-solid fa-broom"></i>清理监控</button>
             </div>
             <div id="tgwhitelist-action-msg" class="text-[12px] text-gray-500 dark:text-gray-400 min-h-[18px]"></div>
 
@@ -2146,11 +2144,8 @@
                 stat('最近同步', d.last_run || '尚未运行') +
                 stat('同步结果', d.last_result || '-') +
                 stat('累计统计', '共' + (s.total||0) + ' / 成功' + (s.success||0) + ' / 跳过' + (s.skipped||0) + ' / 失败' + (s.failed||0)) +
-                stat('特性2 自动入库', yn(d.auto_ingest_enabled)) +
-                stat('特性1 完结清理', yn(d.auto_cleanup_enabled)) +
-                stat('清理期限', (d.cleanup_days||5) + ' 天') +
-                stat('入库检测', d.last_ingest_result || '尚未运行') +
-                stat('清理结果', d.last_cleanup_result || '尚未运行');
+                stat('清理归属', 'TgtoDrive 侧插件') +
+                stat('触发说明', '工单大厅接单即推送');
         } catch(e) {
             grid.innerHTML = '<div class="text-center py-6 text-red-400 col-span-full">请求异常</div>';
         }
@@ -2207,8 +2202,6 @@
     }
     function tgTestConnection() { tgAction('test_connection', '测试连接中', 'tgwhitelist-btn-test'); }
     function tgSyncNow() { tgAction('sync_now', '同步中', 'tgwhitelist-btn-sync'); }
-    function tgIngestNow() { tgAction('ingest_now', '入库流转检测中', 'tgwhitelist-btn-ingest'); }
-    function tgCleanupNow() { tgAction('cleanup_now', '清理中', 'tgwhitelist-btn-cleanup'); }
 
 
     // ==========================================

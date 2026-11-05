@@ -159,44 +159,46 @@ CSRFMiddleware._expected_origins() 只给出 http://<你的域名>
 
 ## ✨ 四、本项目独有特性：求片 → TgtoDrive 自动同步插件（本次更新）
 
-> 插件 id：`tg_whitelist_sync`，版本 `v1.3.0`，作者 Abson2。这是本独立仓库**相对上游的独有扩展**，上游并不具备。
+> 插件 id：`tg_whitelist_sync`（EMBYPULSE 侧，本文档称**插件 A**），版本 `v2.0.0`，作者 Abson2。这是本独立仓库**相对上游的独有扩展**，上游并不具备。配套的 TgtoDrive 侧清理插件（**插件 B** `emby-pulse-monitor`）位于仓库 `tgtdrive-monitor/`，需安装到 TgtoDrive 容器内运行。
 
 ### 4.1 它解决什么问题
 
-把 **EMBYPULSE 工单大厅**里用户提交的求片（以 **TMDB 编号**为唯一标识），**自动写入飞牛上 TgtoDrive 的「光鸭云盘 → 频道监控配置 → 关键词过滤 → 关键词白名单」**，触发 tg 频道监控入库，再把对应工单置为完结（`status=2`）。
+把 **EMBYPULSE 工单大厅**里用户提交的求片（以 **TMDB 编号**为唯一标识），在管理员**审批通过 / 手动接单**时，**自动写入飞牛上 TgtoDrive 的「光鸭云盘 → 频道监控配置 → 关键词过滤 → 关键词白名单」**，触发 tg 频道监控入库。
 
-并在此基础上补齐两个长期痛点：
+核心分工（避免早期版本「全量覆盖写误删用户关键词」的坑）：
 
-- **特性 2（自动入库流转）**：工单处于「待入库(7)」时，若 Emby 媒体库里已经存在该影视，自动流转为「已入库(2)」，无需人工点完结。
-- **特性 1（完结清理）**：工单已完结且超过清理天数（默认 5 天）后，自动删除其在 TgtoDrive 上的对应关键词监控，避免监控列表无限膨胀。
+- **插件 A（本插件，只写不删）**：把求片推送到白名单（分辨率 4k / 画面效果 全部效果 / 年份 读 TMDB 自动填 / 必包含关键词 265），合并写入时**完整保留用户已有的其它关键词**；推送成功后把工单置为「自动下载中(`status=1`)」。
+- **EMBYPULSE 核心（入库流转）**：Emby webhook 触发 `auto_finish_request`，把工单自动置为「已入库(`status=2`)」并通知管理员/用户。这部分由核心负责，插件 A 不重复实现。
+- **插件 B（TgtoDrive 侧，负责清理）**：按计划周期读取白名单里本插件写入的 `kw_` 规则，以「影视已入库 Emby」判定完结，满 `cleanup_days`（默认 5）天后删除对应关键词。**只删 `kw_` 本插件所有的规则，绝不碰用户其它关键词。**
 
-### 4.2 三大能力一览
+### 4.2 两大组件一览
 
-| 能力 | 阶段 | 触发条件 / 说明 | 默认 |
-|------|------|----------------|------|
-| 🔁 **自动同步白名单** | A | 审批通过（`status=1`）的求片 → 写入 TgtoDrive 关键词白名单 → 置工单完结(`2`) 或待入库(`7`) | 始终开启（轮询间隔 `check_interval`，默认 5 分钟） |
-| 📥 **待入库自动流转（特性2）** | B | 工单为「待入库(`7)`」且 Emby 库已有该影视 → 自动流转为「已入库(`2)`」 | 开关 `auto_ingest_enabled`（默认关），间隔 `ingest_interval` 30 分钟 |
-| 🧹 **完结关键词清理（特性1）** | C | 工单「已入库(`2)`」且超过 `cleanup_days`（默认 5 天）→ 删除对应 TgtoDrive 关键词监控 | 开关 `auto_cleanup_enabled`（默认关），间隔 `cleanup_interval` 60 分钟 |
+| 组件 | 运行位置 | 职责 | 默认 |
+|------|----------|------|------|
+| 🔁 **插件 A：求片推送（tg_whitelist_sync）** | EMBYPULSE 侧 | 审批通过/手动接单 → 写 TgtoDrive 白名单（合并、不删）；推送成功置 `status=1` | 启用即生效；**事件驱动**（工单大厅接单即推送）+ 轮询兜底（`check_interval` 默认 5 分钟） |
+| 🧹 **插件 B：完结清理（emby-pulse-monitor）** | TgtoDrive 容器内 | 读白名单 `kw_` 规则 → 按影视是否已入库 Emby 判完结 → 满 `cleanup_days`(默认5) 删对应关键词 | 需安装到 TgtoDrive 并按周期启用；只删本插件所有的 `kw_` 规则 |
 
 ### 4.3 生命周期与时序
 
 ```
-用户提交求片 ──► (管理员审批) ──► status=1（下载中）
-                                      │
-        ┌─────────────────────────────┴─────────────────────────────┐
-        ▼  [阶段A 轮询] 写入 TgtoDrive 白名单                          │
-           成功 → 置 status=2（已入库）或 7（待入库，由 mark_status 决定）
-                                                                     │
-        ┌─────────────────────────────┐                              │
-        ▼  [特性2 轮询] 若 Emby 库已有该影视                            │
-           7 ──► 2                                                     │
-                                                                     │
-        ┌─────────────────────────────┐                              │
-        ▼  [特性1 轮询] 2 且超 cleanup_days(默认5)                     │
-           删除 TgtoDrive 上 kw_<tmdb>_<season> 关键词                 │
+用户提交求片 ──► 管理员「手动接单 / 审批通过」（事件驱动，点完立即推送）
+   │  approve → status=1（自动下载中）；manual → status=4（手动接单中）
+   ▼
+插件 A 立即把该求片推送到 TgtoDrive 白名单（合并写入，绝不删用户规则）
+   │  推送成功 → manual 的 4 也流转为 1（自动下载中）
+   ▼
+TgtoDrive 频道监控命中 → tg 转存 → Emby 入库存档
+   ▼
+EMBYPULSE 核心（Emby webhook）自动把工单置 status=2（已入库）并通知管理员/用户
+   ▼
+插件 B（TgtoDrive 侧，周期运行）发现该影视已入库 Emby
+   │  开始计时；满 cleanup_days（默认 5 天）
+   ▼
+删除 TgtoDrive 白名单里 kw_<tmdb>_<season> 关键词（只删本插件的，不动用户其它规则）
 ```
 
-> 三个能力由**同一个后台守护线程**按各自 cadence 调度，互不阻塞；单轮异常只记日志、不终止线程。
+> 审批**拒绝(reject) 不触发推送**，流程直接流转为「已拒绝(`status=3`)」并通知管理员/用户。
+> 事件驱动为主路径，后台轮询仅为容错兜底；单轮异常只记日志、不终止线程。
 
 ### 4.4 插件配置项（在 EMBYPULSE「插件」页该插件下填写）
 
@@ -210,19 +212,12 @@ CSRFMiddleware._expected_origins() 只给出 http://<你的域名>
 | `rule_resolution` | `4k` | 写入规则的分辨率筛选 |
 | `rule_effect` | `all` | 画面效果筛选，`all`=全部效果 |
 | `rule_required_keyword` | `265` | 规则必包含关键词（如 265=H.265/HEVC），留空不限制 |
-| `check_interval` | `5` | 阶段A 轮询间隔（分钟） |
-| `trigger_mode` | `approved_only` | 仅审批通过后(`1`) / +手动接单(`1,4`) / 全部待同步(`1,4,7`) / 含未审批(`0,1,4,7`) |
-| `mark_status` | `2` | 同步成功后工单状态：`2` 完结 / `7` 待入库 |
+| `check_interval` | `5` | 后台轮询兜底间隔（分钟） |
+| `trigger_mode` | `approved_and_manual` | 仅影响后台轮询兜底：仅审批通过(`1`) / 审批通过+手动接单(`1,4`) / 全部待同步(`1,4,7`)；**事件驱动（工单大厅接单）不受此限** |
 | `dry_run` | 关 | 试运行：只记录动作、不写入不改状态，首次验证推荐开启 |
 | `notify_enabled` | 关 | 运行结果发全局通知 |
-| `auto_ingest_enabled` | 关 | **特性2 总开关** |
-| `ingest_interval` | `30` | 特性2 检测间隔（分钟） |
-| `auto_cleanup_enabled` | 关 | **特性1 总开关** |
-| `cleanup_days` | `5` | 完结后多少天删除关键词；`0` 关闭清理 |
-| `cleanup_interval` | `60` | 特性1 扫描间隔（分钟） |
-| `cleanup_done_status` | `2` | 触发清理的完结状态：`2` 已入库 / `7` 待入库 |
 
-> **特性1 / 特性2 在哪里体现？** 插件启用后，它们在插件配置页以两个开关（`自动入库流转（特性2）` / `完结关键词清理（特性1）`）呈现，开启即按各自间隔**自动后台运行**；运行结果、最近一次动作与统计可在该插件的日志 / 状态中查看。无需手动点按钮即可生效。
+> **职责边界**：入库流转（待入库 `7` → 已入库 `2` + 通知）由 **EMBYPULSE 核心**负责；完结关键词清理由 **TgtoDrive 侧插件 B**（`tgtdrive-monitor/`，见该目录 README）负责。插件 A 自 v2.0.0 起**只推送、不删除**，彻底避免早期「全量覆盖写误删用户关键词」的坑。
 
 ### 4.5 通信地址健壮性：不把易变 IP 写死
 
@@ -414,14 +409,17 @@ docker compose up -d
 │   ├── bootstrap/middleware.py           ★ 注册鉴权网关
 │   ├── domains/system/webhook.py         ★ 问题 3
 │   ├── bot/bot.py                        ★ 问题 3/5
-│   └── plugins/tg_whitelist_sync/plugin.py   ★ 独有特性：求片→TgtoDrive 同步（v1.3.0）
+│   └── plugins/tg_whitelist_sync/plugin.py   ★ 独有特性：求片→TgtoDrive 同步（插件 A，v2.0.0）
+├── tgtdrive-monitor/plugin.py               ★ 独有特性：TgtoDrive 侧完结清理（插件 B）
+├── tgtdrive-monitor/README.md               ★ 插件 B 安装与参数说明
 ├── templates/settings.html        ★ 问题 3/5，完整模板
-├── tests/test_tg_whitelist_sync.py    独有特性插件单元测试（38 项）
+├── tests/test_tg_whitelist_sync.py    独有特性插件 A 单元测试
+├── tests/test_tgtdrive_monitor.py    独有特性插件 B 单元测试（mock urllib）
 ├── docs/tg-whitelist-sync-design.md    独有特性设计文档
 └── static/ run.py pyproject.toml uv.lock requirements.txt ...
 ```
 
-★ = 本仓库相对上游的改动/新增。其中前 7 个源码文件 + `templates/settings.html` 为第一轮安全加固；`app/plugins/tg_whitelist_sync/plugin.py` + 测试 + 设计文档为第二轮独有特性扩展。其余源码保持上游原样，便于对照与后续自行升级。
+★ = 本仓库相对上游的改动/新增。其中前 7 个源码文件 + `templates/settings.html` 为第一轮安全加固；`app/plugins/tg_whitelist_sync/plugin.py`（插件 A）+ `tgtdrive-monitor/`（插件 B）+ 测试 + 设计文档为第二轮独有特性扩展。其余源码保持上游原样，便于对照与后续自行升级。
 
 ---
 

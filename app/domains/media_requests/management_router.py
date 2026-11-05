@@ -1,4 +1,5 @@
 import logging
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional
 
@@ -46,6 +47,45 @@ _get_pending_notify_data_provider = lambda: get_pending_notify_data
 _safe_error_message_provider = lambda: safe_error_message
 _logger_provider = lambda: logging.getLogger("uvicorn")
 _batch_manage_action_provider = lambda: batch_manage_action
+
+
+# ---------------------------------------------------------------------------
+# 事件驱动：工单大厅审批通过 / 手动接单后，异步把求片推送到 TgtoDrive 白名单
+# ---------------------------------------------------------------------------
+def _trigger_tg_whitelist_push(candidates):
+    """审批通过/手动接单后，异步触发「求片同步 TgtoDrive 白名单」插件推送。
+
+    - 失败不影响审批结果返回（推送失败仅记录日志，工单保留原状态可重试）；
+    - 用独立守护线程执行，避免阻塞管理员的接单 HTTP 响应；
+    - 推送成功后由插件把工单置为 自动下载中(status=1)；拒绝(reject) 不触发。
+    """
+    if not candidates:
+        return
+    try:
+        from app.plugins import get_plugin
+        plugin = get_plugin("tg_whitelist_sync")
+    except Exception as e:
+        logger.warning(f"[求片同步] 获取插件实例失败: {e}")
+        return
+    if plugin is None or not getattr(plugin, "enabled", False):
+        return
+    try:
+        t = threading.Thread(
+            target=_run_tg_whitelist_push,
+            args=(plugin, list(candidates)),
+            daemon=True,
+            name="tg-whitelist-push",
+        )
+        t.start()
+    except Exception as e:
+        logger.warning(f"[求片同步] 启动推送线程失败: {e}")
+
+
+def _run_tg_whitelist_push(plugin, candidates):
+    try:
+        plugin.push_items(candidates, set_status_on_success=1)
+    except Exception as e:
+        logger.error(f"[求片同步] 事件驱动推送异常: {e}", exc_info=True)
 
 
 class AdminActionModel(BaseModel):
@@ -280,6 +320,7 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
 
     # 🔥 预先批量查询所有需要通知的工单信息（优化数据库查询）
     notify_items = []  # 收集所有需要通知的工单
+    push_candidates = []  # 收集需要事件驱动推送到 TgtoDrive 白名单的工单
 
     for item in data.items:
         tid = item['tmdb_id']
@@ -298,9 +339,13 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
                 except Exception:
                     pass
             update_status(tid, sn, 1)
+            # 审批通过 → 事件驱动推送求片到 TgtoDrive 白名单
+            push_candidates.append((tid, sn))
 
         elif data.action == "manual":
             update_status(tid, sn, 4)
+            # 手动接单（视为审批通过）→ 事件驱动推送求片到 TgtoDrive 白名单
+            push_candidates.append((tid, sn))
 
         elif data.action == "reject":
             update_status(tid, sn, 3, data.reject_reason)
@@ -311,6 +356,10 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
             update_status(tid, sn, 7)
         elif data.action == "delete":
             delete_request(tid, sn)
+
+    # 🔥 审批通过 / 手动接单 后，事件驱动推送求片到 TgtoDrive 白名单（异步，失败不影响审批返回）
+    if data.action in ("approve", "manual") and push_candidates:
+        _trigger_tg_whitelist_push(push_candidates)
 
     # 🔥 批量通知用户（审批通过、入库完成、拒绝、手动接单、影巢转存完成）
     if data.action in ["approve", "finish", "reject", "manual", "hdhive_done"]:
