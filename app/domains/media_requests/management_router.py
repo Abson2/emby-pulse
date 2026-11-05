@@ -28,6 +28,12 @@ from app.utils.proxy_helper import get_safe_proxies
 
 router = APIRouter()
 
+# 模块级 logger：事件驱动钩子（_trigger_tg_whitelist_* / _run_tg_whitelist_*）
+# 在独立函数/守护线程里记日志，不能依赖 batch_manage_action 内部由 provider
+# 注入的局部 logger。此前 push 钩子的异常分支引用了未绑定的全局 logger，
+# 一旦获取插件失败就会抛 NameError，这里一并补齐。
+logger = logging.getLogger("uvicorn")
+
 _user_service_provider = lambda: user_service
 _list_my_requests_provider = lambda: list_my_requests
 _list_all_requests_provider = lambda: list_all_requests
@@ -50,7 +56,9 @@ _batch_manage_action_provider = lambda: batch_manage_action
 
 
 # ---------------------------------------------------------------------------
-# 事件驱动：工单大厅审批通过 / 手动接单后，异步把求片推送到 TgtoDrive 白名单
+# 事件驱动：审批通过/手动接单 → 异步把求片推送到 TgtoDrive 白名单
+#           删除工单       → 异步移除该工单对应的 kw_ 监控规则（1.8.0 删单联动）
+# 两条路径失败都只记日志、不影响工单操作返回；独立守护线程避免阻塞管理员响应。
 # ---------------------------------------------------------------------------
 def _trigger_tg_whitelist_push(candidates):
     """审批通过/手动接单后，异步触发「求片同步 TgtoDrive 白名单」插件推送。
@@ -86,6 +94,42 @@ def _run_tg_whitelist_push(plugin, candidates):
         plugin.push_items(candidates, set_status_on_success=1)
     except Exception as e:
         logger.error(f"[求片同步] 事件驱动推送异常: {e}", exc_info=True)
+
+
+def _trigger_tg_whitelist_remove(candidates):
+    """工单删除后，异步移除 TgtoDrive 里对应的 kw_<tmdb>_<season> 监控规则。
+
+    - 删除请求参数自带 (tmdb_id, season)，**无需反查 DAO**（工单行此时已被删除）；
+    - 插件未启用则跳过；联动失败只记日志，绝不阻断工单删除结果返回；
+    - 插件内部只删 kw_ 规则并完整保留其它规则，GET 失败/空配置/结构未知时护栏中止。
+    """
+    if not candidates:
+        return
+    try:
+        from app.plugins import get_plugin
+        plugin = get_plugin("tg_whitelist_sync")
+    except Exception as e:
+        logger.warning(f"[求片同步] 删单联动获取插件实例失败: {e}")
+        return
+    if plugin is None or not getattr(plugin, "enabled", False):
+        return
+    try:
+        t = threading.Thread(
+            target=_run_tg_whitelist_remove,
+            args=(plugin, list(candidates)),
+            daemon=True,
+            name="tg-whitelist-remove",
+        )
+        t.start()
+    except Exception as e:
+        logger.warning(f"[求片同步] 启动删单联动线程失败: {e}")
+
+
+def _run_tg_whitelist_remove(plugin, candidates):
+    try:
+        plugin.remove_items(candidates)
+    except Exception as e:
+        logger.error(f"[求片同步] 删单联动异常: {e}", exc_info=True)
 
 
 class AdminActionModel(BaseModel):
@@ -321,6 +365,7 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
     # 🔥 预先批量查询所有需要通知的工单信息（优化数据库查询）
     notify_items = []  # 收集所有需要通知的工单
     push_candidates = []  # 收集需要事件驱动推送到 TgtoDrive 白名单的工单
+    remove_candidates = []  # 收集被删除工单的 (tmdb_id, season)，用于删单联动移除 kw_ 规则
 
     for item in data.items:
         tid = item['tmdb_id']
@@ -356,10 +401,16 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
             update_status(tid, sn, 7)
         elif data.action == "delete":
             delete_request(tid, sn)
+            # 删单联动：删除请求自带 (tmdb_id, season)，无需在删行前反查 DAO
+            remove_candidates.append((tid, sn))
 
     # 🔥 审批通过 / 手动接单 后，事件驱动推送求片到 TgtoDrive 白名单（异步，失败不影响审批返回）
     if data.action in ("approve", "manual") and push_candidates:
         _trigger_tg_whitelist_push(push_candidates)
+
+    # 🔥 删除工单后，异步移除 TgtoDrive 对应 kw_ 监控规则（失败不影响删除返回）
+    if data.action == "delete" and remove_candidates:
+        _trigger_tg_whitelist_remove(remove_candidates)
 
     # 🔥 批量通知用户（审批通过、入库完成、拒绝、手动接单、影巢转存完成）
     if data.action in ["approve", "finish", "reject", "manual", "hdhive_done"]:

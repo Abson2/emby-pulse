@@ -385,7 +385,7 @@ EMBYPULSE 侧插件 `app/plugins/tg_whitelist_sync/plugin.py` 已实现并通过
 2. **处理范围**：事件驱动只推送审批通过(1)/手动接单(4)；轮询兜底按 `trigger_mode` 取 `1,4`（默认）或 `1,4,7`。未审批(0)/已拒绝(3)/已入库(2) 永不推送。
 3. **识别粒度**：以 `tmdb_id` 为主键（天然唯一），同时把 `title` 作为关键词写入白名单——TgtoDrive 频道监控按关键词匹配 tg 消息，`title` 是匹配依据，`tmdb_id` 仅作备注/审计。
 4. **幂等与失败**：成功改状态即去重；TgtoDrive 调用失败不改状态、下一轮重试；合并写已是精确幂等（同名/同 id 已存在则跳过添加、直接置状态）。
-5. **事件驱动为主、轮询兜底为辅**：工单大厅的接单/审批动作已由 `management_router` 暴露，插件 A 在 `approve`/`manual` 分支异步调用 `push_items(...)`，点完即推送（最快、最准）；后台线程定时轮询仅作容错兜底，覆盖事件丢失的极端情况（已有 auto_expire 印证后台轮询模式）。清理（完结后删关键词）不属于本插件，交 TgtoDrive 侧插件 B。
+5. **事件驱动为主、轮询兜底为辅**：工单大厅的接单/审批动作已由 `management_router` 暴露，插件 A 在 `approve`/`manual` 分支异步调用 `push_items(...)`，点完即推送（最快、最准）；后台线程定时轮询仅作容错兜底，覆盖事件丢失的极端情况（已有 auto_expire 印证后台轮询模式）。清理（完结后删关键词）交 TgtoDrive 侧插件 B；**唯一例外是「工单删除 → 即时移除对应 kw_ 规则」的删单联动，见第九节**。
 
 ---
 
@@ -414,3 +414,57 @@ EMBYPULSE 侧插件 `app/plugins/tg_whitelist_sync/plugin.py` 已实现并通过
 - **状态接口**：`GET /api/plugins/tg_whitelist_sync/status` 返回运行状态、累计统计与最近一次同步结果，面板与人工排查共用同一数据源。
 
 > 通信地址多层解析（UI > `TGTODRIVE_URL` > `config/tgtodrive.json` > 默认宿主网关）与全量覆盖/raw_regex/只动 `kw_` 前缀规则等约束，见上文第四节，未变。
+
+---
+
+## 九、删单联动：工单删除 → 移除对应监控关键词（1.8.0 / 插件 A v2.2.0）
+
+### 9.1 需求与边界
+
+管理员在工单大厅**删除求片**后，TgtoDrive 频道监控里该工单对应的关键词应立即移除。
+这与插件 B 的「入库完结 → 周期清理」是**两条独立路径**，互不替代：
+
+| | 触发条件 | 执行方 | 时机 |
+|---|---|---|---|
+| 删单联动（本次新增） | EMBYPULSE 工单被删除 | 插件 A（EMBYPULSE 侧，事件驱动） | 删除请求后立即异步执行 |
+| 完结清理（既有） | 影视已入库 Emby 且满 `cleanup_days` | 插件 B（TgtoDrive 侧，定时计划） | 周期运行，默认延迟 5 天 |
+
+插件 B **不感知** EMBYPULSE 删除事件：工单删除后 DAO 行即消失，插件 B 下次运行时
+既不知道这条工单存在过，也无法区分某条 `kw_` 规则该删还是该留。因此联动只能由
+EMBYPULSE 侧主动调用 TgtoDrive OpenAPI 完成。插件 B 保持 v1.4.0 不动。
+
+### 9.2 删除入口与参数
+
+`app/domains/media_requests/management_router.py` 的 `POST /api/manage/requests/batch`
+（单条 `/api/manage/requests/action` 会委托给它）在 `action == "delete"` 分支调用
+`delete_media_request(tid, sn)`。`BulkAdminActionModel.items` 的元素本身已带
+`tmdb_id` / `season`，因此**无需在删行前反查 DAO**，直接收集 `(tid, sn)` 即可。
+
+循环结束后异步触发 `_trigger_tg_whitelist_remove(remove_candidates)`：获取
+`tg_whitelist_sync` 插件实例、校验 `enabled`、起独立守护线程调用
+`plugin.remove_items(candidates)`。联动失败只记日志，**绝不阻断工单删除主流程**。
+`approve` / `manual` / `reject` 等动作不会触发联动。
+
+### 9.3 插件 A 的移除能力与护栏
+
+- `TgWhitelistSyncPlugin.remove_items(candidates)`：把 `(tmdb_id, season)` 转成
+  `kw_<tmdb>_<season>` 规则 id（去重、非法候选跳过），构造 `TgtoDriveClient`，
+  支持全局 `dry_run`（连 GET 都不发起）。
+- `TgtoDriveClient.remove_rules(rule_ids)`：读-过滤-整体 POST 覆盖，与推送写入
+  完全对称，但安全约束更严：
+  1. **只接受 `kw_` 前缀 id**，`tmdb_*` / 用户自建 / 其它工单规则一律不动；
+  2. GET 返回空配置（404 → `{}`）、非字典、结构无法定位目标场景 → **中止，绝不 POST**；
+  3. 删除场景**绝不从零创建场景**（与推送不同），避免写出空规则列表；
+  4. 未命中任何目标规则 → **不 POST**（零净改动）；
+  5. 其余规则按原顺序完整保留，同步信封内 `current` / `scenes[scene]` / 顶层 `rules`
+     的所有副本（只同步 key 匹配目标场景的 `current`，避免串场景）；
+  6. 复用 `_strip_raw_regex`（清 `raw_regex` / `advanced_raw_regex` / `meta_raw_regex`）
+     与 `write_mode`（`flat` 默认 / `envelope`），写入体与 1.7.0 推送保持一致。
+
+### 9.4 验证
+
+- `tests/test_tg_whitelist_sync.py` 覆盖：保留用户规则与其它工单规则、目标 id 移除、
+  信封副本同步、其它场景不受影响、未命中/空配置/结构未知/GET 失败/dry_run 一律不 POST、
+  批量去重、`envelope` 写入体、非 `kw_` id 过滤、删除入口接线静态断言。
+- 该测试已改为按 `__file__` 推导仓库路径，并由 CI 直接运行；`tools/verify_patches.py`
+  新增「问题 8」静态断言防止接线被改坏。

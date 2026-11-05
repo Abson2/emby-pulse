@@ -1,26 +1,41 @@
 """
-求片同步 TgtoDrive 关键词白名单插件（v2.1.0）
+求片同步 TgtoDrive 关键词白名单插件（v2.2.0）
 =============================================
 
-本插件**只负责把求片推送进 TgtoDrive，绝不删除任何规则**。
+职责：把求片推送进 TgtoDrive；并在工单被删除时，移除该工单对应的 kw_ 监控规则。
+**任何情况下都不会删除用户自建规则或其它工单的规则。**
 
 职责边界（与插件 B 的分工）
 ---------------------------
-- 插件 A（本文件，运行在 EMBYPULSE 侧）：把工单大厅里**审批通过 / 手动接单**的求片，
-  按 TMDB 编号写入飞牛上 TgtoDrive 的「光鸭云盘 → 频道监控配置 → 关键词过滤 → 关键词白名单」，
-  触发 tg 频道监控入库。**只写不删**：合并写入时完整保留用户已有的其它关键词。
-- 插件 B（运行在 TgtoDrive 容器内，仓库 tgtdrive-monitor/）：按「影视已入库 Emby」判定完结，
-  完结满 cleanup_days(默认5) 天后，删除本插件写入的 kw_ 前缀关键词。清理权完全交给插件 B。
+- 插件 A（本文件，运行在 EMBYPULSE 侧）：
+  1) 推送：把工单大厅里**审批通过 / 手动接单**的求片，按 TMDB 编号写入飞牛上
+     TgtoDrive 的「光鸭云盘 → 频道监控配置 → 关键词过滤 → 关键词白名单」，
+     触发 tg 频道监控入库。合并写入时完整保留用户已有的其它关键词。
+  2) 删单联动（v2.2.0 新增）：工单大厅**删除求片**时，按删除请求自带的
+     (tmdb_id, season) 精确定位 `kw_<tmdb>_<season>`，只移除这些规则，
+     完整保留其它所有规则。GET 失败 / 空配置 / 结构未知 / 未命中一律不 POST。
+- 插件 B（运行在 TgtoDrive 容器内，仓库 tgtdrive-monitor/）：按「影视已入库 Emby」
+  判定完结，完结满 cleanup_days(默认5) 天后，删除本插件写入的 kw_ 前缀关键词。
+  **插件 B 不感知 EMBYPULSE 工单删除事件**（工单删除后 DAO 行即消失，插件 B
+  下次周期运行时无从判断该规则该删还是该留）。
 
-为什么 A 不删
---------------
-早期版本在 EMBYPULSE 侧做"完结清理"，因全量覆盖写会冲掉用户通过 TgtoDrive 页面手动添加的
-关键词（坑①）。清理是 TgtoDrive 侧的事，交给插件 B 在 TgtoDrive 容器内执行，避免跨容器误删。
+为什么两条删除路径并存
+----------------------
+插件 B 是「入库完结 → 周期清理」，插件 A 的删单联动是「工单删除 → 即时清理」，
+触发条件与时机完全不同，互不替代、互不冲突。早期版本在 EMBYPULSE 侧做「完结
+清理」，因全量覆盖写会冲掉用户通过 TgtoDrive 页面手动添加的关键词（坑①）。
+因此插件 A 的移除能力被严格限定为：只删本插件 kw_ 规则、只在明确的删除事件下、
+且绝不从零创建场景、绝不写空规则列表。
 
 触发方式：事件驱动 + 轻量轮询兜底
 ---------------------------------
-- **事件驱动（主路径）**：工单大厅管理员点「手动接单 / 审批通过」时，management_router 会
-  异步调用本插件的 `push_items(candidates, set_status_on_success=1)`，点完立即推送，不等轮询。
+- **推送（主路径）**：管理员点「手动接单 / 审批通过」时，management_router 异步调用
+  `push_items(candidates, set_status_on_success=1)`，点完立即推送，不等轮询。
+- **删单联动（v2.2.0）**：管理员点「删除」时，management_router 在 delete 分支
+  收集 (tmdb_id, season)，异步调用 `remove_items(candidates)`。删除请求参数本身
+  带 (tmdb_id, season)，无需反查 DAO（工单行此时已被删）。联动失败只记日志，
+  绝不阻断工单删除主流程。
+
   - 审批通过(approve) → status=1（自动下载中），并推送；
   - 手动接单(manual)  → status=4（手动接单中），并推送；推送成功后流转为 status=1（自动下载中）；
   - 审批拒绝(reject)  → 不推送，流程流转为 status=3（已拒绝）。
@@ -267,7 +282,8 @@ class TgtoDriveClient:
     config/tgtodrive.json > 默认值，便于容器变动时一处修改即可恢复通信。
 
     写入策略：GET 当前 scene 配置 → 合并 rules → 整体 POST（全量覆盖）。
-    这样绝不会冲掉用户已在页面里配置的其他关键词（**本插件永不删除**）。
+    合并写入绝不删除已有规则；删除只由 `remove_rules()` 在工单删除事件下执行，
+    且严格限定为 kw_ 前缀规则（安全护栏见该方法）。
     """
 
     def __init__(self, base_url, token, endpoint, scene=DEFAULT_SCENE,
@@ -466,7 +482,7 @@ class TgtoDriveClient:
         rule[required_switch] = bool(req)
         return rule
 
-    # -------------------------------------------------------- 合并写（核心，永不删除）
+    # -------------------------------------------------------- 合并写（核心，只追加不删除）
     def merge_and_save(self, items):
         """读-合并-写：把 items 追加进目标 scene 白名单，整体 POST 覆盖。
 
@@ -604,6 +620,105 @@ class TgtoDriveClient:
             "detail": f"已追加 {len(added_ids)} 条规则",
         }
 
+    # -------------------------------------------------------- 删单联动移除（v2.2.0）
+    def remove_rules(self, rule_ids):
+        """工单删除事件：从目标 scene 白名单移除指定 kw_ 规则，整体 POST 覆盖。
+
+        与 merge_and_save 对称，但**安全约束更严**（防「全量清空」）：
+        - 只接受 `kw_` 前缀的 id，绝不误删 `tmdb_*` / 用户自建规则；
+        - 删除场景下**绝不允许从零创建场景**：GET 空配置、结构未知、定位不到
+          目标 scene 一律中止，绝不 POST（否则等于把现有规则整体清空）；
+        - 未命中任何目标规则时不 POST（零净改动）；
+        - 其余规则按原顺序完整保留，并同步信封内所有规则副本；
+        - 复用 `_strip_raw_regex` 与 `write_mode`，与推送写入体保持一致。
+
+        返回 dict: {ok, removed[], kept_count, changed, detail}
+        """
+        targets = {
+            rid for rid in (rule_ids or [])
+            if isinstance(rid, str) and rid.startswith(RULE_ID_PREFIX)
+        }
+        if not targets:
+            return {"ok": True, "removed": [], "kept_count": 0, "changed": False,
+                    "detail": "无可移除的 kw_ 规则 id"}
+
+        cfg = self.get_config()
+        if not isinstance(cfg, dict) or not cfg:
+            # 404 返回 {} / 空响应：宁可不删，绝不发一个 rules=[] 的 POST
+            return {"ok": False, "removed": [], "kept_count": 0, "changed": False,
+                    "detail": "GET 返回空配置，为安全起见中止删除，避免清空现有规则"}
+
+        scene = self.scene
+        container, source = self._find_scene_container(cfg, scene)
+        if container is None:
+            return {"ok": False, "removed": [], "kept_count": 0, "changed": False,
+                    "detail": "GET 返回无法定位目标场景的 rules，为安全起见中止删除"}
+
+        existing = list(container.get("rules") or [])
+        kept = []
+        removed = []
+        for r in existing:
+            rid = self._safe_id(r)
+            if isinstance(rid, str) and rid in targets:
+                removed.append(rid)
+            else:
+                kept.append(r)
+
+        if not removed:
+            return {"ok": True, "removed": [], "kept_count": len(kept),
+                    "changed": False, "detail": "目标规则不在白名单中，无需改动"}
+
+        if self._log:
+            self._log.info("[求片同步] 删单联动规则定位: %s，命中 %d 条，保留 %d 条",
+                           source, len(removed), len(kept))
+
+        # 同步信封内所有规则副本：后端无论读 current / scenes / 顶层都不会拿到过期规则
+        containers = [(container, "rules")]
+        cur = cfg.get("current")
+        if isinstance(cur, dict) and cur is not container and isinstance(cur.get("rules"), list):
+            if not cur.get("key") or cur.get("key") == scene:
+                containers.append((cur, "rules"))
+        sc = cfg.get("scenes")
+        node = sc.get(scene) if isinstance(sc, dict) else None
+        if isinstance(node, dict) and node is not container and isinstance(node.get("rules"), list):
+            containers.append((node, "rules"))
+        if isinstance(cfg.get("rules"), list):
+            containers.append((cfg, "rules"))
+        for c, k in containers:
+            c[k] = list(kept)
+
+        self._strip_raw_regex(cfg)
+
+        if (self.write_mode or "flat").strip().lower() == "envelope":
+            cfg["scene"] = scene
+            payload = cfg
+        else:
+            payload = {
+                k: v for k, v in container.items()
+                if k not in ("rules", "updated_at", "success")
+            }
+            payload["scene"] = scene
+            payload["rules"] = list(kept)
+            self._strip_raw_regex(payload)
+
+        try:
+            resp = requests.post(
+                self._url(),
+                json=payload,
+                headers=self._headers(),
+                timeout=self.timeout,
+            )
+        except requests.RequestException as e:
+            raise TgtoDriveError(f"POST 配置失败: {e}") from e
+
+        if not (200 <= resp.status_code < 300):
+            return {"ok": False, "removed": [], "kept_count": len(existing),
+                    "changed": False,
+                    "detail": f"HTTP {resp.status_code}: {resp.text[:200]}"}
+
+        return {"ok": True, "removed": removed, "kept_count": len(kept),
+                "changed": True, "detail": f"已移除 {len(removed)} 条规则"}
+
     # -------------------------------------------------------- 探测
     def health_check(self):
         """探测连通性（GET base_url，只判可达）。"""
@@ -630,10 +745,10 @@ class TgtoDriveClient:
 class TgWhitelistSyncPlugin(PluginBase):
     id = "tg_whitelist_sync"
     name = "求片同步 TgtoDrive 白名单"
-    description = "仅推送：把审批通过/手动接单的求片按 TMDB 写入 TgtoDrive 频道监控白名单（分辨率4k/全部效果/年份TMDB/必含265）；字段名依真实响应定稿；清理交由 TgtoDrive 侧插件"
+    description = "推送 + 删单联动：审批通过/手动接单按 TMDB 增量写入 TgtoDrive 频道监控白名单；工单删除时仅移除对应 kw_ 规则并完整保留其它规则；字段契约依真实响应定稿；入库完结清理由 TgtoDrive 侧插件 B 负责"
     icon = "fa-tower-broadcast"
     icon_color = "from-sky-500 to-cyan-500"
-    version = "2.1.0"
+    version = "2.2.0"
     author = "Abson2"
     permissions = ["db:read", "db:write", "network:out"]
 
@@ -1064,6 +1179,96 @@ class TgWhitelistSyncPlugin(PluginBase):
     def push_request(self, tmdb_id, season, set_status_on_success=STATUS_AUTO_DOWNLOADING):
         """便捷方法：推送单条工单。"""
         return self.push_items([(tmdb_id, season)], set_status_on_success)
+
+    # ------------------------------------------------------------ 删单联动入口（v2.2.0）
+    def remove_items(self, candidates):
+        """工单删除事件入口：从 TgtoDrive 白名单移除对应 kw_ 监控规则。
+
+        - candidates: list of (tmdb_id, season)，取自工单大厅删除请求参数；
+          **无需反查 DAO**（此时工单行已被删除，且参数本身已带 tmdb/season）。
+        - 只删本插件写入的 `kw_<tmdb>_<season>` 规则，完整保留其它所有规则。
+        - 失败只记日志，不抛给上层：删除事件由异步守护线程触发，
+          联动失败绝不阻断工单删除主流程。
+        - dry_run 开启时只记录，不写 TgtoDrive。
+        返回 dict: {ok, removed[], kept_count, changed, detail}
+        """
+        if not candidates:
+            return {"ok": True, "removed": [], "kept_count": 0, "changed": False,
+                    "detail": "无候选工单"}
+
+        cfg = self._get_config()
+        base = _resolve_base_url(cfg)
+        token = (cfg.get("tgtdrive_token") or "").strip()
+        cookie = (cfg.get("tgtdrive_cookie") or "").strip()
+        scene = (cfg.get("tgtdrive_scene") or DEFAULT_SCENE).strip()
+        endpoint = (cfg.get("whitelist_endpoint") or VISUAL_FILTER_ENDPOINT).strip()
+        write_mode = (cfg.get("write_mode") or "flat").strip() or "flat"
+        dry_run = cfg.get("dry_run") in (True, "true", "1", 1)
+        if not base or not endpoint:
+            msg = "TgtoDrive 地址或白名单接口未配置，跳过关键词移除"
+            logger.info(f"[求片同步] {msg}")
+            return {"ok": False, "removed": [], "kept_count": 0,
+                    "changed": False, "detail": msg}
+
+        client = TgtoDriveClient(base, token, endpoint, scene, cookie,
+                                 logger=logger, write_mode=write_mode)
+        rule_ids = []
+        for pair in candidates:
+            try:
+                tmdb_id = int(pair[0])
+                season = int(pair[1] or 0)
+            except (TypeError, ValueError, IndexError):
+                logger.warning(f"[求片同步] 删单联动跳过非法候选: {pair!r}")
+                continue
+            rid = client._rule_id(tmdb_id, season)
+            if rid not in rule_ids:
+                rule_ids.append(rid)
+
+        if not rule_ids:
+            return {"ok": True, "removed": [], "kept_count": 0,
+                    "changed": False, "detail": "无合法规则 id"}
+
+        if dry_run:
+            logger.info(f"[求片同步][试运行] 删单联动将移除: {rule_ids} scene={scene}")
+            self._last_run = time.strftime("%Y-%m-%d %H:%M:%S")
+            self._last_result = f"[试运行] 删单联动将移除 {len(rule_ids)} 条，未实际写入"
+            self._save_state()
+            return {"ok": True, "removed": [], "kept_count": 0,
+                    "changed": False, "detail": "dry_run"}
+
+        try:
+            result = client.remove_rules(rule_ids)
+        except TgtoDriveError as e:
+            msg = f"删单联动移除失败: {e}"
+            self._last_run = time.strftime("%Y-%m-%d %H:%M:%S")
+            self._last_result = msg
+            self._stats["failed"] += len(rule_ids)
+            logger.warning(f"[求片同步] {msg}")
+            self.log(msg, "warning", notify=True)
+            self._save_state()
+            return {"ok": False, "removed": [], "kept_count": 0,
+                    "changed": False, "detail": str(e)}
+
+        removed = result.get("removed") or []
+        self._last_run = time.strftime("%Y-%m-%d %H:%M:%S")
+        if not result.get("ok"):
+            self._last_result = f"删单联动移除失败: {result.get('detail')}"
+            self._stats["failed"] += len(rule_ids)
+            logger.warning(f"[求片同步] {self._last_result}")
+            self.log(self._last_result, "warning", notify=True)
+        else:
+            self._last_result = (
+                f"[删单联动] 目标 {len(rule_ids)} 条，已移除 {len(removed)} 条，"
+                f"保留其它规则 {result.get('kept_count', 0)} 条"
+            )
+            logger.info(f"[求片同步] {self._last_result}")
+            if removed:
+                self.log(
+                    f"工单删除后已移除 TgtoDrive 监控关键词: {', '.join(removed)}",
+                    "info",
+                )
+        self._save_state()
+        return result
 
     @staticmethod
     def _build_keyword(title, media_type, year, season, episodes):

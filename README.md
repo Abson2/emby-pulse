@@ -159,7 +159,7 @@ CSRFMiddleware._expected_origins() 只给出 http://<你的域名>
 
 ## ✨ 四、本项目独有特性：求片 → TgtoDrive 自动同步插件（本次更新）
 
-> 插件 id：`tg_whitelist_sync`（EMBYPULSE 侧，本文档称**插件 A**），版本 `v2.0.0`，作者 Abson2。这是本独立仓库**相对上游的独有扩展**，上游并不具备。配套的 TgtoDrive 侧清理插件（**插件 B** `emby-pulse-monitor`）位于仓库 `tgtdrive-monitor/`，需安装到 TgtoDrive 容器内运行。
+> 插件 id：`tg_whitelist_sync`（EMBYPULSE 侧，本文档称**插件 A**），版本 `v2.2.0`，作者 Abson2。这是本独立仓库**相对上游的独有扩展**，上游并不具备。配套的 TgtoDrive 侧清理插件（**插件 B** `emby-pulse-monitor`）位于仓库 `tgtdrive-monitor/`，需安装到 TgtoDrive 容器内运行。
 
 ### 4.1 它解决什么问题
 
@@ -167,7 +167,7 @@ CSRFMiddleware._expected_origins() 只给出 http://<你的域名>
 
 核心分工（避免早期版本「全量覆盖写误删用户关键词」的坑）：
 
-- **插件 A（本插件，只写不删）**：把求片推送到白名单（分辨率 4k / 画面效果 全部效果 / 年份 读 TMDB 自动填 / 必包含关键词 265），合并写入时**完整保留用户已有的其它关键词**；推送成功后把工单置为「自动下载中(`status=1`)」。
+- **插件 A（本插件，推送 + 删单联动）**：把求片推送到白名单（分辨率 4k / 画面效果 全部效果 / 年份 读 TMDB 自动填 / 必包含关键词 265），合并写入时**完整保留用户已有的其它关键词**；推送成功后把工单置为「自动下载中(`status=1`)」。工单被删除时，另按 `(tmdb_id, season)` **只移除该工单的 `kw_` 规则**，其它规则一律保留。
 - **EMBYPULSE 核心（入库流转）**：Emby webhook 触发 `auto_finish_request`，把工单自动置为「已入库(`status=2`)」并通知管理员/用户。这部分由核心负责，插件 A 不重复实现。
 - **插件 B（TgtoDrive 侧，负责清理）**：按计划周期读取白名单里本插件写入的 `kw_` 规则，以「影视已入库 Emby」判定完结，满 `cleanup_days`（默认 5）天后删除对应关键词。**只删 `kw_` 本插件所有的规则，绝不碰用户其它关键词。**
 
@@ -175,7 +175,7 @@ CSRFMiddleware._expected_origins() 只给出 http://<你的域名>
 
 | 组件 | 运行位置 | 职责 | 默认 |
 |------|----------|------|------|
-| 🔁 **插件 A：求片推送（tg_whitelist_sync）** | EMBYPULSE 侧 | 审批通过/手动接单 → 写 TgtoDrive 白名单（合并、不删）；推送成功置 `status=1` | 启用即生效；**事件驱动**（工单大厅接单即推送）+ 轮询兜底（`check_interval` 默认 5 分钟） |
+| 🔁 **插件 A：求片推送 + 删单联动（tg_whitelist_sync）** | EMBYPULSE 侧 | 审批通过/手动接单 → 写 TgtoDrive 白名单（合并、不删）；推送成功置 `status=1`；**删除工单 → 移除该工单的 `kw_` 规则** | 启用即生效；**事件驱动**（接单即推送 / 删除即移除）+ 轮询兜底（`check_interval` 默认 5 分钟） |
 | 🧹 **插件 B：完结清理（emby-pulse-monitor）** | TgtoDrive 容器内 | 读白名单 `kw_` 规则 → 按影视是否已入库 Emby 判完结 → 满 `cleanup_days`(默认5) 删对应关键词 | 需安装到 TgtoDrive 并按周期启用；只删本插件所有的 `kw_` 规则 |
 
 ### 4.3 生命周期与时序
@@ -197,6 +197,7 @@ EMBYPULSE 核心（Emby webhook）自动把工单置 status=2（已入库）并�
 删除 TgtoDrive 白名单里 kw_<tmdb>_<season> 关键词（只删本插件的，不动用户其它规则）
 ```
 
+> **删除工单是另一条独立路径**：管理员在工单大厅删除求片 → 插件 A 立即异步移除 TgtoDrive 里该工单的 `kw_<tmdb>_<season>` 规则（只删目标，完整保留用户自建规则与其它工单规则）。这与插件 B 的「入库完结 → 周期清理」互不替代，插件 B 不感知 EMBYPULSE 删除事件。详见 [设计文档第九节](docs/tg-whitelist-sync-design.md)。
 > 审批**拒绝(reject) 不触发推送**，流程直接流转为「已拒绝(`status=3`)」并通知管理员/用户。
 > 事件驱动为主路径，后台轮询仅为容错兜底；单轮异常只记日志、不终止线程。
 
@@ -217,7 +218,9 @@ EMBYPULSE 核心（Emby webhook）自动把工单置 status=2（已入库）并�
 | `dry_run` | 关 | 试运行：只记录动作、不写入不改状态，首次验证推荐开启 |
 | `notify_enabled` | 关 | 运行结果发全局通知 |
 
-> **职责边界**：入库流转（待入库 `7` → 已入库 `2` + 通知）由 **EMBYPULSE 核心**负责；完结关键词清理由 **TgtoDrive 侧插件 B**（`tgtdrive-monitor/`，见该目录 README）负责。插件 A 自 v2.0.0 起**只推送、不删除**，彻底避免早期「全量覆盖写误删用户关键词」的坑。
+> 删单联动无需额外配置：插件启用即生效，遵循全局 `dry_run`；只移除 `kw_<tmdb>_<season>` 规则，GET 失败 / 空配置 / 结构未知 / 未命中一律不写 TgtoDrive。
+
+> **职责边界**：入库流转（待入库 `7` → 已入库 `2` + 通知）由 **EMBYPULSE 核心**负责；完结关键词清理由 **TgtoDrive 侧插件 B**（`tgtdrive-monitor/`，见该目录 README）负责。插件 A 的合并写入**永不删除已有规则**；自 v2.2.0 起新增的删除能力被严格限定为「工单删除事件下只移除该工单的 `kw_` 规则」，且带多重安全护栏，彻底避免早期「全量覆盖写误删用户关键词」的坑。两条删除路径互不替代。
 
 ### 4.5 通信地址健壮性：不把易变 IP 写死
 
@@ -313,12 +316,12 @@ WEBHOOK_ALLOW_QUERY_TOKEN=0
 
 ### 5.2 `docker-compose.yml`（拉取镜像，格式参考）
 
-把下面内容保存为 `docker-compose.yml`（仓库根目录已提供同款）。镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG` 即可拉取指定版本（如 `IMAGE_TAG=1.6.0` 回退历史版本，`IMAGE_TAG=latest` 追最新），不设置则默认 `1.7.0`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
+把下面内容保存为 `docker-compose.yml`（仓库根目录已提供同款）。镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG` 即可拉取指定版本（如 `IMAGE_TAG=1.7.0` 回退历史版本，`IMAGE_TAG=latest` 追最新），不设置则默认 `1.8.0`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
 
 ```yaml
 services:
   embypulse-pro:
-    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.7.0}
+    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.8.0}
     container_name: embypulse-pro
     restart: unless-stopped
     ports:
@@ -423,7 +426,7 @@ docker compose up -d
 │   ├── bootstrap/middleware.py           ★ 注册鉴权网关
 │   ├── domains/system/webhook.py         ★ 问题 3
 │   ├── bot/bot.py                        ★ 问题 3/5
-│   └── plugins/tg_whitelist_sync/plugin.py   ★ 独有特性：求片→TgtoDrive 同步（插件 A，v2.0.0）
+│   └── plugins/tg_whitelist_sync/plugin.py   ★ 独有特性：求片→TgtoDrive 同步 + 删单联动（插件 A，v2.2.0）
 ├── tgtdrive-monitor/plugin.py               ★ 独有特性：TgtoDrive 侧完结清理（插件 B）
 ├── tgtdrive-monitor/README.md               ★ 插件 B 安装与参数说明
 ├── templates/settings.html        ★ 问题 3/5，完整模板

@@ -197,6 +197,32 @@ check("meta_raw_regex 纳入清理", '"meta_raw_regex"' in tg)
 check("旧配置错误字段名自动纠正", '"must_include", "picture_effect"' in tg)
 check("写入体形态可切换", '"write_mode"' in tg and '"envelope"' in tg)
 
+print("== 问题 8: 工单删除联动移除 TgtoDrive 监控关键词 ==")
+mr = read("app/domains/media_requests/management_router.py")
+check("插件 A 提供删单联动入口", "def remove_items(self, candidates):" in tg)
+check("client 提供安全移除能力", "def remove_rules(self, rule_ids):" in tg)
+check("插件 A 版本升级到 2.2.0", 'version = "2.2.0"' in tg)
+check("只接受 kw_ 前缀 id（绝不误删用户规则）",
+      "rid.startswith(RULE_ID_PREFIX)" in tg)
+check("保留非目标规则", "kept.append(r)" in tg)
+check("删除体只写 kept 规则", 'payload["rules"] = list(kept)' in tg)
+check("空配置护栏（绝不 POST 空规则）",
+      "if not isinstance(cfg, dict) or not cfg:" in tg)
+check("定位不到目标场景时中止删除", "为安全起见中止删除" in tg)
+check("未命中目标规则时不写入", "if not removed:" in tg)
+check("删单联动支持 dry_run", "删单联动将移除" in tg)
+check("删除入口收集 (tmdb_id, season)",
+      "remove_candidates.append((tid, sn))" in mr)
+check("仅 delete 动作触发联动",
+      'data.action == "delete" and remove_candidates' in mr)
+check("异步触发函数已定义", "def _trigger_tg_whitelist_remove(candidates):" in mr)
+check("守护线程调用 remove_items", "plugin.remove_items(candidates)" in mr)
+check("原推送事件驱动未被破坏",
+      "plugin.push_items(candidates, set_status_on_success=1)" in mr
+      and 'if data.action in ("approve", "manual") and push_candidates:' in mr)
+check("模块级 logger 已定义（修复 push 钩子异常分支）",
+      'logger = logging.getLogger("uvicorn")' in mr)
+
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:
     for f in FAILS:

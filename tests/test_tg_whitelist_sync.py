@@ -1,18 +1,22 @@
 """
-求片同步 TgtoDrive 白名单插件 A（v2.1.0）—— 回归 / 生命周期测试
+求片同步 TgtoDrive 白名单插件 A（v2.2.0）—— 回归 / 生命周期测试
 
 v2.1.0：字段契约按资料库附件 guangya_visual_filter.json（GET 真实响应）定稿：
 必含字段名 required_keyword + 开关 include_required_keyword、效果 effect、
 年份/tmdb_id 为字符串、GET 信封 rules 在 current / scenes[scene] 内。
 
+v2.2.0：新增「删单联动移除」—— 工单删除事件下只移除 kw_<tmdb>_<season>，
+完整保留用户自建规则与其它工单规则，并带全套安全护栏。插件 B 仍独立负责
+「入库完结 → 周期清理」，两条删除路径互不替代。
+
 不依赖真实 app / Emby / TgtoDrive，通过注入假模块与可控 transport 验证：
-- 推送（阶段A）：审批后/手动接单后写入白名单，全量覆盖不冲掉现有规则（坑①），丢弃陈旧 raw_regex（坑②）
-- 推送（阶段A）：合并写入绝不删除用户其它关键词（v2.0.0 关键约束：本插件只写不删）
-- 推送（阶段A）：仅处理审批通过(1)/手动接单(4)，未审批(0) 不碰
-- 幂等，重复运行不重复添加
-- 事件驱动：push_items(candidates) 推送成功后将工单置 status=1（自动下载中）
+- 推送：审批后/手动接单后写入白名单，全量覆盖不冲掉现有规则（坑①），丢弃陈旧 raw_regex（坑②）
+- 推送：合并写入绝不删除用户其它关键词；仅处理审批通过(1)/手动接单(4)，未审批(0) 不碰
+- 幂等，重复运行不重复添加；事件驱动 push_items 推送成功后置 status=1
+- 删单联动：remove_items 只删目标 kw_ 规则、保留用户规则与其它工单规则
+- 删单联动护栏：GET 失败 / 空配置 / 结构未知 / 未命中 / dry_run 一律不 POST
 - 全局 dry_run -> 任何阶段都不写库 / 不写 TgtoDrive
-- 拒绝(reject) 由工单路由处理，本插件不提供删除/清理能力（无 remove_rules / _cleanup_once / _ingest_once）
+- 入库完结清理由插件 B 负责（本插件无 _cleanup_once / _ingest_once）
 - build_rule 规则字段映射（分辨率/效果/年份/必包含）
 """
 
@@ -149,9 +153,13 @@ fake_requests.post = transport.post
 # 3) 导入插件（文件方式，避免污染 repo 包）
 # ----------------------------------------------------------------------------
 import importlib.util
+import os as _os
+# 路径由测试文件位置推导，便于在 CI / 任意 checkout 目录直接运行
+_REPO_ROOT = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".."))
+_PLUGIN_PATH = _os.path.join(_REPO_ROOT, "app", "plugins", "tg_whitelist_sync", "plugin.py")
 SPEC = importlib.util.spec_from_file_location(
     "tg_whitelist_sync_test",
-    "/tmp/ep_repo/app/plugins/tg_whitelist_sync/plugin.py",
+    _PLUGIN_PATH,
 )
 mod = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(mod)
@@ -262,10 +270,12 @@ check(captured.get("payload", {}).get("raw_regex") in (None, ""), "陈旧 raw_re
 check(any(c[0]=="POST" for c in transport.calls), "已发起 POST 覆盖写")
 check(update_calls == [(123, 0, 1)], f"工单推送成功置 自动下载中(1)：{update_calls}")
 
-print("\n== v2.0.0 关键约束：本插件绝不删除用户其它关键词 ==")
-# 验证插件不再提供任何删除/清理能力
-check(not hasattr(plugin, "remove_rules"), "无 remove_rules 方法（不对外暴露删除）")
-check(not hasattr(plugin, "_cleanup_once"), "无 _cleanup_once（完结清理已移交插件 B）")
+print("\n== 删除能力边界：仅删单联动，绝不误删用户规则 ==")
+check(hasattr(plugin, "remove_items"), "提供 remove_items 事件驱动入口（删单联动）")
+check(hasattr(mod.TgtoDriveClient, "remove_rules"), "client 提供 remove_rules 移除能力")
+check(not hasattr(plugin, "remove_rules"),
+      "Plugin 层不暴露裸 remove_rules（只走 remove_items 生成的 kw_ 白名单 id）")
+check(not hasattr(plugin, "_cleanup_once"), "无 _cleanup_once（完结清理仍由插件 B 负责）")
 check(not hasattr(plugin, "_ingest_once"), "无 _ingest_once（入库流转由核心负责）")
 
 print("\n== 阶段A：未审批(0) 不触发 ==")
@@ -379,7 +389,7 @@ for meth, path, fn in plugin.router.routes:
 check(prev is not None, "preview 路由已注册")
 check(status_route is not None, "status 路由已注册")
 check("/sync_now" in [p for _, p, _ in plugin.router.routes if _ == "POST" or True], "sync_now 路由已注册")
-src = open("/tmp/ep_repo/app/plugins/tg_whitelist_sync/plugin.py", encoding="utf-8").read()
+src = open(_PLUGIN_PATH, encoding="utf-8").read()
 check('"request_count": _row_get(r, "cnt")' in src, "preview 用 cnt 映射 request_count（列表接口字段）")
 check('"requested_by": _row_get(r, "users")' in src, "preview 用 users 映射 requested_by（列表接口字段）")
 check('_row_get(r, "requested_by")' not in src, "未误用单查字段 requested_by 去读列表行")
@@ -524,6 +534,121 @@ transport.set_post("visual-filter", lambda kw: (guard_cap.update(p=kw.get("json"
 plugin._sync_once()
 check(not any(c[0] == "POST" for c in transport.calls),
       "GET 结构完全未知时护栏中止，绝不冒险覆盖")
+
+print("\n== 1.8.0 删单联动：只删目标 kw_ 规则，完整保留其它规则 ==")
+posted = []
+transport.set_post("visual-filter", lambda kw: (posted.append(kw.get("json")) or _Resp(200, {})))
+
+transport.calls.clear(); posted.clear(); update_calls.clear()
+reset_cfg()
+env = _guangya_envelope()
+env["scenes"]["ENV_FILTER_GUANGYA"]["rules"].append(
+    {"id": "kw_888_1", "title": "Other Request S1", "keywords": ["Other S1"]})
+transport.set_get("visual-filter", lambda kw: _Resp(200, env))
+res = plugin.remove_items([(297253, 1)])
+p = posted[0] if posted else {}
+ids = [r.get("id") for r in p.get("rules", [])]
+check(res.get("ok") is True and res.get("changed") is True, f"remove_items 返回成功: {res}")
+check("kw_297253_1" not in ids, "目标工单的 kw_297253_1 已移除")
+check("tmdb_movie_969681" in ids, "用户自建 tmdb_movie_ 规则完整保留")
+check("kw_888_1" in ids, "其它工单的 kw_ 规则完整保留（不误删）")
+check(res.get("removed") == ["kw_297253_1"], f"仅报告移除目标 id: {res.get('removed')}")
+check(res.get("kept_count") == 2, f"保留 2 条其它规则: {res.get('kept_count')}")
+check(p.get("scene") == "ENV_FILTER_GUANGYA", "写入体 scene 指向插件配置的目标场景")
+check("raw_regex" not in p and "meta_raw_regex" not in p and "advanced_raw_regex" not in p,
+      "删单联动同样清除三类陈旧正则")
+check("success" not in p and "scenes" not in p, "flat 模式不回传只读信封字段")
+check(len(env["scenes"]["ENV_FILTER_GUANGYA"]["rules"]) == 2,
+      "信封内目标场景规则副本已同步为 kept")
+check(len(env["scenes"]["ENV_FILTER_115"]["rules"]) == 1
+      and env["scenes"]["ENV_FILTER_115"]["rules"][0].get("id") == "tmdb_movie_999999",
+      "其它场景 / current 所指场景的规则未被改动")
+check(update_calls == [], "删单联动不改动任何工单状态")
+
+print("\n== 删单联动护栏：未命中 / 空配置 / 结构未知 / GET 失败 / dry_run ==")
+transport.calls.clear(); posted.clear()
+reset_cfg()
+transport.set_get("visual-filter", lambda kw: _Resp(200, _guangya_envelope()))
+res = plugin.remove_items([(999999, 9)])
+check(res.get("changed") is False and res.get("removed") == [],
+      "未命中目标规则时返回零改动")
+check(posted == [], "未命中时不 POST（零净改动）")
+
+transport.calls.clear(); posted.clear()
+transport.set_get("visual-filter", lambda kw: _Resp(404, {}))
+res = plugin.remove_items([(297253, 1)])
+check(res.get("ok") is False, "GET 404 空配置时中止并返回失败")
+check(posted == [], "空配置时绝不 POST（避免清空现有规则）")
+
+transport.calls.clear(); posted.clear()
+transport.set_get("visual-filter", lambda kw: _Resp(200, {"success": True, "weird": {"unknown": 1}}))
+res = plugin.remove_items([(297253, 1)])
+check(res.get("ok") is False, "GET 结构未知时护栏中止")
+check(posted == [], "结构未知时绝不 POST")
+
+transport.calls.clear(); posted.clear()
+transport.set_get("visual-filter", lambda kw: _Resp(500, {}, text="boom"))
+res = plugin.remove_items([(297253, 1)])
+check(res.get("ok") is False, "GET HTTP 500 时返回失败（异常被兜住，不冒到删除主流程）")
+check(posted == [], "GET 失败时绝不 POST")
+
+transport.calls.clear(); posted.clear()
+reset_cfg(dry_run=True)
+transport.set_get("visual-filter", lambda kw: _Resp(200, _guangya_envelope()))
+res = plugin.remove_items([(297253, 1)])
+check(res.get("changed") is False, "dry_run 返回零改动")
+check(posted == [], "dry_run 不写 TgtoDrive")
+check(not any(c[0] == "GET" for c in transport.calls), "dry_run 连 GET 都不发起")
+
+print("\n== 删单联动：批量去重 / envelope 写入体 / 非 kw_ id 过滤 ==")
+transport.calls.clear(); posted.clear()
+reset_cfg()
+env = _guangya_envelope()
+env["scenes"]["ENV_FILTER_GUANGYA"]["rules"] = [
+    {"id": "kw_111_0", "title": "A", "keywords": []},
+    {"id": "tmdb_movie_222", "title": "User", "keywords": []},
+    {"id": "kw_333_2", "title": "B", "keywords": []},
+]
+transport.set_get("visual-filter", lambda kw: _Resp(200, env))
+res = plugin.remove_items([(111, 0), (333, 2), (111, 0)])
+check(sorted(res.get("removed") or []) == ["kw_111_0", "kw_333_2"],
+      "批量删除命中 2 条且重复候选已去重")
+check([r.get("id") for r in (posted[0] if posted else {}).get("rules", [])] == ["tmdb_movie_222"],
+      "批量删除后只剩用户自建规则")
+
+transport.calls.clear(); posted.clear()
+reset_cfg(write_mode="envelope")
+transport.set_get("visual-filter", lambda kw: _Resp(200, _guangya_envelope()))
+res = plugin.remove_items([(297253, 1)])
+pe = posted[0] if posted else {}
+ids_e = [r.get("id") for r in pe.get("scenes", {}).get("ENV_FILTER_GUANGYA", {}).get("rules", [])]
+check("scenes" in pe and pe.get("scene") == "ENV_FILTER_GUANGYA",
+      "envelope 模式原样回写整个 GET 信封")
+check("kw_297253_1" not in ids_e and "tmdb_movie_969681" in ids_e,
+      "envelope 模式下目标场景副本已移除目标规则且保留用户规则")
+check("raw_regex" not in pe.get("scenes", {}).get("ENV_FILTER_GUANGYA", {}),
+      "envelope 模式下陈旧正则也已清除")
+
+transport.calls.clear(); posted.clear()
+reset_cfg()
+transport.set_get("visual-filter", lambda kw: _Resp(200, _guangya_envelope()))
+cl = mod.TgtoDriveClient("http://tg", "tok", "/api/visual-filter/config", "ENV_FILTER_GUANGYA")
+res2 = cl.remove_rules(["tmdb_movie_969681", "some_user_rule"])
+check(res2.get("changed") is False and res2.get("removed") == [],
+      "client 层过滤掉所有非 kw_ id，绝不误删用户规则")
+check(posted == [], "非 kw_ id 请求不产生 POST")
+
+print("\n== 删除入口接线（management_router.py） ==")
+_mr_path = _os.path.join(_REPO_ROOT, "app", "domains", "media_requests", "management_router.py")
+mrouter = open(_mr_path, encoding="utf-8").read()
+check("_trigger_tg_whitelist_remove" in mrouter, "新增删单联动触发函数")
+check("remove_candidates.append((tid, sn))" in mrouter,
+      "delete 分支直接收集删除请求自带的 (tmdb_id, season)")
+check('data.action == "delete" and remove_candidates' in mrouter,
+      "仅 delete 动作触发联动（approve/manual/reject 不误触发）")
+check("plugin.remove_items(candidates)" in mrouter, "异步守护线程调用 remove_items")
+check('logger = logging.getLogger("uvicorn")' in mrouter,
+      "模块级 logger 已定义（修复既有 push 钩子异常分支的 NameError）")
 
 print(f"\n==== 结果：通过 {PASS} / 失败 {FAIL} ====")
 sys.exit(1 if FAIL else 0)

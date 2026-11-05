@@ -37,6 +37,9 @@ jobs:
       - name: 校验 10307/10308 会话 Cookie 隔离
         run: python tools/check_session_cookie_isolation.py .
 
+      - name: 校验求片同步插件（推送 + 删单联动回归）
+        run: python tests/test_tg_whitelist_sync.py
+
       - name: 编译全部应用源码
         run: python -m compileall -q app/
 
