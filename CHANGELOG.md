@@ -1,5 +1,29 @@
 # 更新日志
 
+## 1.9.2
+
+修复「只启用系统级 Bark、未配置 TG Bot / 企业微信时，新片入库不触发 Bark 通知」的问题。1.9.1 及更早版本均受影响；求片 Bark 通知与工单自动流转不受影响，仍正常。
+
+### 根因：事件订阅被渠道凭证误门控
+- `NotificationBot.start()` 原有一行 `if not get_bot_tg_token() and not get_wecom_corpid(): return`，在 `_subscribe_events()` **之前**就退出。系统级 Bark 是 1.9.0 新增的独立通道，不依赖任何 TG / 企微配置，但它的入库通知 handler 挂在 `notify.library.new_item` / `notify.library.new_episode` 两个事件上，只有 `NotificationBot` 成功启动并订阅后才会执行。
+- 因此只配置 Bark 时，这两个事件**没有任何订阅者**。`EventBus.publish()` 对无订阅者是静默空转（不抛异常、不记日志），入库通知被无声丢弃，排查时看不到任何错误。
+- 「工单大厅流转已入库」是正常的：`_auto_finish_request()` 由 `SystemDaemon` 的入库轮询链路在 `push_single_item()` / `push_episode_group()` 里直接调用，与后续事件订阅不是同一层；`process_library_group()` 也没有「入库通知总开关」前置过滤。
+- 「求片 Bark 正常」也是正常的：`submit_router.py` 直接调用 `safe_push("request_new", ...)`，不经过事件总线。
+
+### 修复
+- 事件订阅与 `running` 标记改为**无条件建立**，不再受 TG / 企微凭证影响；`notify.user.login` / `notify.playback.*` / `notify.item.deleted` / `notify.daily_report` 等内部事件订阅一并恢复正常。
+- 外部渠道动作改为**精确门控**：`has_tg` 时才注册 TG 命令并启动 `notification-bot-polling` 线程，`has_wecom` 时才下发企微菜单。无凭证时不产生任何无效外部调用；各 handler 内的 `send_message` / `send_photo` 本身也有 token 空值判断，双重保险。
+- 启动日志追加 `(event subscriptions active, tg=..., wecom=...)`，便于现场确认订阅状态。
+- **未改动** Bark 发送模块、配置层、求片入口、Webhook 兼容逻辑与任何既有接口；Bark handler 仍位于「入库通知总开关」判断之前，只由自身 `enabled` / `notify_library_new` 两个开关控制。
+
+### 回归
+- 新增 `tools/check_notification_bot_subscription.py`（纯标准库，29 条断言）并接入 CI：用 AST 从真实源码抽出 `start` / `_subscribe_events` / 两个入库 handler，在受控命名空间执行，覆盖「仅 Bark / 仅 TG / 仅企微 / 全部配置 / 重复 start / 取消订阅」六种场景，并把「publish 入库事件 → handler → Bark」整条链闭环验证（含把入库通知总开关置为 False 时 Bark 仍触发）。
+- `verify_patches.py` 新增「问题 11」静态断言；既有 1.7.0 / 1.8.0 / 1.9.0 / 1.9.1 全部回归关卡保持全绿。
+
+### 发布与验证
+- 应用版本升级至 `1.9.2`；compose 默认锁定 `1.9.2`，`1.9.1` 仍保留，可用 `IMAGE_TAG=1.9.1` 回退。
+- 升级后无需重新配置 Bark，也无需配置 TG / 企业微信。触发一次真实新片入库，确认收到「新片入库」推送；求片推送与工单流转应保持不变。
+
 ## 1.9.1
 
 修复 1.9.0 的 Bark 配置「找不到入口」问题。按部署方要求，**不新增独立菜单板块**，改为把 Bark 配置直接内置进「系统设置」页。

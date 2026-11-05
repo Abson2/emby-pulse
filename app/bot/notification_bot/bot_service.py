@@ -664,20 +664,37 @@ class NotificationBot:
 
     def start(self):
         if self.running: return
-        if not get_bot_tg_token() and not get_wecom_corpid(): return
+
+        # 1.9.2：内部事件订阅与「是否配置了 TG / 企业微信」无关，必须始终建立。
+        # 系统级 Bark 推送（以及登录 / 播放 / 删项 / 日报等事件）挂在
+        # notify.library.new_item、notify.library.new_episode 等订阅上。若在这里
+        # 因缺少 TG Token 与企微 corpid 提前 return，事件总线会静默丢弃事件
+        # （publish 对无订阅者不报错、不记日志），表现为「求片 Bark 正常、
+        # 新片入库 Bark 不触发、工单自动流转却正常」。
+        # 外部渠道动作仍严格按凭证门控：无 token 时不注册命令、不发企微菜单、
+        # 不启动轮询线程，避免产生无效外部调用。
         self._subscribe_events()
         self._stop_event.clear()
         self.running = True
-        self._set_commands()
-        self._set_wecom_menu() 
-        if get_bot_tg_token():
+
+        has_tg = bool(get_bot_tg_token())
+        has_wecom = bool(get_wecom_corpid())
+
+        if has_tg:
+            self._set_commands()
+        if has_wecom:
+            self._set_wecom_menu()
+        if has_tg:
             self.poll_thread = threading.Thread(
                 target=self._polling_loop,
                 daemon=True,
                 name="notification-bot-polling",
             )
             self.poll_thread.start()
-        logger.info("🤖 Notification Bot Started")
+        logger.info(
+            f"🤖 Notification Bot Started (event subscriptions active, "
+            f"tg={has_tg}, wecom={has_wecom})"
+        )
 
     def stop(self):
         self.running = False

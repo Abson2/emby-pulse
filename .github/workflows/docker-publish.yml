@@ -43,6 +43,9 @@ jobs:
       - name: 校验系统级 Bark 推送与 Webhook token 兼容
         run: python tests/test_bark_push.py
 
+      - name: 校验入库事件订阅（仅启用 Bark 时也触发）
+        run: python tools/check_notification_bot_subscription.py .
+
       - name: 编译全部应用源码
         run: python -m compileall -q app/
 

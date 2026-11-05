@@ -319,7 +319,7 @@ WEBHOOK_ALLOW_QUERY_TOKEN=1   # Emby Webhook 插件只能配 ?token= URL；反�
 
 ### 5.2 `docker-compose.yml`（拉取镜像，格式参考）
 
-把下面内容保存为 `docker-compose.yml`（仓库根目录已提供同款）。镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG` 即可拉取指定版本（如 `IMAGE_TAG=1.9.0` 回退历史版本，`IMAGE_TAG=latest` 追最新），不设置则默认 `1.9.1`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
+把下面内容保存为 `docker-compose.yml`（仓库根目录已提供同款）。镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG` 即可拉取指定版本（如 `IMAGE_TAG=1.9.1` 回退历史版本，`IMAGE_TAG=latest` 追最新），不设置则默认 `1.9.2`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
 
 ```yaml
 services:
@@ -472,5 +472,7 @@ docker compose up -d
 **系统级 Bark 推送（界面配置，不通过环境变量）**：在「**系统设置 → 系统级 Bark 推送**」卡片填写服务器（默认 `https://api.day.app`，也支持自建）与 Device Key，打开总开关，再按需打开「新片入库通知」「新的求片通知」两个独立开关，点「保存 Bark」，可用「测试推送」验证当前表单值。该卡片独立于顶部「保存配置」按钮，只提交 `bark` 节点，不会覆盖 TG / 企业微信渠道配置。Bark 是**系统级独立通道**，不加入 `notify_rules` 渠道勾选列表，也不受原有通知总开关约束；推送失败只记日志，绝不影响求片提交 / 入库通知主流程。Device Key 在管理端读取时掩码显示，保存时回填的掩码值不会覆盖已存的真实 Key。
 >
 > 1.9.0 用户直接访问 `http://<内网IP>:10307/notify_admin` →「推送渠道」Tab → 第 4 张 Bark 卡片，效果完全相同。完整通知规则矩阵、TG 频道、发送历史也在该页（侧边栏无菜单入口，可从系统设置页卡片底部的「通知规则更多设置 →」进入）。
+>
+> **1.9.2 起**：新片入库 Bark 通知不再依赖 TG Bot / 企业微信配置。1.9.1 及更早版本若两者都未配置，`NotificationBot` 不会订阅 `notify.library.new_item` / `notify.library.new_episode`，入库事件被事件总线静默丢弃，表现为「求片 Bark 正常、新片入库 Bark 不触发、工单自动流转却正常」。升级后事件订阅始终建立，TG 命令 / 轮询线程 / 企微菜单仍按各自凭证门控，无凭证时不会产生无效外部调用。
 
 **Emby Webhook 回调地址（1.9.0）**：在 Emby Webhook 插件里填 `http://<内网IP>:10307/api/v1/webhook?token=<WEBHOOK_TOKEN 的原值>`，设置页「系统神经感知 (Webhook) → 推送目标地址」可直接复制该格式；把占位符换成你自己的真实 Token 即可。后端默认已兼容 `?token=`（见第三节问题 3）。该回调走**内网直连**，不经过公网链路；若管理端是从公网域名打开设置页，复制后请把 host 换成实际内网 IP，别把公网域名填进 Emby。

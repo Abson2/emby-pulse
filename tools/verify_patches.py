@@ -307,11 +307,11 @@ check("系统设置接口给出可复制的 URL 模板",
 check("系统设置接口不再要求 Emby 配置 Header",
       "请在 Emby 中配置 Header" not in system_router)
 
-check("应用版本升级到 1.9.1", 'APP_VERSION = "1.9.1"' in read("app/shared/version.py"))
-check("Dockerfile 版本为 1.9.1-hardened", "APP_VERSION=1.9.1-hardened" in dockerfile)
-check("compose 默认拉取 1.9.1", "IMAGE_TAG:-1.9.1" in compose)
-check("CHANGELOG 含 1.9.0 与 1.9.1 发版说明",
-      "## 1.9.0" in read("CHANGELOG.md") and "## 1.9.1" in read("CHANGELOG.md"))
+check("应用版本升级到 1.9.2", 'APP_VERSION = "1.9.2"' in read("app/shared/version.py"))
+check("Dockerfile 版本为 1.9.2-hardened", "APP_VERSION=1.9.2-hardened" in dockerfile)
+check("compose 默认拉取 1.9.2", "IMAGE_TAG:-1.9.2" in compose)
+check("CHANGELOG 含 1.9.0 / 1.9.1 / 1.9.2 发版说明",
+      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2")))
 check("CI 增加 Bark / Webhook 回归步骤",
       "tests/test_bark_push.py" in read(".github/workflows/docker-publish.yml"))
 
@@ -343,6 +343,35 @@ check("侧边栏未新增独立通知管理板块",
 check("设置页保留完整通知管理入口链接", 'href="/notify_admin"' in settings)
 check("CHANGELOG 含 1.9.1 入口修复说明",
       "## 1.9.1" in changelog and "系统设置" in changelog)
+
+print("== 问题 11: 入库事件订阅不再依赖 TG/企微（1.9.2） ==")
+bot_svc = read("app/bot/notification_bot/bot_service.py")
+ci = read(".github/workflows/docker-publish.yml")
+check("start 去掉渠道凭证提前 return",
+      "if not get_bot_tg_token() and not get_wecom_corpid(): return" not in bot_svc)
+check("start 无条件建立事件订阅与 running 标记",
+      "self._subscribe_events()" in bot_svc and "self.running = True" in bot_svc)
+check("外部动作按 has_tg / has_wecom 精确门控",
+      "has_tg = bool(get_bot_tg_token())" in bot_svc
+      and "has_wecom = bool(get_wecom_corpid())" in bot_svc
+      and "if has_tg:" in bot_svc and "if has_wecom:" in bot_svc)
+check("轮询线程仍只在有 TG Token 时启动",
+      'name="notification-bot-polling"' in bot_svc)
+check("_subscribe_events 仍订阅两个入库事件",
+      'bus.subscribe("notify.library.new_item", self.on_library_new_item)' in bot_svc
+      and 'bus.subscribe("notify.library.new_episode", self.on_library_new_episode)' in bot_svc)
+_item_body = nitem.split("def handle_library_new_item(", 1)[1]
+_ep_body = nep.split("def handle_library_new_episode(", 1)[1]
+check("Bark handler 位于入库通知总开关判断之前",
+      _item_body.index("_bark_notify_new_item(item)") < _item_body.index("if not _enable_library_notify_provider()():")
+      and _ep_body.index("_bark_notify_new_episode(data)") < _ep_body.index("if not _enable_library_notify_provider()():"))
+check("CI 增加入库事件订阅行为校验",
+      "tools/check_notification_bot_subscription.py" in ci)
+check("新增行为校验脚本存在且只依赖标准库",
+      "import ast" in read("tools/check_notification_bot_subscription.py")
+      and "import requests" not in read("tools/check_notification_bot_subscription.py"))
+check("CHANGELOG 含 1.9.2 修复说明",
+      "## 1.9.2" in changelog and "静默" in changelog)
 
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:
