@@ -574,6 +574,60 @@
             </div>
         </div>
 
+        <!-- 系统级 Bark 推送（1.9.1）：直接内置在系统设置页，无需跳通知管理 -->
+        <div class="apple-card flex flex-col h-full p-5 md:p-6">
+            <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-5 flex items-center shrink-0">
+                <div class="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-500/10 text-orange-500 flex items-center justify-center mr-3 shadow-sm"><i class="fa-solid fa-mobile-screen-button text-sm"></i></div>
+                系统级 Bark 推送
+            </h3>
+            <div class="flex-1 flex flex-col justify-between space-y-3.5">
+                <div class="bg-orange-50/80 dark:bg-orange-500/10 p-3 rounded-xl border border-orange-100 dark:border-orange-500/20">
+                    <p class="text-[11px] text-orange-800 dark:text-orange-300 leading-relaxed font-medium">推送「新片入库」与「新的求片」两类消息。系统级独立通道，不受通知规则勾选与旧通知总开关约束；失败只记日志，不影响业务主流程。</p>
+                </div>
+
+                <label class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50 dark:bg-[#2C2C2E] cursor-pointer hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition">
+                    <span class="text-[12px] font-bold text-gray-700 dark:text-gray-200">启用 Bark 推送</span>
+                    <input type="checkbox" id="settings-bark-enabled" class="w-5 h-5 rounded text-orange-500">
+                </label>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">服务器地址</label>
+                    <input type="text" id="settings-bark-server" class="w-full px-3.5 py-2.5 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[12px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-orange-500/50 outline-none transition-all" placeholder="https://api.day.app（自建服填自己的地址）">
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">Device Key</label>
+                    <input type="password" id="settings-bark-device-key" class="w-full px-3.5 py-2.5 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[12px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-orange-500/50 outline-none transition-all" placeholder="Bark App 里的设备密钥">
+                </div>
+
+                <div class="flex flex-wrap gap-x-5 gap-y-2 pl-1">
+                    <label class="flex items-center gap-2 text-[12px] font-medium text-gray-600 dark:text-gray-300 cursor-pointer"><input type="checkbox" id="settings-bark-notify-library-new" class="w-4 h-4 rounded text-orange-500">新片入库通知</label>
+                    <label class="flex items-center gap-2 text-[12px] font-medium text-gray-600 dark:text-gray-300 cursor-pointer"><input type="checkbox" id="settings-bark-notify-request-new" class="w-4 h-4 rounded text-orange-500">新的求片通知</label>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">提示音</label>
+                        <input type="text" id="settings-bark-sound" class="w-full px-3 py-2.5 rounded-xl border border-transparent bg-gray-100 dark:bg-[#2C2C2E] text-[12px] text-gray-800 dark:text-gray-100 outline-none focus:ring-2 focus:ring-orange-500/50" placeholder="default">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">分组</label>
+                        <input type="text" id="settings-bark-group" class="w-full px-3 py-2.5 rounded-xl border border-transparent bg-gray-100 dark:bg-[#2C2C2E] text-[12px] text-gray-800 dark:text-gray-100 outline-none focus:ring-2 focus:ring-orange-500/50" placeholder="EMBYPULSE">
+                    </div>
+                </div>
+
+                <div class="flex gap-2 pt-1">
+                    <button type="button" onclick="saveBarkSettings()" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-[12px] font-bold transition active:scale-95">
+                        <i class="fa-solid fa-floppy-disk text-[11px]"></i>保存 Bark
+                    </button>
+                    <button type="button" onclick="testBarkSettings()" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-gray-700 dark:text-gray-200 rounded-xl text-[12px] font-bold transition active:scale-95">
+                        <i class="fa-solid fa-paper-plane text-[11px]"></i>测试推送
+                    </button>
+                </div>
+                <p class="text-[10px] text-gray-400 dark:text-gray-500 leading-relaxed">Device Key 读取时掩码显示，保存时掩码值不会覆盖已存密钥；「测试推送」可验证当前表单里尚未保存的值。<a href="/notify_admin" class="text-orange-500 hover:underline">通知规则更多设置 →</a></p>
+            </div>
+        </div>
+
         <div class="apple-card flex flex-col h-full p-5 md:p-6">
             <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-5 flex items-center shrink-0">
                 <div class="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-500/10 text-rose-500 flex items-center justify-center mr-3 shadow-sm"><i class="fa-solid fa-shield-halved text-sm"></i></div> 
@@ -1368,6 +1422,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
     loadSettings();
+    loadBarkConfig();
 });
 
 function toggleQweatherHost() {
@@ -1687,6 +1742,73 @@ function copyWebhookUrl() {
         }).catch(fallback);
     } else {
         fallback();
+    }
+}
+
+// ==================== 系统级 Bark 推送（1.9.1：内置于系统设置页） ====================
+// 独立于顶部「保存配置」：Bark 走 /api/notify/channels_config，只提交 bark 节点，
+// 不会触发 /api/settings 的 BotSettingsModel 校验，也不会覆盖 TG / 企业微信配置。
+function collectBarkSettings() {
+    return {
+        bark: {
+            enabled: document.getElementById('settings-bark-enabled').checked,
+            server: (document.getElementById('settings-bark-server').value || '').trim(),
+            device_key: (document.getElementById('settings-bark-device-key').value || '').trim(),
+            sound: (document.getElementById('settings-bark-sound').value || '').trim() || 'default',
+            group: (document.getElementById('settings-bark-group').value || '').trim() || 'EMBYPULSE',
+            notify_library_new: document.getElementById('settings-bark-notify-library-new').checked,
+            notify_request_new: document.getElementById('settings-bark-notify-request-new').checked
+        }
+    };
+}
+
+async function loadBarkConfig() {
+    try {
+        const res = await fetch('/api/notify/channels_config');
+        const json = await res.json();
+        if (json.status !== 'success') return;
+        const c = (json.data && json.data.bark) || {};
+        document.getElementById('settings-bark-enabled').checked = !!c.enabled;
+        document.getElementById('settings-bark-server').value = c.server || '';
+        document.getElementById('settings-bark-device-key').value = c.device_key || '';
+        document.getElementById('settings-bark-sound').value = c.sound || 'default';
+        document.getElementById('settings-bark-group').value = c.group || 'EMBYPULSE';
+        document.getElementById('settings-bark-notify-library-new').checked = c.notify_library_new !== false;
+        document.getElementById('settings-bark-notify-request-new').checked = c.notify_request_new !== false;
+    } catch (e) {
+        console.warn('[Bark] 读取配置失败', e);
+    }
+}
+
+async function saveBarkSettings() {
+    try {
+        const res = await fetch('/api/notify/channels_config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(collectBarkSettings())
+        });
+        const json = await res.json();
+        showSettingsToast(json.message || (json.status === 'success' ? 'Bark 配置已保存' : '保存失败'),
+                          json.status === 'success' ? 'success' : 'error');
+        // 重新读取，让 Device Key 显示为后端下发的掩码值
+        if (json.status === 'success') await loadBarkConfig();
+    } catch (e) {
+        showSettingsToast('Bark 配置保存失败: ' + e.message, 'error');
+    }
+}
+
+async function testBarkSettings() {
+    const c = collectBarkSettings().bark;
+    try {
+        const res = await fetch('/api/notify/bark_test', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({server: c.server, device_key: c.device_key})
+        });
+        const json = await res.json();
+        showSettingsToast(json.message || '测试完成', json.status === 'success' ? 'success' : 'error');
+    } catch (e) {
+        showSettingsToast('测试推送失败: ' + e.message, 'error');
     }
 }
 

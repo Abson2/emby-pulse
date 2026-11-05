@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import sys
 
 ROOT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else ".")
@@ -306,12 +307,42 @@ check("系统设置接口给出可复制的 URL 模板",
 check("系统设置接口不再要求 Emby 配置 Header",
       "请在 Emby 中配置 Header" not in system_router)
 
-check("应用版本升级到 1.9.0", 'APP_VERSION = "1.9.0"' in read("app/shared/version.py"))
-check("Dockerfile 版本为 1.9.0-hardened", "APP_VERSION=1.9.0-hardened" in dockerfile)
-check("compose 默认拉取 1.9.0", "IMAGE_TAG:-1.9.0" in compose)
-check("CHANGELOG 含 1.9.0 发版说明", "## 1.9.0" in read("CHANGELOG.md"))
+check("应用版本升级到 1.9.1", 'APP_VERSION = "1.9.1"' in read("app/shared/version.py"))
+check("Dockerfile 版本为 1.9.1-hardened", "APP_VERSION=1.9.1-hardened" in dockerfile)
+check("compose 默认拉取 1.9.1", "IMAGE_TAG:-1.9.1" in compose)
+check("CHANGELOG 含 1.9.0 与 1.9.1 发版说明",
+      "## 1.9.0" in read("CHANGELOG.md") and "## 1.9.1" in read("CHANGELOG.md"))
 check("CI 增加 Bark / Webhook 回归步骤",
       "tests/test_bark_push.py" in read(".github/workflows/docker-publish.yml"))
+
+print("== 问题 10: Bark 配置内置到系统设置页（1.9.1，不新增独立板块） ==")
+settings = tpl
+layout = read("templates/layout.html")
+changelog = read("CHANGELOG.md")
+check("系统设置页新增 Bark 卡片",
+      "系统级 Bark 推送" in settings and "settings-bark-enabled" in settings)
+check("卡片字段齐全",
+      all(x in settings for x in (
+          "settings-bark-server", "settings-bark-device-key",
+          "settings-bark-sound", "settings-bark-group",
+          "settings-bark-notify-library-new", "settings-bark-notify-request-new")))
+check("提供独立保存与测试按钮",
+      "saveBarkSettings()" in settings and "testBarkSettings()" in settings)
+check("保存走独立接口而非 /api/settings",
+      "async function saveBarkSettings()" in settings
+      and "fetch('/api/notify/channels_config'" in settings)
+_m = re.search(r"function collectBarkSettings\(\)\s*\{(.*?)\n\}", settings, re.S)
+_body = _m.group(1) if _m else ""
+check("只提交 bark 节点（绝不覆盖 TG/企微配置）",
+      "bark:" in _body and "tg_bot" not in _body and "wecom" not in _body)
+check("测试推送走 bark_test 接口", "fetch('/api/notify/bark_test'" in settings)
+check("页面初始化自动加载 Bark 配置",
+      "loadBarkConfig();" in settings and "fetch('/api/notify/channels_config')" in settings)
+check("侧边栏未新增独立通知管理板块",
+      'href="/notify_admin" class="nav-item' not in layout)
+check("设置页保留完整通知管理入口链接", 'href="/notify_admin"' in settings)
+check("CHANGELOG 含 1.9.1 入口修复说明",
+      "## 1.9.1" in changelog and "系统设置" in changelog)
 
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:
