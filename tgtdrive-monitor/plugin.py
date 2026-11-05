@@ -1,30 +1,4 @@
 # -*- coding: utf-8 -*-
-"""TgtoDrive 插件：求片完结关键词清理（v1.0.0）
-
-只使用 Python 标准库（urllib / json / pathlib）。
-
-分工（与 EMBYPULSE 侧「求片同步 TgtoDrive 白名单」插件 A 配合）：
-- 插件 A（运行在 EMBYPULSE）把审批通过/手动接单的求片**推送**进 TgtoDrive 的
-  「频道监控 → 关键词白名单」，规则 id 带 kw_ 前缀（如 kw_123_0），且**永不删除**任何规则。
-- 本插件（运行在 TgtoDrive 容器内，由 OpenAPI 按计划周期调用）负责**清理**：
-  读取白名单里本插件写入的 kw_ 规则，按「影视已入库 Emby」判定完结；
-  完结满 cleanup_days（默认 5）天后，删除对应的 kw_ 关键词，释放 tg 频道监控配额。
-  只删 kw_ 前缀、属于本插件所有的规则，绝不碰用户其它关键词。
-
-完结判据：影视已在 Emby 媒体库中存在（通过 ProviderIds.Tmdb 精确匹配，兜底按名称+年份）。
-未入库则不计时、不删除；一旦入库开始计时，满期才删。删除采用「读-过滤-整体 POST 覆盖」，
-同样丢弃陈旧的 raw_regex 让后端重新编译。
-
-注意：本目录不在凭证扫描器的豁免名单内，故默认地址一律用 127.0.0.1（回环），
-不出现任何具体内网 IP 或第三方域名。
-"""
-import json
-import time
-import urllib.request
-import urllib.error
-from pathlib import Path
-
-
 PLUGIN_MANIFEST = {
     'schema_version': 1,
     'id': 'emby-pulse-monitor',
@@ -51,8 +25,35 @@ PLUGIN_MANIFEST = {
     ],
 }
 
+"""TgtoDrive 插件：求片完结关键词清理（v1.0.0）
+
+只使用 Python 标准库（urllib / json / pathlib / re）。
+
+分工（与 EMBYPULSE 侧「求片同步 TgtoDrive 白名单」插件 A 配合）：
+- 插件 A（运行在 EMBYPULSE）把审批通过/手动接单的求片**推送**进 TgtoDrive 的
+  「频道监控 → 关键词白名单」，规则 id 带 kw_ 前缀（如 kw_123_0），且**永不删除**任何规则。
+- 本插件（运行在 TgtoDrive 容器内，由 OpenAPI 按计划周期调用）负责**清理**：
+  读取白名单里本插件写入的 kw_ 规则，按「影视已入库 Emby」判定完结；
+  完结满 cleanup_days（默认 5）天后，删除对应的 kw_ 关键词，释放 tg 频道监控配额。
+  只删 kw_ 前缀、属于本插件所有的规则，绝不碰用户其它关键词。
+
+完结判据：影视已在 Emby 媒体库中存在（通过 ProviderIds.Tmdb 精确匹配，兜底按名称+年份）。
+未入库则不计时、不删除；一旦入库开始计时，满期才删。删除采用「读-过滤-整体 POST 覆盖」，
+同样丢弃陈旧的 raw_regex 让后端重新编译。
+
+注意：本目录不在凭证扫描器的豁免名单内，故默认地址一律用 127.0.0.1（回环），
+不出现任何具体内网 IP 或第三方域名。
+"""
+import json
+import time
+import urllib.request
+import urllib.error
+import re
+from pathlib import Path
+
+
 RULE_ID_PREFIX = 'kw_'
-KW_RE = __import__('re').compile(r'^kw_(\d+)_(\d+)$')
+KW_RE = re.compile(r'^kw_(\d+)_(\d+)$')
 
 
 def _http_json(url, token=None, method='GET', payload=None, timeout=20):
