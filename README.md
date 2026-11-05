@@ -1,4 +1,4 @@
-# emby-pulse 安全加固独立版（基于 EmbyPulse-next）
+# 🛡️ emby-pulse 安全加固独立版（基于 EmbyPulse-next）
 
 **直接拉取 `ghcr.io/abson2/emby-pulse-hardened:latest` 即可解决「外网经 Cloudflare Tunnel 无法添加用户」和「求片心愿提交报 CSRF 验证失败：Origin 不匹配」，并同时封堵三处越权与凭证泄露口子。**
 
@@ -10,7 +10,22 @@
 
 ---
 
-## 一、原项目功能介绍（EmbyPulse-next）
+## 📑 目录
+
+- [一、原项目功能介绍（EmbyPulse-next）](#一原项目功能介绍embypulse-next)
+- [二、本版本相对原项目做了什么（简明）](#二本版本相对原项目做了什么简明)
+- [三、本次做了哪些改进（详细）](#三本次做了哪些改进详细逐条对应你提的问题)
+- [四、本项目独有特性：求片 → TgtoDrive 自动同步插件](#四本项目独有特性求片--tgtodrive-自动同步插件本次更新)
+- [五、快速部署（推荐：直接拉取镜像）](#五快速部署推荐直接拉取镜像)
+- [六、从源码构建 / 自行修改](#六从源码构建--自行修改)
+- [七、配置隔离：仓库里有什么、没有什么](#七配置隔离仓库里有什么没有什么)
+- [八、仓库结构](#八仓库结构)
+- [九、与上游的关系](#九与上游的关系)
+- [十、配置项](#十配置项)
+
+---
+
+## 📺 一、原项目功能介绍（EmbyPulse-next）
 
 > 以下内容整理自上游 `amlkiller/emby-pulse`（项目名 EmbyPulse-next，v1.5.0）。本版本**完整保留这些功能**，仅在之上做安全加固，未删减任何业务能力。
 
@@ -20,21 +35,23 @@ NEXT 版是 EmbyPulse-pro 的安全分支，解锁 Pro 全部功能；它基于�
 
 ### 核心功能
 
-1. **全景仪表盘**：实时并发播放监控、IP 归属地、资源概览、播放趋势图表、系统状态。
-2. **缺集管理**：比对 Emby 库存与 TMDB 数据，定位缺失集数，联动 MoviePilot 一键搜索、智能匹配版本。
-3. **追剧日历**：全球热播剧集更新时间表，红绿灯状态标识已入库 / 缺失，一键跳转播放或复制搜索指令。
-4. **求片系统**：用户提交电影 / 剧集 / 季度请求，状态链路完整闭环（待处理 → 已下载 → 已入库 / 已拒绝）并通知用户，机器人协同。
-5. **用户中心**：账号信息、到期时间、VIP 标识、用户画像、行为追溯。
-6. **数据洞察**：用户画像趣味成就、入驻溯源、画质审计（4K/HDR/杜比视界占比）、低质筛选。
-7. **映迹工坊**：多维报表（日 / 周 / 月 / 年），黑金 / 赛博 / 极光 / 落日等主题，一键生成长图并推送。
-8. **邀请注册**：生成邀请链接、自助注册、账号到期与批量续期管理。
-9. **Telegram 机器人**：播放 / 入库实时推送、风控告警、交互指令（`/stats`、`/search`、`/check`）、黑名单客户端自动踢出。
-10. **系统运维**：可视化任务管理、网页端实时日志、数据库工具（完整性检测 / 修复 / 备份恢复）、系统诊断。
-11. **播放历史**：全站播放流水、IP 归属地（IPv4/IPv6）精确查询、设备信息展示。
+| # | 功能 | 说明 |
+|---|------|------|
+| 1 | 📊 全景仪表盘 | 实时并发播放监控、IP 归属地、资源概览、播放趋势图表、系统状态 |
+| 2 | 🧩 缺集管理 | 比对 Emby 库存与 TMDB 数据，定位缺失集数，联动 MoviePilot 一键搜索 |
+| 3 | 📅 追剧日历 | 全球热播剧集更新时间表，红绿灯状态标识已入库 / 缺失 |
+| 4 | 🎬 求片系统 | 用户提交电影 / 剧集 / 季度请求，状态链路闭环并通知，机器人协同 |
+| 5 | 👤 用户中心 | 账号信息、到期时间、VIP 标识、用户画像、行为追溯 |
+| 6 | 🔎 数据洞察 | 用户画像趣味成就、画质审计（4K/HDR/杜比视界占比）、低质筛选 |
+| 7 | 🖼️ 映迹工坊 | 多维报表，黑金 / 赛博 / 极光 / 落日等主题，一键生成长图并推送 |
+| 8 | 💌 邀请注册 | 生成邀请链接、自助注册、账号到期与批量续期管理 |
+| 9 | 🤖 Telegram 机器人 | 播放 / 入库实时推送、风控告警、交互指令、黑名单客户端自动踢出 |
+| 10 | 🛠️ 系统运维 | 可视化任务管理、网页端实时日志、数据库工具、系统诊断 |
+| 11 | 🕑 播放历史 | 全站播放流水、IP 归属地（IPv4/IPv6）、设备信息展示 |
 
 ### Pro 独占特性
 
-- **影巢资源集成**：本地库 + 影巢资源全局搜索、TMDB 联动匹配海报 / 背景 / 简介、一键转存到 115 网盘、拼音首字母穿透搜索。
+- **影巢资源集成**：本地库 + 影巢资源全局搜索、TMDB 联动匹配、一键转存 115 网盘、拼音首字母穿透搜索。
 - **风险管控引擎**：并发检测、异常账号违规拦截（警告 / 封禁 / 踢下线）、VIP 豁免、执法记录追溯。
 - **积分系统**：每日签到、积分商城（账号续期 / 邀请码等）、求片消费扣费。
 - **自定义通知模板**：动漫风 / 幽默风 / 简约风等多套预设，支持变量自由组合与随机文案。
@@ -55,7 +72,7 @@ NEXT 版是 EmbyPulse-pro 的安全分支，解锁 Pro 全部功能；它基于�
 
 ---
 
-## 二、本版本相对原项目做了什么（简明）
+## 🔍 二、本版本相对原项目做了什么（简明）
 
 | 维度 | 原项目 | 本版本 |
 |------|--------|--------|
@@ -67,11 +84,13 @@ NEXT 版是 EmbyPulse-pro 的安全分支，解锁 Pro 全部功能；它基于�
 | F12 泄露（问题 5） | 设置接口回传明文 token，前端把 token 拼进 URL | 响应脱敏 + 模板不再拼 URL |
 | 部署文件 | 含 `/volume1/docker/...` 示例路径与示例内网 IP | 完全重写 compose / Dockerfile / CI，无任何个人配置 |
 
-详细根因与改动见 **第三节**；部署方式见 **第四节**。
+> 详细根因与改动见 **第三节**；本次新增的「求片 → TgtoDrive 自动同步」能力见 **第四节**；部署方式见 **第五节**。
 
 ---
 
-## 三、本次做了哪些改进（详细，逐条对应你提的问题）
+## 🐞 三、本次做了哪些改进（详细，逐条对应你提的问题）
+
+> 本节对应**第一轮加固**（5 项安全修复）。第二轮新增能力见 **第四节**。
 
 | # | 你提出的问题 | 现象 | 根因 | 改动文件 |
 |---|---|---|---|---|
@@ -138,28 +157,152 @@ CSRFMiddleware._expected_origins() 只给出 http://<你的域名>
 
 ---
 
-## 四、快速部署（推荐：直接拉取镜像）
+## ✨ 四、本项目独有特性：求片 → TgtoDrive 自动同步插件（本次更新）
 
-### 4.1 准备 .env
+> 插件 id：`tg_whitelist_sync`，版本 `v1.2.0`，作者 Abson2。这是本独立仓库**相对上游的独有扩展**，上游并不具备。
+
+### 4.1 它解决什么问题
+
+把 **EMBYPULSE 工单大厅**里用户提交的求片（以 **TMDB 编号**为唯一标识），**自动写入飞牛上 TgtoDrive 的「光鸭云盘 → 频道监控配置 → 关键词过滤 → 关键词白名单」**，触发 tg 频道监控入库，再把对应工单置为完结（`status=2`）。
+
+并在此基础上补齐两个长期痛点：
+
+- **特性 2（自动入库流转）**：工单处于「待入库(7)」时，若 Emby 媒体库里已经存在该影视，自动流转为「已入库(2)」，无需人工点完结。
+- **特性 1（完结清理）**：工单已完结且超过清理天数（默认 5 天）后，自动删除其在 TgtoDrive 上的对应关键词监控，避免监控列表无限膨胀。
+
+### 4.2 三大能力一览
+
+| 能力 | 阶段 | 触发条件 / 说明 | 默认 |
+|------|------|----------------|------|
+| 🔁 **自动同步白名单** | A | 审批通过（`status=1`）的求片 → 写入 TgtoDrive 关键词白名单 → 置工单完结(`2`) 或待入库(`7`) | 始终开启（轮询间隔 `check_interval`，默认 5 分钟） |
+| 📥 **待入库自动流转（特性2）** | B | 工单为「待入库(`7)`」且 Emby 库已有该影视 → 自动流转为「已入库(`2)`」 | 开关 `auto_ingest_enabled`（默认关），间隔 `ingest_interval` 30 分钟 |
+| 🧹 **完结关键词清理（特性1）** | C | 工单「已入库(`2)`」且超过 `cleanup_days`（默认 5 天）→ 删除对应 TgtoDrive 关键词监控 | 开关 `auto_cleanup_enabled`（默认关），间隔 `cleanup_interval` 60 分钟 |
+
+### 4.3 生命周期与时序
+
+```
+用户提交求片 ──► (管理员审批) ──► status=1（下载中）
+                                      │
+        ┌─────────────────────────────┴─────────────────────────────┐
+        ▼  [阶段A 轮询] 写入 TgtoDrive 白名单                          │
+           成功 → 置 status=2（已入库）或 7（待入库，由 mark_status 决定）
+                                                                     │
+        ┌─────────────────────────────┐                              │
+        ▼  [特性2 轮询] 若 Emby 库已有该影视                            │
+           7 ──► 2                                                     │
+                                                                     │
+        ┌─────────────────────────────┐                              │
+        ▼  [特性1 轮询] 2 且超 cleanup_days(默认5)                     │
+           删除 TgtoDrive 上 kw_<tmdb>_<season> 关键词                 │
+```
+
+> 三个能力由**同一个后台守护线程**按各自 cadence 调度，互不阻塞；单轮异常只记日志、不终止线程。
+
+### 4.4 插件配置项（在 EMBYPULSE「插件」页该插件下填写）
+
+| 配置键 | 默认 | 作用 |
+|--------|------|------|
+| `tgtdrive_base_url` | 留空 | TgtoDrive 地址；**留空时按优先级自动取**（见 4.5），一般无需填 |
+| `tgtdrive_token` | 空 | OpenAPI Bearer 令牌（系统工具 → 实用工具 → OpenAPI 创建） |
+| `tgtdrive_cookie` | 空 | 兜底会话 Cookie，仅在白名单接口只认网页会话时填 |
+| `tgtdrive_scene` | `ENV_FILTER_GUANGYA` | 白名单场景；光鸭=`ENV_FILTER_GUANGYA`，115=`ENV_FILTER_115`，天翼=`ENV_FILTER_189`，HDHIVE=`ENV_FILTER_HDHIVE` |
+| `whitelist_endpoint` | `/api/visual-filter/config` | TgtoDrive 8.8.x 关键词过滤写入路径 |
+| `rule_resolution` | `4k` | 写入规则的分辨率筛选 |
+| `rule_effect` | `all` | 画面效果筛选，`all`=全部效果 |
+| `rule_required_keyword` | `265` | 规则必包含关键词（如 265=H.265/HEVC），留空不限制 |
+| `check_interval` | `5` | 阶段A 轮询间隔（分钟） |
+| `trigger_mode` | `approved_only` | 仅审批通过后(`1`) / +手动接单(`1,4`) / 全部待同步(`1,4,7`) / 含未审批(`0,1,4,7`) |
+| `mark_status` | `2` | 同步成功后工单状态：`2` 完结 / `7` 待入库 |
+| `dry_run` | 关 | 试运行：只记录动作、不写入不改状态，首次验证推荐开启 |
+| `notify_enabled` | 关 | 运行结果发全局通知 |
+| `auto_ingest_enabled` | 关 | **特性2 总开关** |
+| `ingest_interval` | `30` | 特性2 检测间隔（分钟） |
+| `auto_cleanup_enabled` | 关 | **特性1 总开关** |
+| `cleanup_days` | `5` | 完结后多少天删除关键词；`0` 关闭清理 |
+| `cleanup_interval` | `60` | 特性1 扫描间隔（分钟） |
+| `cleanup_done_status` | `2` | 触发清理的完结状态：`2` 已入库 / `7` 待入库 |
+
+> **特性1 / 特性2 在哪里体现？** 插件启用后，它们在插件配置页以两个开关（`自动入库流转（特性2）` / `完结关键词清理（特性1）`）呈现，开启即按各自间隔**自动后台运行**；运行结果、最近一次动作与统计可在该插件的日志 / 状态中查看。无需手动点按钮即可生效。
+
+### 4.5 通信地址健壮性：不把易变 IP 写死
+
+TgtoDrive 通常以 `host` 网络模式运行（默认端口 `12366`），**不在 EMBYPULSE 所在的 docker 桥网络里**，因此无法用 compose 服务名做 DNS 解析。从 EMBYPULSE 容器看过去，访问 host 网络下 TgtoDrive 的**稳定地址是 docker 宿主桥网关**（即 docker0 网桥地址，飞牛默认通常位于 `172.17.0.0/16` 网段）。
+
+> ⚠️ **不要填 NAS 的 LAN IP**（如 `192.168.x.x`）：它会因 DHCP / 换网而变，容器一重启就可能失联。
+
+插件按以下优先级解析 TgtoDrive 地址（`_resolve_base_url`），**任意一层配置即可恢复通信，容器变动也不用手改代码**：
+
+```
+1. 插件配置 UI 填的 tgtdrive_base_url   （最高优先，便于临时覆盖）
+2. 环境变量 TGTODRIVE_URL               （在 compose / .env 一处配置，容器重建不丢）← 推荐
+3. 本地配置文件 <config>/tgtodrive.json 的 base_url
+4. 默认值：docker 宿主桥网关 :12366      （host 网络 TgtoDrive 的稳定入口）
+```
+
+配套写入策略已规避 TgtoDrive 的三处坑：① 全量覆盖 —— 先 `GET` 当前场景规则再合并整体 `POST`；② 后端信 `rules` 不信 `raw_regex` —— 只维护 `rules` 数组；③ 仅动本插件写入的 `kw_` 前缀规则，**绝不波及你在页面里手动配置的其他关键词**。
+
+### 4.6 设计文档
+
+更完整的技术细节（接口结构、字段名映射 `RULE_FIELD`、鉴权兜底、回归测试）见仓库 `docs/tg-whitelist-sync-design.md`。字段名 `resolution / picture_effect / year / must_include` 系依据 TgtoDrive UI 表单推断，若与实际不符，仅改 `RULE_FIELD` 一处常量即可（无需动其他代码）。
+
+---
+
+## 🚀 五、快速部署（推荐：直接拉取镜像）
+
+### 5.1 准备 `.env`（含 TgtoDrive 地址，小白向）
+
+先把模板复制出来：
 
 ```bash
 cp .env.example .env
 ```
 
-按下方说明填写（只在本机编辑，`.env` 已被 `.gitignore` / `.dockerignore` 排除，不会进仓库 / 镜像）：
+然后编辑本机 `.env`（它已被 `.gitignore` / `.dockerignore` 排除，不会进仓库 / 镜像）。下面是**可直接照抄的完整模板**（已包含本轮新增的 `TGTODRIVE_URL`）：
 
-| 变量 | 是否必填 | 怎么获取 |
-|------|----------|----------|
-| `EMBY_HOST` | 推荐 | Emby 服务器内网地址，格式 `http://<IP>:8096`，在 Emby 后台「控制台 → 服务器信息」查看；本机部署填 `http://127.0.0.1:8096` |
-| `EMBY_API_KEY` | 推荐 | Emby 后台「控制台 → API 密钥 → 新建密钥」生成并复制；用环境变量注入后会从磁盘配置自动清除 |
-| `SECRET_KEY` | 必填 | 会话加密密钥，**务必随机**。生成：`openssl rand -hex 32`，把输出填入；留空会导致每次重启所有用户掉登录 |
-| `TG_BOT_TOKEN` | 可选 | 在 BotFather 创建机器人得到的 token；启用 Telegram 推送 / 求片才需要 |
-| `TMDB_API_KEY` | 可选 | 在 TMDB 官网注册申请的 API Key；用于缺集扫描、合集同步 |
-| `WEBHOOK_TOKEN` | 可选（建议） | 自定义随机串，用于 Emby Webhook 回调校验。生成：`openssl rand -hex 16`；配合 `X-Webhook-Token` 请求头使用 |
+```bash
+# ===== Emby 连接 =====
+# Emby 内网地址：http://<Emby局域网IP>:8096（本机部署填 http://127.0.0.1:8096）
+EMBY_HOST=http://<Emby局域网IP>:8096
 
-其余加固变量（`FORWARDED_ALLOW_IPS` / `AUTH_GATE_MODE` / `WEBHOOK_ALLOW_QUERY_TOKEN` / `PUBLIC_API_PATHS`）一般无需改动，默认值即已加固，见 `.env.example` 注释。
+# Emby 后台「控制台 → API 密钥 → 新建密钥」生成的 Key（用环境变量注入后自动从磁盘配置清除）
+EMBY_API_KEY=
 
-### 4.2 docker-compose.yml（拉取镜像，格式参考）
+# 会话加密密钥（必填！生成：openssl rand -hex 32），留空会导致每次重启所有用户掉登录
+SECRET_KEY=
+
+# ===== 按需启用（留空即不启用对应功能）=====
+# TG_BOT_TOKEN=           # Telegram 机器人 Token（BotFather 创建）
+# TMDB_API_KEY=           # TMDB API Key（缺集扫描 / 合集同步用）
+# WEBHOOK_TOKEN=          # Webhook 安全令牌（生成：openssl rand -hex 16），配 X-Webhook-Token 请求头
+
+# ===== 求片→TgtoDrive 白名单自动同步插件（本项目独有特性）=====
+# TgtoDrive 默认 host 网络、端口 12366。从 EMBYPULSE 容器访问它，稳定地址是 docker 宿主桥网关。
+# 绝大多数飞牛 docker 默认桥网关即下方占位值，无需改动；改过 docker 子网请填实际 docker0 网关。
+# 切勿填 NAS 的 LAN IP（会随 DHCP 变化）。插件另有 UI / tgtodrive.json / 默认网关 多层回落。
+TGTODRIVE_URL=http://<DOCKER_HOST_GATEWAY>:12366
+
+# ===== 本版本加固相关（一般无需改动）=====
+TZ=Asia/Shanghai
+FORWARDED_ALLOW_IPS=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+AUTH_GATE_MODE=enforce
+WEBHOOK_ALLOW_QUERY_TOKEN=0
+# PUBLIC_API_PATHS=
+```
+
+**各变量怎么填**（仅本机编辑，不进仓库）：
+
+| 变量 | 是否必填 | 怎么获取 / 说明 |
+|------|----------|----------------|
+| `EMBY_HOST` | 推荐 | Emby 后台「控制台 → 服务器信息」查看；本机部署填 `http://127.0.0.1:8096` |
+| `EMBY_API_KEY` | 推荐 | Emby 后台「控制台 → API 密钥 → 新建密钥」生成并复制 |
+| `SECRET_KEY` | **必填** | `openssl rand -hex 32` 生成的随机串；留空会丢登录 |
+| `TG_BOT_TOKEN` / `TMDB_API_KEY` / `WEBHOOK_TOKEN` | 可选 | 按需启用，见上方注释 |
+| `TGTODRIVE_URL` | 推荐（用本插件必填） | `http://<DOCKER_HOST_GATEWAY>:12366`；host 网络下填 docker 宿主桥网关，**勿填 LAN IP** |
+| `FORWARDED_ALLOW_IPS` 等加固变量 | 一般不动 | 默认已加固，详见 `.env.example` 注释 |
+
+> 其余加固变量（`FORWARDED_ALLOW_IPS` / `AUTH_GATE_MODE` / `WEBHOOK_ALLOW_QUERY_TOKEN` / `PUBLIC_API_PATHS`）一般无需改动，默认值即已加固。
+
+### 5.2 `docker-compose.yml`（拉取镜像，格式参考）
 
 把下面内容保存为 `docker-compose.yml`（仓库根目录已提供同款）：
 
@@ -185,6 +328,8 @@ services:
       - "FORWARDED_ALLOW_IPS=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
     env_file:
       - ./.env
+      # ↑ .env 中的 TGTODRIVE_URL 经此注入容器，供「求片→TgtoDrive 自动同步」插件使用；
+      #   host 网络下它应指向 docker 宿主桥网关 :12366，详见 README 第五节 5.1。
       # - PORT=10307
       # - REQUEST_PORT=10308
       # - DB_PATH=/emby-data/playback_reporting.db
@@ -194,7 +339,7 @@ services:
 
 > 只开放注册 / 求片时，**仅暴露 10308** 即可，10307 留在内网更安全。
 
-### 4.3 启动
+### 5.3 启动
 
 ```bash
 docker compose up -d
@@ -202,15 +347,15 @@ docker compose up -d
 
 Cloudflare Tunnel 回源指向 `http://<容器宿主机>:10307`（或 10308），tunnel 侧无需额外配置请求头。
 
-### 4.4 Cloudflare Tunnel 内网穿透
+### 5.4 Cloudflare Tunnel 内网穿透
 
 本项目要解决的「外网添加用户失败 / 求片 CSRF」正是 Cloudflare Tunnel 回源场景下的典型问题。关于 Cloudflare Tunnel 内网穿透的部署与原理，参见项目介绍：<https://tunnel.naspk.com>。
 
 ---
 
-## 五、从源码构建 / 自行修改
+## 🧩 六、从源码构建 / 自行修改
 
-直接 `git clone` 后照常 `docker compose up -d` 即可（镜像已含全部加固）：
+直接 `git clone` 后照常 `docker compose up -d` 即可（镜像已含全部加固与独有插件）：
 
 ```bash
 git clone https://github.com/Abson2/emby-pulse.git
@@ -223,7 +368,7 @@ docker compose up -d
 
 ---
 
-## 六、配置隔离：仓库里有什么、没有什么
+## 🔐 七、配置隔离：仓库里有什么、没有什么
 
 | | 本仓库 | 部署时（你的机器） |
 |---|---|---|
@@ -231,7 +376,7 @@ docker compose up -d
 | `config/config.json` | **不含** | `./config` 卷挂载目录内 |
 | `data/*.db` | **不含** | `./data` 卷挂载目录内 |
 | `.env` / API Key / Token / 域名 | **不含**，`.env.example` 只有中性占位符 | 本机 `.env`，已被忽略 |
-| 个人域名、内网 IP、账号 | **不含**（上游示例 IP 已替换为本地回环） | 仅在你的 tunnel / `.env` 中 |
+| 个人域名、内网 IP、账号 | **不含**（上游示例 IP 已替换为本地回环 / 占位符） | 仅在你的 tunnel / `.env` 中 |
 | 上游 git 历史 / fork 关系 | **无**，干净单 commit | — |
 
 配套机制：
@@ -251,7 +396,7 @@ docker compose up -d
 
 ---
 
-## 七、仓库结构
+## 🗂️ 八、仓库结构
 
 ```
 .
@@ -263,21 +408,24 @@ docker compose up -d
 ├── .env.example / .gitignore / .dockerignore
 ├── tools/check-no-secrets.py      CI 凭证扫描
 ├── .github/workflows/docker-publish.yml   扫描 → 断言 → 构建 → 冒烟 → 推送
-├── app/                           完整应用源码（本次改动 7 个文件）
+├── app/                           完整应用源码
 │   ├── core/csrf_middleware.py            ★ 问题 1/2 应用层兜底
 │   ├── core/auth_gate_middleware.py      ★ 新增，问题 4
 │   ├── bootstrap/middleware.py           ★ 注册鉴权网关
 │   ├── domains/system/webhook.py         ★ 问题 3
-│   └── bot/bot.py                        ★ 问题 3/5
+│   ├── bot/bot.py                        ★ 问题 3/5
+│   └── plugins/tg_whitelist_sync/plugin.py   ★ 独有特性：求片→TgtoDrive 同步（v1.2.0）
 ├── templates/settings.html        ★ 问题 3/5，完整模板
-├── static/ run.py pyproject.toml uv.lock requirements.txt ...
+├── tests/test_tg_whitelist_sync.py    独有特性插件单元测试（38 项）
+├── docs/tg-whitelist-sync-design.md    独有特性设计文档
+└── static/ run.py pyproject.toml uv.lock requirements.txt ...
 ```
 
-★ = 本次修改/新增，共 7 个源码文件；其余源码保持上游原样，便于对照与后续自行升级。
+★ = 本仓库相对上游的改动/新增。其中前 7 个源码文件 + `templates/settings.html` 为第一轮安全加固；`app/plugins/tg_whitelist_sync/plugin.py` + 测试 + 设计文档为第二轮独有特性扩展。其余源码保持上游原样，便于对照与后续自行升级。
 
 ---
 
-## 八、与上游的关系
+## 🔗 九、与上游的关系
 
 - 上游：`https://github.com/amlkiller/emby-pulse`（**仅作为代码来源**）；
 - 本仓库**不是 fork**：无 upstream remote、无上游提交历史、单个干净 root commit；
@@ -286,18 +434,19 @@ docker compose up -d
 
 ---
 
-## 九、配置项
+## ⚙️ 十、配置项
 
 | 变量 | 默认值 | 作用 |
 |---|---|---|
-| `EMBY_HOST` | `http://127.0.0.1:8096` | Emby 服务地址（见 4.1 获取方式） |
-| `EMBY_API_KEY` | 空 | Emby API Key（见 4.1） |
-| `SECRET_KEY` | 空 | 会话加密密钥，务必随机（见 4.1） |
-| `TG_BOT_TOKEN` / `TMDB_API_KEY` / `WEBHOOK_TOKEN` | 空 | 按需启用（见 4.1） |
+| `EMBY_HOST` | `http://127.0.0.1:8096` | Emby 服务地址（见 5.1 获取方式） |
+| `EMBY_API_KEY` | 空 | Emby API Key（见 5.1） |
+| `SECRET_KEY` | 空 | 会话加密密钥，务必随机（见 5.1） |
+| `TG_BOT_TOKEN` / `TMDB_API_KEY` / `WEBHOOK_TOKEN` | 空 | 按需启用（见 5.1） |
+| `TGTODRIVE_URL` | 无（用独有插件建议设） | TgtoDrive 地址；host 网络下填 `http://<DOCKER_HOST_GATEWAY>:12366`。插件按 UI > 本变量 > `config/tgtodrive.json` > 默认网关 优先级解析（见第四节 4.5） |
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` | 允许 uvicorn 采信代理头；**问题 1/2 主修复** |
 | `AUTH_GATE_MODE` | `enforce` | `enforce` 拦截 / `observe` 只记录 / `off` 关闭 |
 | `PUBLIC_API_PATHS` | 空 | 追加放行路径，逗号分隔 |
 | `WEBHOOK_ALLOW_QUERY_TOKEN` | `0` | 是否兼容旧的 `?token=` 传参 |
 | `TZ` / `HTTP_PORT` | `Asia/Shanghai` / `10307` | 时区 / 宿主机端口 |
 
-完整说明见 `SECURITY.md`；`.env` 各字段获取方式见 **第四节 4.1**。
+完整说明见 `SECURITY.md`；`.env` 各字段获取方式见 **第五节 5.1**。插件自身的运行期配置（TgtoDrive 令牌、场景、特性 1/2 开关、轮询间隔等）在 EMBYPULSE「插件」页内填写，不通过环境变量，详见 **第四节 4.4**。
