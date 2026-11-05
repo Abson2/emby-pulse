@@ -95,6 +95,13 @@ def build_user_portal_app(app, request_port: int):
                     return
 
         elif scope["type"] == "http":
+            # v1.7.0 会话隔离：本 wrapper 只挂在用户端(10308)的 uvicorn 上，
+            # 因此在进入主 app 前给 scope 打权威标记。下游 DatabaseSessionMiddleware
+            # 据此改用独立 Cookie 名 ep_user_session，与管理端 10307 的 session_id
+            # 彻底分开，登录时的 session.clear() 不再删除另一端的会话行。
+            # 标记来自 socket 而非 Host 头，无法被伪造。
+            from app.core.session import USER_PORTAL_SCOPE_FLAG
+            scope[USER_PORTAL_SCOPE_FLAG] = True
             path = scope.get("path", "")
             if path == "/":
                 scope["path"] = "/request"

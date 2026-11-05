@@ -234,11 +234,13 @@ TgtoDrive 通常以 `host` 网络模式运行（默认端口 `12366`），**不�
 4. 默认值：docker 宿主桥网关 :12366      （host 网络 TgtoDrive 的稳定入口）
 ```
 
-配套写入策略已规避 TgtoDrive 的三处坑：① 全量覆盖 —— 先 `GET` 当前场景规则再合并整体 `POST`；② 后端信 `rules` 不信 `raw_regex` —— 只维护 `rules` 数组；③ 仅动本插件写入的 `kw_` 前缀规则，**绝不波及你在页面里手动配置的其他关键词**。
+配套写入策略已规避 TgtoDrive 的四处坑：① 全量覆盖 —— 先 `GET` 当前场景规则再合并整体 `POST`；② GET 返回是信封（`rules` 在 `current` / `scenes[场景]` 内，顶层没有），按目标场景定位，避免串场景；③ 后端信 `rules` 不信 `raw_regex` —— 只维护 `rules` 数组；④ 仅动本插件写入的 `kw_` 前缀规则，**绝不波及你在页面里手动配置的其他关键词**。
+
+> 若现场发现 POST 后规则不生效或返回 400，可在插件配置「写入体形态」把 `flat` 切到 `envelope`（原样回写整个 GET 信封）。
 
 ### 4.6 设计文档
 
-更完整的技术细节（接口结构、字段名映射 `RULE_FIELD`、鉴权兜底、回归测试）见仓库 `docs/tg-whitelist-sync-design.md`。字段名 `resolution / picture_effect / year / must_include` 系依据 TgtoDrive UI 表单推断，若与实际不符，仅改 `RULE_FIELD` 一处常量即可（无需动其他代码）。
+更完整的技术细节（接口结构、字段名映射 `RULE_FIELD`、鉴权兜底、回归测试）见仓库 `docs/tg-whitelist-sync-design.md`。字段名已按 TgtoDrive 真实响应样本（2026-11）定稿：`resolution / effect / year / required_keyword`，并配套 `include_year` / `include_required_keyword` 布尔开关；`year`、`tmdb_id` 为字符串。旧版本推断的 `picture_effect` / `must_include` 后端并不识别，会被丢弃（这正是"必包含关键词丢失"的原因）。字段名仍可通过插件配置「必含字段名」覆盖，无需改代码。
 
 ### 4.7 插件 B（TgtoDrive 侧完结清理）怎么启用
 
@@ -311,12 +313,12 @@ WEBHOOK_ALLOW_QUERY_TOKEN=0
 
 ### 5.2 `docker-compose.yml`（拉取镜像，格式参考）
 
-把下面内容保存为 `docker-compose.yml`（仓库根目录已提供同款）：
+把下面内容保存为 `docker-compose.yml`（仓库根目录已提供同款）。镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG` 即可拉取指定版本（如 `IMAGE_TAG=1.6.0` 回退历史版本，`IMAGE_TAG=latest` 追最新），不设置则默认 `1.7.0`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
 
 ```yaml
 services:
   embypulse-pro:
-    image: ghcr.io/abson2/emby-pulse-hardened:latest
+    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.7.0}
     container_name: embypulse-pro
     restart: unless-stopped
     ports:

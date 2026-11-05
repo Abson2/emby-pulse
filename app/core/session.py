@@ -15,7 +15,32 @@ from app.infra.db.session_dao import (
 )
 
 SESSION_TABLE = "sessions"
-SESSION_COOKIE_NAME = "session_id"
+
+# 会话 Cookie 按端口隔离（v1.7.0）
+# ---------------------------------------------------------------------------
+# 管理端(10307) 与用户端(10308) 同主机同域，而浏览器 Cookie 不区分端口，
+# 同名 Cookie 会被两端互相覆盖。更致命的是登录/登出会调用 session.clear()：
+# 它删除共享会话行并轮换 session_id，另一端随即因会话不存在被踢下线。
+# 因此用户端改用独立 Cookie 名，两端各自持有独立的 DB 会话行，互不影响。
+SESSION_COOKIE_NAME = "session_id"                  # 管理端 / 单端口部署
+USER_PORTAL_SESSION_COOKIE_NAME = "ep_user_session"  # 用户端(10308)
+# ASGI scope 标记：由用户端 wrapper 在入口写入，无法被 Host / X-Forwarded-* 伪造
+USER_PORTAL_SCOPE_FLAG = "embypulse_is_user_portal"
+
+
+def session_cookie_name(scope) -> str:
+    """按 ASGI scope 返回本次请求应使用的会话 Cookie 名。
+
+    用户端口(10308)的 wrapper 会在 scope 上打 USER_PORTAL_SCOPE_FLAG 标记；
+    未标记的请求（管理端 / 单端口部署 / 内部调用 / 测试）一律用默认名。
+    纯函数、仅依赖标准库，便于 CI 独立抽取测试。
+    """
+    # 只认布尔 True：该标记由本进程写入，任何非布尔真值都不视为用户端
+    if isinstance(scope, dict) and scope.get(USER_PORTAL_SCOPE_FLAG) is True:
+        return USER_PORTAL_SESSION_COOKIE_NAME
+    return SESSION_COOKIE_NAME
+
+
 # 空闲超时（默认 24 小时）；可通过环境变量 SESSION_IDLE_HOURS 调整（单位：小时）。
 # 注意：本应用代码层面最短也是 24 小时，若出现「几分钟就被踢」属基础设施问题
 # （容器/进程周期性重启冲掉会话库、或上游 Cloudflare Access / 反代自带更短超时），

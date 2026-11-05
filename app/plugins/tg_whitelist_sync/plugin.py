@@ -1,5 +1,5 @@
 """
-求片同步 TgtoDrive 关键词白名单插件（v2.0.0）
+求片同步 TgtoDrive 关键词白名单插件（v2.1.0）
 =============================================
 
 本插件**只负责把求片推送进 TgtoDrive，绝不删除任何规则**。
@@ -28,32 +28,58 @@
   （已入库）并通知管理员/用户。本插件不重复实现。
 - **轻量轮询兜底**：后台每 check_interval 分钟扫描一次 status∈(1,4) 的工单补推，仅作容错。
 
-推送的每条规则除 {id, title, keywords[]} 外，按配置带筛选字段：
+推送的每条规则按配置带筛选字段：
 分辨率(rule_resolution, 默认 4k) / 画面效果(rule_effect, 默认 all=全部效果) /
 年份(取自 TMDB，自动填写) / 必包含关键词(rule_required_keyword, 默认 265=H.265/HEVC)。
 
-TgtoDrive 写入接口（基于 8.8.27 实测，不走官方 Python 插件路线）
+TgtoDrive 写入接口（v2.1.0：字段契约已按真实响应样本定稿）
 ---------------------------------------------------------------
-白名单写入是标准 REST 接口，无需改 TgtoDrive 源码：
+依据资料库附件 `guangya_visual_filter.json`（GET /api/visual-filter/config 的真实
+响应，2026-11）实证，不再是 UI 推断：
 
-    POST /api/visual-filter/config
+1. **GET 返回是「信封」**，顶层没有 rules：
 
-请求体（场景 key 用 `scene` 字段区隔，光鸭为 `ENV_FILTER_GUANGYA`）：
+       {
+         "success": true,
+         "scene": "ENV_FILTER_GUANGYA",           # 当前选中场景
+         "current": { "key": "...", "rules": [...], "parse_mode": "meta", ... },
+         "scenes": { "ENV_FILTER_GUANGYA": { "rules": [...] }, ... },
+         "scene_labels": {...}, "tmdb_rule_cache": {...}, "image_base_url": "..."
+       }
 
-    {
-      "scene": "ENV_FILTER_GUANGYA",
-      "rules": [ { "id": "...", "title": "...", "keywords": ["关键词"] } ],
-      "parse_mode": 1,
-      "all_mode": 0,
-      "raw_regex": "",
-      "advanced_raw_regex": ""
-    }
+   `current` 是**当前选中场景**的快照，可能与插件配置的目标 scene 不同；
+   因此定位规则时优先取 `scenes[目标scene].rules`，避免把规则串到别的场景。
+   旧版本直接读顶层 `cfg["rules"]` 恒为空 → 只写新规则 → **覆盖**（bug1 根因）。
 
-两个必须知道的坑（已在本插件内处理）：
-1. **全量覆盖，不是 append**：直接 POST 一条会把现有规则全冲掉。
-   所以强制 `GET 当前 scene → 合并 → 整体 POST`，且**完整保留非 kw_ 的用户规则**。
-2. **后端信 rules 不信 raw_regex**：绝不手拼 raw_regex，只维护 rules 数组，
-   丢弃 GET 回来的陈旧 raw_regex，让后端按 rules 重新编译。
+2. **rules[] 内字段名**（此前基于 UI 的推断全是错的，bug2 根因）：
+
+       required_keyword        : "265"      # 必包含关键词（旧推断 must_include：后端不认）
+       include_required_keyword: true       # 必含开关，不开则后端不编进正则
+       effect                  : "all"      # 画面效果（旧推断 picture_effect：后端不认）
+       resolution              : "4k"
+       year                    : "2026"     # 字符串，不是 int
+       include_year            : true
+       rule_type               : "structured"
+       source                  : "tmdb"
+       tmdb_id                 : "297253"   # 字符串
+       keyword_groups_any / aliases / media_name / preferred_name / title / keywords
+       exclude_keywords / custom_regex / id / media_type / ...
+
+   附件中插件写入的 `kw_297253_1` 经后端规范化后为
+   `required_keyword:""` + `include_required_keyword:false` —— 正是「必包含关键词
+   丢失」的实证：字段名错了、开关也没打开。
+
+3. **后端信 rules 不信 raw_regex**：绝不手拼 raw_regex，只维护 rules 数组；
+   丢弃 GET 回来的 `raw_regex` / `advanced_raw_regex` / `meta_raw_regex`，
+   让后端按 rules 重新编译。
+
+4. **POST 是整体覆盖，不是 append**：强制 `GET → 合并 → 整体 POST`，
+   **完整保留非 kw_ 的用户规则**，只追加本插件新的 kw_ 规则。
+
+写入体形态（配置项 `write_mode`）：
+- `flat`（默认）：把 GET 里目标场景的配置对象提取成扁平体，补 `scene` 后 POST，
+  与接口文档的 `{scene, rules, parse_mode, all_mode, ...}` 一致，不回传只读信封字段；
+- `envelope`：原样回写整个 GET 信封（若现场后端要求完整信封，切到此项）。
 
 鉴权：优先 `Authorization: Bearer <OpenAPI 令牌>`（系统工具→实用工具→OpenAPI 创建）；
 若白名单接口只认网页会话，可用 `tgtdrive_cookie` 配置自签 session（兜底）。
@@ -115,17 +141,27 @@ STATUS_TEXT = {
 # 本插件写入的监控规则 id 前缀：插件 B 清理时只动这些，绝不波及用户其他关键词
 RULE_ID_PREFIX = "kw_"
 
-# 光鸭白名单「规则对象」字段名映射。
-# 注意：TgtoDrive 的 OpenAPI 规范（自动生成）只导出了顶层字段（scene/rules/...），
-# 并未导出 rules[] 内部每条规则的字段结构，因此下列字段名是基于 UI 表单推断的。
-# 若实际抓包发现字段名不同，仅修改本字典即可，无需改动其它代码。
+# 光鸭白名单「结构化规则对象」字段名映射（v2.1.0 定稿）。
+# 依据：资料库附件 guangya_visual_filter.json —— GET /api/visual-filter/config
+# 的真实响应（2026-11）。此前基于 UI 推断的 must_include / picture_effect 均不存在，
+# 后端会把未知字段丢弃，这正是「必包含关键词丢失」的根因。
 # 取值（4k / all / 265）由插件配置项提供，字段名在此集中维护。
 RULE_FIELD = {
-    "resolution": "resolution",      # 分辨率选择（如 4k）
-    "effect": "picture_effect",      # 画面效果（"all" 表示全部效果）
-    "year": "year",                  # 年份（取自 TMDB）
-    "required": "must_include",      # 必包含关键词（如 265 / H.265）
+    "resolution": "resolution",      # 分辨率（如 "4k" / "all"）
+    "effect": "effect",              # 画面效果（"all" 表示全部效果）
+    "year": "year",                  # 年份（字符串，如 "2026"）
+    "required": "required_keyword",  # 必包含关键词（如 "265" / H.265）
 }
+
+# 与上面的取值字段配套的布尔开关：不开则后端不会把该条件编进 meta_raw_regex。
+# 附件实证：include_required_keyword=false 时 required_keyword 为空串。
+RULE_SWITCH = {
+    "required": "include_required_keyword",
+    "year": "include_year",
+}
+
+# 字段名仍可通过插件配置覆盖（万一 TgtoDrive 升级改名，无需改代码）。
+# 但默认值已是附件实证的真名，1.6.0 用户若曾手填 must_include 需清空或改回。
 
 
 class TgtoDriveError(Exception):
@@ -235,13 +271,14 @@ class TgtoDriveClient:
     """
 
     def __init__(self, base_url, token, endpoint, scene=DEFAULT_SCENE,
-                 cookie=None, timeout=15, logger=None):
+                 cookie=None, timeout=15, logger=None, write_mode="flat"):
         self.base_url = (base_url or "").rstrip("/")
         self.token = token or ""
         self.endpoint = endpoint or VISUAL_FILTER_ENDPOINT
         self.scene = scene or DEFAULT_SCENE
         self.cookie = cookie or ""
         self.timeout = timeout
+        self.write_mode = write_mode or "flat"
         self._log = logger
 
     # -------------------------------------------------------- 基础
@@ -292,8 +329,41 @@ class TgtoDriveClient:
         return None, None
 
     @staticmethod
-    def _extract_rules(cfg):
-        """从 GET 返回里稳妥取出 rules 数组（兼容顶层 / 嵌套结构）。"""
+    def _find_scene_container(cfg, scene):
+        """按目标 scene 精确定位配置对象（v2.1.0）。
+
+        真实 GET 响应（附件实证）是信封：
+            {"scene": "...", "current": {...rules...},
+             "scenes": {"ENV_FILTER_GUANGYA": {...rules...}, ...}, ...}
+
+        `current` 只是**当前选中场景**的快照，未必等于插件配置的目标 scene。
+        若盲目取 current.rules，插件会把规则合并进别的场景 → 串场景 + 覆盖。
+        优先级：scenes[目标scene] > current(仅当 key 匹配) > 顶层包含 rules 的对象。
+        返回 (container_dict, 来源说明)；找不到返回 (None, None)。
+        """
+        if not isinstance(cfg, dict):
+            return None, None
+        scenes = cfg.get("scenes")
+        if isinstance(scenes, dict):
+            node = scenes.get(scene)
+            if isinstance(node, dict) and isinstance(node.get("rules"), list):
+                return node, "scenes[%s]" % scene
+        cur = cfg.get("current")
+        if isinstance(cur, dict) and isinstance(cur.get("rules"), list):
+            key = cur.get("key")
+            if not key or key == scene:
+                return cur, "current"
+        if isinstance(cfg.get("rules"), list):
+            return cfg, "top-level"
+        return None, None
+
+    @staticmethod
+    def _extract_rules(cfg, scene=None):
+        """从 GET 返回里稳妥取出目标 scene 的 rules 数组。"""
+        if scene:
+            container, _ = TgtoDriveClient._find_scene_container(cfg, scene)
+            if container is not None and isinstance(container.get("rules"), list):
+                return container["rules"]
         container, subkey = TgtoDriveClient._find_rules_container(cfg)
         if container is not None:
             rules = container.get(subkey)
@@ -303,10 +373,15 @@ class TgtoDriveClient:
 
     @staticmethod
     def _strip_raw_regex(cfg):
-        """递归删除 raw_regex / advanced_raw_regex 键（后端信 rules 不信正则）。"""
+        """递归删除 raw_regex / advanced_raw_regex / meta_raw_regex 键。
+
+        后端信 rules 不信正则（附件里三者都是按 rules 编译出来的产物），
+        留着陈旧值会让后端跳过重编译或写入过期条件。
+        """
         if isinstance(cfg, dict):
             cfg.pop("raw_regex", None)
             cfg.pop("advanced_raw_regex", None)
+            cfg.pop("meta_raw_regex", None)
             for v in cfg.values():
                 TgtoDriveClient._strip_raw_regex(v)
         elif isinstance(cfg, list):
@@ -339,66 +414,108 @@ class TgtoDriveClient:
 
     # -------------------------------------------------------- 构造单条规则
     def build_rule(self, item):
-        """把一条求片构造为白名单规则对象。
+        """把一条求片构造为 TgtoDrive「结构化」白名单规则对象。
 
-        item 字段：tmdb_id / media_type / year / season / title / keyword / rule_fields
-        最小可用字段为 {id, title, keywords[]}；额外附 tmdb_id 等便于回查，
-        并按 RULE_FIELD 映射写入分辨率/画面效果/年份/必包含关键词等筛选字段。
-        后端按 rules 编译正则（坑②），未知字段会被忽略，故字段名以实际抓包为准。
+        字段形态以资料库附件 guangya_visual_filter.json（GET 真实响应）为准：
+        rule_type=structured、source=tmdb、tmdb_id/year 为字符串、
+        keywords/aliases/keyword_groups_any 承载片名，配套 include_* 布尔开关。
+
+        实测（附件中 kw_297253_1 即本插件写入后被后端规范化的规则）：后端会按
+        rules 重新规范化并编译 meta_raw_regex，因此这里补齐结构化骨架，
+        尤其必须写入 required_keyword **并打开 include_required_keyword**，
+        否则后端会把必包含关键词规范化成空串（bug2）。
         """
         rid = self._rule_id(item["tmdb_id"], item["season"])
         title = (item.get("title") or "").strip() or f"TMDB{item['tmdb_id']}"
+        keyword = item["keyword"]
+        # 字段名可由插件配置覆盖（TgtoDrive 改名时无需改代码）；默认已是附件实证真名
+        required_key = item.get("rule_required_field") or RULE_FIELD["required"]
+        required_switch = item.get("rule_required_switch") or RULE_SWITCH["required"]
+        year_key = RULE_FIELD["year"]
+        year_switch = RULE_SWITCH["year"]
+
         rule = {
             "id": rid,
             "title": title,
-            "keywords": [item["keyword"]],
-            "tmdb_id": item["tmdb_id"],
-            "media_type": item.get("media_type"),
+            "media_name": title,
+            "preferred_name": title,
+            "aliases": [title],
+            "keywords": [keyword],
+            "keyword_groups_any": [[keyword]],
+            "exclude_keywords": [],
+            "custom_regex": "",
+            "rule_type": "structured",
+            "source": "tmdb",
+            # 附件实证：tmdb_id / year 均为字符串，不是 int
+            "tmdb_id": str(item["tmdb_id"]),
+            "media_type": item.get("media_type") or "",
         }
-        # 年份：取自 TMDB（工单提交时即由 TMDB 填充，符合"读取TMDB自动填写"）
-        if item.get("year"):
-            rule[RULE_FIELD["year"]] = item["year"]
         rf = item.get("rule_fields") or {}
         if rf.get("resolution"):
             rule[RULE_FIELD["resolution"]] = rf["resolution"]
         if rf.get("effect"):
             rule[RULE_FIELD["effect"]] = rf["effect"]
+        year = item.get("year")
+        if year:
+            rule[year_key] = str(year)
+            rule[year_switch] = True
+        # 必包含关键词：值 + 开关缺一不可。留空时显式写空串/关闭开关，
+        # 让后端规范化结果与附件一致（required_keyword:"" / include_*:false）
         req = (rf.get("required") or "").strip()
-        if req:
-            # 必包含关键词的字段名由配置 rule_required_field 决定（默认 must_include，
-            # 系依据 TgtoDrive UI 推断；若实际抓包字段名不同，改配置即可，无需动代码）
-            rule[item.get("rule_required_field") or RULE_FIELD["required"]] = req
+        rule[required_key] = req
+        rule[required_switch] = bool(req)
         return rule
 
     # -------------------------------------------------------- 合并写（核心，永不删除）
     def merge_and_save(self, items):
-        """读-合并-写：把 items 追加进当前 scene 白名单，整体 POST 覆盖。
+        """读-合并-写：把 items 追加进目标 scene 白名单，整体 POST 覆盖。
 
         **关键保证**：只把本插件要写的新规则合并进去，**完整保留所有已存在的规则
         （含用户通过 TgtoDrive 页面手动添加的其它关键词）**，绝不删除任何用户规则。
 
-        安全护栏：若 GET 成功返回但无法从响应中解析出 rules（接口版本 / scene /
-        鉴权不匹配导致结构未知），**中止推送**而非冒险覆盖现有规则——宁可本次不写入，
-        也绝不让用户已有的频道监控关键词被冲掉。
+        v2.1.0（依据附件 guangya_visual_filter.json 定稿）：
+        - GET 返回是信封，rules 在 `current` / `scenes[scene]` 内、顶层没有 rules。
+          旧代码读顶层 rules 恒为空 → 只写新规则 → 覆盖（bug1 根因）。
+        - `current` 是「当前选中场景」，可能不是插件配置的目标场景，故优先按
+          `scenes[目标scene]` 定位，避免串场景。
+        - 写回时把合并后的规则同步到信封内所有副本（current / scenes[scene] /
+          顶层 rules），后端无论读哪一份都不会拿到过期规则。
+
+        安全护栏：GET 成功但结构完全无法解析、且不是「目标场景尚未创建」时，
+        **中止推送**而非冒险覆盖现有规则。
 
         返回 dict: {ok, added[], skipped[], changed, detail}
         """
         cfg = self.get_config()
+        scene = self.scene
 
-        container, subkey = self._find_rules_container(cfg)
+        container, source = self._find_scene_container(cfg, scene)
         if container is None:
-            # 找不到 rules 容器：区分「真·空场景(404 返回 {})」与「未知结构」
-            if cfg:
+            # 区分三种情况：真·空配置 / 目标场景尚未创建 / 未知结构
+            scenes = cfg.get("scenes") if isinstance(cfg, dict) else None
+            scene_not_created = isinstance(scenes, dict) and scene not in scenes
+            if cfg and not scene_not_created:
                 raise TgtoDriveError(
-                    "GET 返回无法解析出 rules（可能为接口版本 / scene / 鉴权不匹配），"
-                    "为安全起见中止推送，避免覆盖现有规则。"
-                    "请提供 /api/visual-filter/config 的真实返回样本以便修正字段名/信封结构。"
+                    "GET 返回无法定位目标场景的 rules（接口版本 / scene / 鉴权不匹配），"
+                    "为安全起见中止推送，避免覆盖现有规则。请核对 tgtdrive_scene 配置，"
+                    "或把 write_mode 切到 envelope 后重试。"
                 )
-            # 真正空场景：从零创建
-            cfg = {"scene": self.scene, "rules": []}
-            container, subkey = cfg, "rules"
+            # 空配置(404 返回 {}) 或目标场景尚无配置：从零创建该场景
+            if not isinstance(cfg, dict) or not cfg:
+                cfg = {}
+            if not isinstance(scenes, dict):
+                cfg["scenes"] = {}
+                scenes = cfg["scenes"]
+            fresh = {"key": scene, "rules": []}
+            scenes[scene] = fresh
+            container, source = fresh, "scenes[%s](new)" % scene
+            cfg.setdefault("current", fresh)
+            cfg["scene"] = scene
+        if self._log:
+            self._log.info("[求片同步] 规则定位: %s，现有 %d 条",
+                           source, len(container.get("rules") or []))
 
-        existing = list(container.get(subkey) or [])
+        existing = list(container.get("rules") or [])
         existing_ids = {self._safe_id(r) for r in existing}
 
         new_rules = []
@@ -425,16 +542,45 @@ class TgtoDriveClient:
 
         # 坑①：保留所有现有规则（含用户规则），仅追加新的 kw_ 规则 —— 绝不删除任何已有规则
         merged = list(existing) + new_rules
-        container[subkey] = merged
 
-        # 坑②：后端信 rules 不信 raw_regex，递归丢弃陈旧正则让其重新编译
+        # 同步信封内的所有规则副本，避免后端读 current / scenes 拿到不同版本
+        containers = [(container, "rules")]
+        if isinstance(cfg, dict):
+            cur = cfg.get("current")
+            if isinstance(cur, dict) and cur is not container and isinstance(cur.get("rules"), list):
+                if not cur.get("key") or cur.get("key") == scene:
+                    containers.append((cur, "rules"))
+            sc = cfg.get("scenes")
+            node = sc.get(scene) if isinstance(sc, dict) else None
+            if isinstance(node, dict) and node is not container and isinstance(node.get("rules"), list):
+                containers.append((node, "rules"))
+            if isinstance(cfg.get("rules"), list):
+                containers.append((cfg, "rules"))
+        for c, k in containers:
+            c[k] = list(merged)
+
+        # 坑②：后端信 rules 不信正则，递归丢弃陈旧正则让其重新编译
         self._strip_raw_regex(cfg)
-        cfg["scene"] = self.scene
+
+        if (self.write_mode or "flat").strip().lower() == "envelope":
+            # 原样回写整个 GET 信封（现场后端若要求完整信封，用此模式）
+            cfg["scene"] = scene
+            payload = cfg
+        else:
+            # 默认 flat：提取目标场景配置对象为扁平写入体，不回传 success /
+            # scene_labels / tmdb_rule_cache 等只读信封字段
+            payload = {
+                k: v for k, v in container.items()
+                if k not in ("rules", "updated_at", "success")
+            }
+            payload["scene"] = scene
+            payload["rules"] = list(merged)
+            self._strip_raw_regex(payload)
 
         try:
             resp = requests.post(
                 self._url(),
-                json=cfg,
+                json=payload,
                 headers=self._headers(),
                 timeout=self.timeout,
             )
@@ -477,17 +623,17 @@ class TgtoDriveClient:
         except TgtoDriveError as e:
             # 连通但鉴权/接口异常：区分提示
             return False, f"连通可达但读取配置失败: {e}", 0
-        rules = self._extract_rules(cfg)
+        rules = self._extract_rules(cfg, self.scene)
         return True, f"可达，场景 {self.scene} 当前 {len(rules)} 条规则", len(rules)
 
 
 class TgWhitelistSyncPlugin(PluginBase):
     id = "tg_whitelist_sync"
     name = "求片同步 TgtoDrive 白名单"
-    description = "仅推送：把审批通过/手动接单的求片按 TMDB 写入 TgtoDrive 频道监控白名单（分辨率4k/全部效果/年份TMDB/必含265）；清理交由 TgtoDrive 侧插件"
+    description = "仅推送：把审批通过/手动接单的求片按 TMDB 写入 TgtoDrive 频道监控白名单（分辨率4k/全部效果/年份TMDB/必含265）；字段名依真实响应定稿；清理交由 TgtoDrive 侧插件"
     icon = "fa-tower-broadcast"
     icon_color = "from-sky-500 to-cyan-500"
-    version = "2.0.0"
+    version = "2.1.0"
     author = "Abson2"
     permissions = ["db:read", "db:write", "network:out"]
 
@@ -618,10 +764,27 @@ class TgWhitelistSyncPlugin(PluginBase):
             },
             {
                 "key": "rule_required_field",
-                "label": "规则·必含字段名（高级，默认 must_include）",
+                "label": "规则·必含字段名（高级，默认 required_keyword）",
                 "type": "text",
-                "placeholder": "must_include",
-                "hint": "TgtoDrive 规则对象中『必包含关键词』对应的字段名，系依据其 UI 推断；若实际抓包字段名不同（如 required_keywords/include），改此处即可，无需改代码",
+                "placeholder": "required_keyword",
+                "hint": "依据 TgtoDrive 真实响应样本（2026-11）定稿为 required_keyword。旧版本误用 must_include 导致必含关键词被后端丢弃；若已在旧版手填过 must_include，请清空或改回 required_keyword",
+            },
+            {
+                "key": "rule_required_switch",
+                "label": "规则·必含开关字段名（高级，默认 include_required_keyword）",
+                "type": "text",
+                "placeholder": "include_required_keyword",
+                "hint": "必包含关键词的布尔开关；不打开后端不会把该条件编进正则。留空用默认 include_required_keyword",
+            },
+            {
+                "key": "write_mode",
+                "label": "写入体形态（高级，默认 flat）",
+                "type": "select",
+                "options": [
+                    {"value": "flat", "label": "flat — 提取目标场景配置为扁平体（推荐）"},
+                    {"value": "envelope", "label": "envelope — 原样回写整个 GET 信封"},
+                ],
+                "hint": "GET /api/visual-filter/config 返回的是含 current/scenes 的信封。默认只把目标场景配置提取成扁平体写回；若现场后端要求完整信封（POST 400/规则不生效），切到 envelope",
             },
             {
                 "key": "check_interval",
@@ -766,15 +929,25 @@ class TgWhitelistSyncPlugin(PluginBase):
             "effect": (cfg.get("rule_effect") or "all").strip(),
             "required": (cfg.get("rule_required_keyword") or "").strip(),
         }
-        # 必包含关键词写进规则对象的「字段名」可配置（TgtoDrive 实际字段名未知时由此修正）
-        rule_required_field = (cfg.get("rule_required_field") or RULE_FIELD["required"]).strip() or RULE_FIELD["required"]
+        # 字段名可配置，但旧版本(<=1.6.0)默认/手填的 must_include 已被附件实证为
+        # 后端不认的错误名 —— 自动纠正，避免存量部署升级后仍丢必含关键词。
+        raw_field = (cfg.get("rule_required_field") or "").strip()
+        if raw_field in ("must_include", "picture_effect"):
+            logger.warning(
+                f"[求片同步] 检测到旧版错误字段名 {raw_field!r}，已自动纠正为 {RULE_FIELD['required']!r}"
+            )
+            raw_field = ""
+        rule_required_field = raw_field or RULE_FIELD["required"]
+        rule_required_switch = (cfg.get("rule_required_switch") or "").strip() or RULE_SWITCH["required"]
+        write_mode = (cfg.get("write_mode") or "flat").strip() or "flat"
         if rule_fields["required"]:
             logger.info(
-                f"[求片同步] 必包含关键词将写入字段名 {rule_required_field}={rule_fields['required']!r}"
-                f"（如 TgtoDrive 实际字段名不同，请在插件配置『必含字段名』中修正）"
+                f"[求片同步] 必包含关键词写入 {rule_required_field}={rule_fields['required']!r} "
+                f"并置 {rule_required_switch}=True（字段名/开关依据 TgtoDrive 真实响应定稿）"
             )
 
-        client = TgtoDriveClient(base, token, endpoint, scene, cookie, logger=logger)
+        client = TgtoDriveClient(base, token, endpoint, scene, cookie,
+                                 logger=logger, write_mode=write_mode)
 
         items = []
         for pair in candidates:
@@ -806,6 +979,7 @@ class TgWhitelistSyncPlugin(PluginBase):
                 "keyword": keyword,
                 "rule_fields": rule_fields,
                 "rule_required_field": rule_required_field,
+                "rule_required_switch": rule_required_switch,
             })
 
         if not items:

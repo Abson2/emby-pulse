@@ -155,6 +155,48 @@ _host_ip = _re.compile(
 )
 check(".env.example 不含具体内网主机地址", not _host_ip.search(env))
 
+print("== 问题 6: 10307/10308 会话 Cookie 隔离（避免互踢） ==")
+sess = read("app/core/session.py")
+sns = exec_nodes(sess, {"SESSION_COOKIE_NAME", "USER_PORTAL_SESSION_COOKIE_NAME",
+                        "USER_PORTAL_SCOPE_FLAG", "session_cookie_name"})
+check("定义管理端 Cookie 名", sns.get("SESSION_COOKIE_NAME") == "session_id")
+check("定义用户端独立 Cookie 名",
+      bool(sns.get("USER_PORTAL_SESSION_COOKIE_NAME"))
+      and sns["USER_PORTAL_SESSION_COOKIE_NAME"] != sns["SESSION_COOKIE_NAME"])
+check("管理端 scope 用默认名", sns["session_cookie_name"]({"type": "http"}) == "session_id")
+check("用户端 scope 用独立名",
+      sns["session_cookie_name"]({sns["USER_PORTAL_SCOPE_FLAG"]: True})
+      == sns["USER_PORTAL_SESSION_COOKIE_NAME"])
+check("伪造标记不会被误判（仅认布尔真值）",
+      sns["session_cookie_name"]({sns["USER_PORTAL_SCOPE_FLAG"]: "false"}) == "session_id")
+check("非 dict scope 安全降级", sns["session_cookie_name"](None) == "session_id")
+
+smw = read("app/core/session_middleware.py")
+check("中间件按请求动态选 Cookie 名", "session_cookie_name(request.scope)" in smw)
+check("读取 Cookie 用动态名", "request.cookies.get(cookie_name)" in smw)
+check("写回 Cookie 用动态名", "key=cookie_name" in smw)
+check("中间件不再硬编码 session_id 读写", "cookies.get(SESSION_COOKIE_NAME)" not in smw)
+
+portal = read("app/bootstrap/user_portal.py")
+check("用户端 wrapper 打 scope 标记", "USER_PORTAL_SCOPE_FLAG" in portal
+      and "scope[USER_PORTAL_SCOPE_FLAG] = True" in portal)
+check("标记在进入主 app 之前写入",
+      portal.index("scope[USER_PORTAL_SCOPE_FLAG] = True")
+      < portal.index("await app(scope, receive, send)"))
+
+print("== 问题 7: TgtoDrive 规则字段契约（依据真实响应样本定稿） ==")
+tg = read("app/plugins/tg_whitelist_sync/plugin.py")
+check("必含字段真名 required_keyword", '"required": "required_keyword"' in tg)
+check("必含开关 include_required_keyword", '"include_required_keyword"' in tg)
+check("画面效果真名 effect", '"effect": "effect"' in tg)
+check("RULE_FIELD 映射未回退到旧推断名",
+      '"required": "must_include"' not in tg
+      and '"effect": "picture_effect"' not in tg)
+check("按目标场景定位 rules", "_find_scene_container" in tg)
+check("meta_raw_regex 纳入清理", '"meta_raw_regex"' in tg)
+check("旧配置错误字段名自动纠正", '"must_include", "picture_effect"' in tg)
+check("写入体形态可切换", '"write_mode"' in tg and '"envelope"' in tg)
+
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:
     for f in FAILS:

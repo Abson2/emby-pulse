@@ -326,22 +326,32 @@ EMBYPULSE 侧插件 `app/plugins/tg_whitelist_sync/plugin.py` 已实现并通过
 用户实测拿到真实写入路径与坑，结论推翻 4.2 的"无法写入"判断：
 
 - 写入接口：`POST /api/visual-filter/config`（与读取同 URL，GET 带 `?scene=`）。
-- 请求体（顶层）：`{ scene, rules, parse_mode, all_mode, raw_regex, advanced_raw_regex }`。
 - 场景 key：光鸭=`ENV_FILTER_GUANGYA`（115=`ENV_FILTER_115`、天翼=`ENV_FILTER_189`、HDHIVE RE0=`ENV_FILTER_HDHIVE`）。
-- 每条 `rules[]` 规则对象：最小 `{id, title, keywords[]}`；分辨率/画面效果/年份/必包含关键词等由 UI 表单决定，规范未导出 `rules[]` 内部结构。
 
-三个必须知道的坑（已在插件内处理）：
+四个必须知道的坑（已在插件内处理）：
 1. **全量覆盖，不是 append**：直接 POST 一条会把现有规则全冲掉 → 强制 GET 当前 scene → 合并 → 整体 POST（见 `TgtoDriveClient.merge_and_save`）。
-2. **后端信 rules 不信 raw_regex**：绝不手拼 raw_regex，只维护 rules 数组，丢弃 GET 回来的陈旧 raw_regex 让其重新编译。
-3. **页面"添加"按钮不发请求，只有"保存并回写"才发**：我们后端直接 POST，不走页面按钮，无此坑；单次 POST 即整体落盘。
+2. **GET 返回是信封，顶层没有 rules**：真实响应为 `{success, scene, current:{...rules...}, scenes:{<场景key>:{...rules...}}, scene_labels, tmdb_rule_cache, image_base_url}`。`current` 只是「页面当前选中场景」的快照，**未必是插件配置的目标场景**，盲目取 `current.rules` 会串场景。插件优先按 `scenes[目标scene].rules` 定位（`_find_scene_container`）。旧版本读顶层 `cfg["rules"]` 恒为空 → 只写新规则 → 覆盖。
+3. **后端信 rules 不信 raw_regex**：绝不手拼 raw_regex，只维护 rules 数组，丢弃 GET 回来的 `raw_regex` / `advanced_raw_regex` / `meta_raw_regex` 让其重新编译。
+4. **页面"添加"按钮不发请求，只有"保存并回写"才发**：我们后端直接 POST，不走页面按钮，无此坑；单次 POST 即整体落盘。
 
-规则级筛选字段（本次新增，见模块常量 `RULE_FIELD` 与配置项 `rule_resolution`/`rule_effect`/`rule_required_keyword`）：
-- 分辨率 `resolution`（默认 `4k`）
-- 画面效果 `picture_effect`（默认 `all`=全部效果）
-- 年份 `year`（取自 TMDB，自动填写）
-- 必包含关键词 `must_include`（默认 `265`=H.265/HEVC）
+### 4.5.1 字段契约定稿（依据真实 GET 响应样本，2026-11）
 
-> ⚠️ 字段名映射集中在插件模块常量 `RULE_FIELD`；因 OpenAPI 规范未导出 `rules[]` 内部结构，下列名系依据 UI 表单推断。验证方法：在 TgtoDrive 页面手动建一条带这些设置的规则，再 `GET /api/visual-filter/config?scene=ENV_FILTER_GUANGYA` 抓包，核对真实字段名后仅改 `RULE_FIELD` 一处即可。
+依据资料库附件 `guangya_visual_filter.json`（`GET /api/visual-filter/config?scene=ENV_FILTER_GUANGYA` 的真实返回）实证，**此前基于 UI 表单的推断全部作废**：
+
+| 语义 | 真实字段名 | 类型/示例 | 配套开关 |
+|---|---|---|---|
+| 分辨率 | `resolution` | `"4k"` / `"all"` | — |
+| 画面效果 | `effect` | `"all"` | — |
+| 年份 | `year` | **字符串** `"2026"` | `include_year: true` |
+| 必包含关键词 | `required_keyword` | `"265"` | `include_required_keyword: true` |
+
+其它结构化字段（后端会按 `rules` 重新规范化并编译 `meta_raw_regex`）：`rule_type:"structured"`、`source:"tmdb"`、`tmdb_id`（字符串）、`media_name` / `preferred_name` / `title` / `aliases[]` / `keywords[]` / `keyword_groups_any[][]` / `exclude_keywords[]` / `custom_regex` / `media_type` / `id`。
+
+**bug「必包含关键词丢失」的双重成因（附件实证）**：附件中 `kw_297253_1` 正是本插件写入、被后端规范化后的规则，其 `required_keyword:""` + `include_required_keyword:false`。一是插件写了 `must_include`，后端不认该字段直接丢弃；二是即便字段名正确，布尔开关不打开后端也不会把该条件编进正则。故 `build_rule` 同时写值与开关。
+
+**写入体形态（配置项 `write_mode`）**：GET 是信封，POST 不宜原样回传只读字段（`success` / `scene_labels` / `tmdb_rule_cache`）。默认 `flat` 把目标场景配置对象提取成扁平体并补 `scene`；若现场后端要求完整信封（POST 400 或规则不生效），切到 `envelope` 原样回写。此项为部署侧假设，需用 `dry_run` + 真机一次推送验证。
+
+字段名映射集中在插件模块常量 `RULE_FIELD` / `RULE_SWITCH`；仍可通过插件配置「必含字段名」「必含开关字段名」覆盖，无需改代码。旧版本手填的 `must_include` / `picture_effect` 会在推送时自动纠正为真实字段名。
 
 ### 4.6 数据契约校准（基于容器内 DAO 实测，2026-11-05）
 

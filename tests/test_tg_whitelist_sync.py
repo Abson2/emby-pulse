@@ -1,5 +1,9 @@
 """
-求片同步 TgtoDrive 白名单插件 A（v2.0.0）—— 回归 / 生命周期测试
+求片同步 TgtoDrive 白名单插件 A（v2.1.0）—— 回归 / 生命周期测试
+
+v2.1.0：字段契约按资料库附件 guangya_visual_filter.json（GET 真实响应）定稿：
+必含字段名 required_keyword + 开关 include_required_keyword、效果 effect、
+年份/tmdb_id 为字符串、GET 信封 rules 在 current / scenes[scene] 内。
 
 不依赖真实 app / Emby / TgtoDrive，通过注入假模块与可控 transport 验证：
 - 推送（阶段A）：审批后/手动接单后写入白名单，全量覆盖不冲掉现有规则（坑①），丢弃陈旧 raw_regex（坑②）
@@ -309,13 +313,19 @@ item = {"tmdb_id": 901, "season": 1, "title": "Field Test", "keyword": "Field Te
             "resolution": "4k", "effect": "all", "required": "265"}}
 r = mod.TgtoDriveClient("http://tg", "tok", "/api/visual-filter/config", "ENV_FILTER_GUANGYA").build_rule(item)
 check(r.get("resolution") == "4k", f"分辨率字段已写入: {r.get('resolution')}")
-check(r.get("picture_effect") == "all", f"画面效果字段已写入(映射名 picture_effect): {r.get('picture_effect')}")
-check(r.get("year") == 2022, f"年份(TMDB)已写入: {r.get('year')}")
-check(r.get("must_include") == "265", f"必包含关键词已写入(映射名 must_include): {r.get('must_include')}")
+check(r.get("effect") == "all", f"画面效果字段已写入(真实字段名 effect): {r.get('effect')}")
+check(r.get("year") == "2022", f"年份(TMDB)已写入且为字符串: {r.get('year')}")
+check(r.get("include_year") is True, "年份开关 include_year 已打开")
+check(r.get("required_keyword") == "265", f"必包含关键词已写入(真实字段名 required_keyword): {r.get('required_keyword')}")
+check(r.get("include_required_keyword") is True, "必含开关 include_required_keyword 已打开（否则后端丢弃必含条件）")
+check("must_include" not in r and "picture_effect" not in r, "不再写入后端不认的旧推断字段名")
 check(r["id"] == "kw_901_1", f"规则 id 幂等正确: {r['id']}")
+check(r.get("rule_type") == "structured" and r.get("source") == "tmdb", "结构化规则骨架 rule_type/source 齐全")
+check(r.get("tmdb_id") == "901", "tmdb_id 为字符串（与真实响应一致）")
 item2 = dict(item); item2["rule_fields"] = {"resolution":"4k","effect":"all","required":""}
 r2 = mod.TgtoDriveClient("http://tg","tok","/api/visual-filter/config","ENV_FILTER_GUANGYA").build_rule(item2)
-check("must_include" not in r2, "必包含留空时不写入该字段")
+check(r2.get("required_keyword") == "" and r2.get("include_required_keyword") is False,
+      "必包含留空时显式写空串并关闭开关（与后端规范化结果一致）")
 
 print("\n== 全局 dry_run：不写库 / 不写 TgtoDrive ==")
 transport.calls.clear(); update_calls.clear()
@@ -351,8 +361,10 @@ check("image.tmdb.org/t/p/w500" not in str(rr.get("poster_path", "")), "未对 p
 check(rr.get("id") == "kw_1507696_0", f"movie season=0 生成幂等 id 正确: {rr.get('id')}")
 check(rr.get("title") == "天启Z：新世界", f"中文标题原样保留: {rr.get('title')}")
 check(rr.get("year") == "2026", f"年份取自 TMDB: {rr.get('year')}")
-check(rr.get("resolution") == "4k" and rr.get("picture_effect") == "all"
-      and rr.get("must_include") == "265", "4k / all / 265 三项规则字段均已写入")
+check(rr.get("resolution") == "4k" and rr.get("effect") == "all"
+      and rr.get("required_keyword") == "265"
+      and rr.get("include_required_keyword") is True,
+      "4k / all / 265 + 必含开关四项规则字段均已按真实契约写入")
 transport.calls.clear()
 plugin._sync_once()
 check(not any(c[0] == "POST" for c in transport.calls), "同一工单重复运行不重复写入（幂等）")
@@ -413,6 +425,105 @@ _rf = mod.TgWhitelistSyncPlugin()
 _rf._state_file = None
 _rfp = _rf._resolve_state_file()
 check(isinstance(_rfp, str) and _rfp.endswith("tg_whitelist_sync_state.json"), "状态文件路径回落到配置目录")
+
+print("\n== v2.1.0 真实信封回归（依据资料库附件 guangya_visual_filter.json）==")
+# 附件结构：顶层无 rules；current 是「当前选中场景」(此处故意设为别的场景)，
+# 目标场景规则只在 scenes[ENV_FILTER_GUANGYA].rules 里。
+def _guangya_envelope():
+    user_rule = {"id": "tmdb_movie_969681", "title": "蜘蛛侠：崭新之日", "keywords": []}
+    kw_rule = {"id": "kw_297253_1", "title": "伟大的长征 S1", "keywords": ["4K"]}
+    other_rule = {"id": "tmdb_movie_999999", "title": "别的场景规则", "keywords": []}
+    return {
+        "success": True,
+        "scene": "ENV_FILTER_115",                 # 页面当前选中场景 != 插件目标场景
+        "image_base_url": "https://image.tmdb.org/t/p",
+        "scene_labels": {"ENV_FILTER_115": "115频道白名单",
+                         "ENV_FILTER_GUANGYA": "光鸭频道白名单"},
+        "current": {"key": "ENV_FILTER_115", "rules": [other_rule],
+                    "parse_mode": "meta", "all_mode": False,
+                    "raw_regex": "OLD", "meta_raw_regex": "OLD_META",
+                    "advanced_raw_regex": "OLD_ADV"},
+        "scenes": {
+            "ENV_FILTER_115": {"key": "ENV_FILTER_115", "rules": [other_rule]},
+            "ENV_FILTER_GUANGYA": {"key": "ENV_FILTER_GUANGYA",
+                                   "label": "光鸭频道白名单",
+                                   "rules": [user_rule, kw_rule],
+                                   "parse_mode": "meta", "all_mode": False,
+                                   "raw_regex": "OLD", "meta_raw_regex": "OLD_META"},
+        },
+        "tmdb_rule_cache": {"tv:297253": {}},
+    }
+
+transport.calls.clear(); update_calls.clear()
+reset_cfg()
+set_rows([make_row(555, "movie", "New Movie", "2026", 4, 0)])
+env = _guangya_envelope()
+transport.set_get("visual-filter", lambda kw: _Resp(200, env))
+env_cap = {}
+transport.set_post("visual-filter", lambda kw: (env_cap.update(p=kw.get("json")) or _Resp(200, {})))
+plugin._sync_once()
+p = env_cap.get("p") or {}
+ids = [r.get("id") for r in p.get("rules", [])]
+check("kw_297253_1" in ids and "tmdb_movie_969681" in ids,
+      f"目标场景现有 2 条规则全部保留（未覆盖）: {ids}")
+check("tmdb_movie_999999" not in ids, "未把 current/其它场景的规则串进目标场景")
+check("kw_555_0" in ids, "新求片规则已增量追加到目标场景")
+check(p.get("scene") == "ENV_FILTER_GUANGYA", "写入体 scene 指向插件配置的目标场景")
+check("raw_regex" not in p and "meta_raw_regex" not in p and "advanced_raw_regex" not in p,
+      "三类陈旧正则均已清除（后端按 rules 重编译）")
+check("success" not in p and "scene_labels" not in p and "tmdb_rule_cache" not in p,
+      "flat 模式不回传只读信封字段")
+new_rule = next((r for r in p.get("rules", []) if r.get("id") == "kw_555_0"), {})
+check(new_rule.get("required_keyword") == "265"
+      and new_rule.get("include_required_keyword") is True,
+      "真实信封下必含关键词与开关均正确写入")
+check(new_rule.get("effect") == "all" and new_rule.get("year") == "2026",
+      "真实信封下 effect / 年份字符串均正确")
+
+print("\n== write_mode=envelope 与旧配置自动纠正 ==")
+transport.calls.clear(); update_calls.clear()
+reset_cfg(write_mode="envelope", rule_required_field="must_include")
+set_rows([make_row(556, "movie", "Envelope Movie", "2026", 4, 0)])
+env2 = _guangya_envelope()
+transport.set_get("visual-filter", lambda kw: _Resp(200, env2))
+env_cap2 = {}
+transport.set_post("visual-filter", lambda kw: (env_cap2.update(p=kw.get("json")) or _Resp(200, {})))
+plugin._sync_once()
+p2 = env_cap2.get("p") or {}
+check("scenes" in p2 and p2.get("scene") == "ENV_FILTER_GUANGYA",
+      "envelope 模式原样回写整个 GET 信封")
+check("raw_regex" not in p2.get("scenes", {}).get("ENV_FILTER_GUANGYA", {}),
+      "envelope 模式下场景内陈旧正则也已清除")
+rule556 = next((r for r in p2.get("scenes", {}).get("ENV_FILTER_GUANGYA", {}).get("rules", [])
+                if r.get("id") == "kw_556_0"), {})
+check(rule556.get("required_keyword") == "265" and "must_include" not in rule556,
+      "旧版残留的错误字段名 must_include 被自动纠正为 required_keyword")
+check(env2["scenes"]["ENV_FILTER_GUANGYA"]["rules"] is p2["scenes"]["ENV_FILTER_GUANGYA"]["rules"] or
+      len(env2["scenes"]["ENV_FILTER_GUANGYA"]["rules"]) ==
+      len(p2["scenes"]["ENV_FILTER_GUANGYA"]["rules"]),
+      "信封内目标场景规则副本已同步")
+
+print("\n== 目标场景尚未创建 / 未知结构护栏 ==")
+transport.calls.clear(); update_calls.clear()
+reset_cfg(tgtdrive_scene="ENV_FILTER_189")
+set_rows([make_row(557, "movie", "Fresh Scene", "2026", 4, 0)])
+transport.set_get("visual-filter", lambda kw: _Resp(200, {"success": True, "scenes": {}}))
+fresh_cap = {}
+transport.set_post("visual-filter", lambda kw: (fresh_cap.update(p=kw.get("json")) or _Resp(200, {})))
+plugin._sync_once()
+check(any(c[0] == "POST" for c in transport.calls), "目标场景无配置时允许从零创建并推送")
+check(any(r.get("id") == "kw_557_0" for r in (fresh_cap.get("p") or {}).get("rules", [])),
+      "新建场景的规则已写入")
+
+transport.calls.clear(); update_calls.clear()
+reset_cfg()
+set_rows([make_row(558, "movie", "Guard", "2026", 4, 0)])
+transport.set_get("visual-filter", lambda kw: _Resp(200, {"success": True, "weird": {"unknown": 1}}))
+guard_cap = {}
+transport.set_post("visual-filter", lambda kw: (guard_cap.update(p=kw.get("json")) or _Resp(200, {})))
+plugin._sync_once()
+check(not any(c[0] == "POST" for c in transport.calls),
+      "GET 结构完全未知时护栏中止，绝不冒险覆盖")
 
 print(f"\n==== 结果：通过 {PASS} / 失败 {FAIL} ====")
 sys.exit(1 if FAIL else 0)

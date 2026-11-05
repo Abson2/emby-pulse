@@ -31,8 +31,11 @@ jobs:
       - name: 扫描凭证与个人配置
         run: python tools/check-no-secrets.py .
 
-      - name: 断言 5 项加固改动生效
+      - name: 断言加固改动生效
         run: python tools/verify_patches.py .
+
+      - name: 校验 10307/10308 会话 Cookie 隔离
+        run: python tools/check_session_cookie_isolation.py .
 
       - name: 编译全部应用源码
         run: python -m compileall -q app/
