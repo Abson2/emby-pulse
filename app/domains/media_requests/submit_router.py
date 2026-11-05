@@ -38,6 +38,16 @@ def _default_get_plugin_provider():
 _get_plugin_provider = _default_get_plugin_provider
 
 
+def _default_bark_push_provider():
+    """系统级 Bark 推送入口（1.9.0）：惰性导入，避免模块加载期引入额外依赖。"""
+    from app.domains.notifications.bark_push import safe_push
+
+    return safe_push
+
+
+_bark_push_provider = _default_bark_push_provider
+
+
 class MediaRequestSubmitModel(BaseSubmitModel):
     seasons: List[int] = [0]
     overview: Optional[str] = ""
@@ -56,6 +66,7 @@ def set_dependency_providers(
     safe_error_message_provider=None,
     logger_provider=None,
     get_plugin_provider=None,
+    bark_push_provider=None,
 ):
     global _check_user_exists_provider
     global _submit_new_media_request_provider
@@ -68,6 +79,7 @@ def set_dependency_providers(
     global _safe_error_message_provider
     global _logger_provider
     global _get_plugin_provider
+    global _bark_push_provider
 
     if check_user_exists_provider is not None:
         _check_user_exists_provider = check_user_exists_provider
@@ -91,6 +103,8 @@ def set_dependency_providers(
         _logger_provider = logger_provider
     if get_plugin_provider is not None:
         _get_plugin_provider = get_plugin_provider
+    if bark_push_provider is not None:
+        _bark_push_provider = bark_push_provider
 
 
 @router.post("/api/requests/submit")
@@ -190,7 +204,20 @@ async def submit_media_request(request: Request):
                 # Web 通知中心 - 只有勾选 web 才发送
                 if 'web' in channels:
                     _system_notification_provider()("request", f"收到新求片: {title}", f"用户 {uname} 提交了新的心愿单", "/requests_admin")
-            # else: 关闭状态不发送任何通知
+            # else: 关闭状态不发送 notify_rules 渠道通知（Bark 由自身系统级开关控制）
+
+            # 系统级 Bark 推送（1.9.0）：新的求片通知，独立于 notify_rules 渠道勾选
+            try:
+                bark_res = _bark_push_provider()(
+                    "request_new",
+                    title=title, year=year, user=uname, media_type=media_type,
+                    seasons=seasons,
+                    admin_url=(admin_url.rstrip("/") + "/requests_admin") if admin_url else "",
+                )
+                if bark_res and not bark_res.get("skipped"):
+                    _logger_provider().info(f"[Bark] 新的求片通知: {bark_res.get('detail')}")
+            except Exception as e:
+                _logger_provider().warning(f"[Bark] 新的求片通知跳过: {e}")
         except Exception as e:
             _logger_provider().error(f"[求片通知] 发送失败: {e}")
 

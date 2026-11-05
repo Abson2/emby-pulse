@@ -36,6 +36,8 @@ DOMAIN_ALLOW = {
     "docker.io", "python.org", "pypi.org", "pythonhosted.org",
     "readthedocs.io", "ietf.org", "rfc-editor.org", "apache.org",
     "astral.sh", "ubuntu.com", "debian.org",
+    # Bark 官方公共推送服务默认地址（系统级推送配置说明），非个人配置
+    "day.app",
     # 用户明确引用的公开项目（Cloudflare Tunnel 内网穿透介绍），非个人配置
     "naspk.com",
 }

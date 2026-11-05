@@ -2,6 +2,74 @@ from app.core.config import cfg
 import json
 
 
+# ---------------------------------------------------------------------------
+# 系统级 Bark 推送（1.9.0）：新片入库 / 新的求片
+# ---------------------------------------------------------------------------
+BARK_SERVER_DEFAULT = "https://api.day.app"
+BARK_GROUP_DEFAULT = "EMBYPULSE"
+BARK_SOUND_DEFAULT = "default"
+
+
+def _mask_secret(value):
+    if not value or not isinstance(value, str):
+        return value
+    if len(value) <= 8:
+        return "****"
+    return value[:4] + "****" + value[-4:]
+
+
+def _bark_bool(value, default):
+    if value is None or value == "":
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("1", "true", "yes", "y", "on")
+
+
+def get_bark_config(*, masked: bool = True) -> dict:
+    """系统级 Bark 配置。管理端读取时 Device Key 做掩码，运行期读取原文。"""
+    try:
+        key = str(cfg.get("bark_device_key", "") or "")
+    except Exception:
+        key = ""
+    return {
+        "enabled": _bark_bool(cfg.get("bark_enabled", False), False),
+        "server": str(cfg.get("bark_server", BARK_SERVER_DEFAULT)
+                      or BARK_SERVER_DEFAULT).strip().rstrip("/"),
+        "device_key": _mask_secret(key) if masked else key,
+        "sound": str(cfg.get("bark_sound", BARK_SOUND_DEFAULT) or BARK_SOUND_DEFAULT).strip(),
+        "group": str(cfg.get("bark_group", BARK_GROUP_DEFAULT) or BARK_GROUP_DEFAULT).strip(),
+        "notify_library_new": _bark_bool(cfg.get("bark_notify_library_new", True), True),
+        "notify_request_new": _bark_bool(cfg.get("bark_notify_request_new", True), True),
+    }
+
+
+def get_bark_runtime_config() -> dict:
+    return get_bark_config(masked=False)
+
+
+def set_bark_config(data: dict) -> None:
+    """保存系统级 Bark 配置；掩码值不覆盖已存的 Device Key。"""
+    if not isinstance(data, dict):
+        return
+    if "enabled" in data:
+        cfg.config["bark_enabled"] = _bark_bool(data["enabled"], False)
+    server = data.get("server")
+    if isinstance(server, str) and server.strip():
+        cfg.config["bark_server"] = server.strip().rstrip("/")
+    key = data.get("device_key")
+    if isinstance(key, str) and key.strip() and "****" not in key:
+        cfg.config["bark_device_key"] = key.strip()
+    for src, dst in (("sound", "bark_sound"), ("group", "bark_group")):
+        if src in data and isinstance(data[src], str):
+            cfg.config[dst] = data[src].strip()
+    for src, dst in (("notify_library_new", "bark_notify_library_new"),
+                     ("notify_request_new", "bark_notify_request_new")):
+        if src in data:
+            cfg.config[dst] = _bark_bool(data[src], True)
+    cfg.save()
+
+
 def get_library_notify_channels() -> str:
     return cfg.get("library_notify_channels", "")
 
@@ -97,6 +165,8 @@ def _get_notification_channels_config(*, masked: bool) -> dict:
             "webhook": mask_token(cfg.get("wecom_webhook", cfg.get("wechat_webhook", ""))) if masked else cfg.get("wecom_webhook", cfg.get("wechat_webhook", "")),
             "enabled": cfg.get("enable_wecom", cfg.get("enable_wechat", False)),
         },
+        # 系统级 Bark 通道（1.9.0）：Device Key 同样按 masked 做掩码
+        "bark": get_bark_config(masked=masked),
     }
 
 
@@ -146,6 +216,9 @@ def set_notification_channels_config(data: dict) -> None:
         if should_update(webhook):
             cfg.config["wecom_webhook"] = webhook
         cfg.config["enable_wecom"] = data["wecom"].get("enabled", False)
+
+    if "bark" in data:
+        set_bark_config(data["bark"])
 
     cfg.save()
 

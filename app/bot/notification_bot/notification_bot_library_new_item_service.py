@@ -31,6 +31,16 @@ _re_provider = lambda: re
 _logger_provider = lambda: logger
 
 
+def _default_bark_push_provider():
+    """系统级 Bark 推送入口（1.9.0）：惰性导入，避免模块加载期引入额外依赖。"""
+    from app.domains.notifications.bark_push import safe_push
+
+    return safe_push
+
+
+_bark_push_provider = _default_bark_push_provider
+
+
 def set_dependency_providers(
     *,
     enable_library_notify_provider=None,
@@ -43,6 +53,7 @@ def set_dependency_providers(
     datetime_provider=None,
     re_provider=None,
     logger_provider=None,
+    bark_push_provider=None,
 ):
     global _enable_library_notify_provider
     global _media_quality_info_provider
@@ -54,6 +65,7 @@ def set_dependency_providers(
     global _datetime_provider
     global _re_provider
     global _logger_provider
+    global _bark_push_provider
 
     if enable_library_notify_provider is not None:
         _enable_library_notify_provider = enable_library_notify_provider
@@ -75,6 +87,8 @@ def set_dependency_providers(
         _re_provider = re_provider
     if logger_provider is not None:
         _logger_provider = logger_provider
+    if bark_push_provider is not None:
+        _bark_push_provider = bark_push_provider
 
 
 def _format_overview(item):
@@ -130,7 +144,41 @@ def _get_platform(channels):
     )
 
 
+def _bark_notify_new_item(item):
+    """系统级 Bark 新片入库通知：由 Bark 自身开关控制，失败绝不影响主流程。
+
+    独立于「入库通知总开关」：Emby 入库事件只要到达这里，Bark 就会按自身
+    enabled / notify_library_new 两个开关决定是否推送，避免旧总开关未开启
+    导致新通道静默不生效。
+    """
+    try:
+        play_url = ""
+        try:
+            base_url = _get_base_url()
+            if base_url and base_url.startswith(("http://", "https://")):
+                play_url = (f"{base_url}/web/index.html#!/item?id={item.get('Id', '')}"
+                            f"&serverId={item.get('ServerId', '')}")
+        except Exception:
+            play_url = ""
+        res = _bark_push_provider()(
+            "library_new",
+            name=str(item.get("Name") or ""),
+            item_type=str(item.get("Type") or ""),
+            year=item.get("ProductionYear", ""),
+            rating=item.get("CommunityRating", ""),
+            overview=_format_overview(item),
+            play_url=play_url,
+        )
+        if res and not res.get("skipped"):
+            _logger_provider().info(f"[Bark] 新片入库通知: {res.get('detail')}")
+    except Exception as e:
+        _logger_provider().warning(f"[Bark] 新片入库通知跳过: {e}")
+
+
 def handle_library_new_item(bot, item):
+    # 系统级 Bark 通道独立于「入库通知总开关」，仅由自身开关控制
+    _bark_notify_new_item(item)
+
     if not _enable_library_notify_provider()():
         return
 

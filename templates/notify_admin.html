@@ -131,6 +131,46 @@
                 </div>
             </div>
         </div>
+
+        <!-- 系统级 Bark 推送（1.9.0）：新片入库 / 新的求片 -->
+        <div class="apple-card">
+            <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between">
+                <h3 class="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                    <i class="fa-solid fa-mobile-screen-button text-orange-500"></i>
+                    系统级 Bark 推送（新片入库 / 新的求片）
+                </h3>
+                <button onclick="testBark()" class="px-3 py-1.5 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 rounded-lg text-xs font-bold hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-all">
+                    <i class="fa-solid fa-paper-plane mr-1"></i>测试推送
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="flex items-center gap-4">
+                    <label class="text-sm font-bold text-gray-600 dark:text-gray-300 w-[100px]">启用</label>
+                    <input type="checkbox" id="bark-enabled" class="w-5 h-5 rounded text-orange-500">
+                </div>
+                <div class="flex items-center gap-4">
+                    <label class="text-sm font-bold text-gray-600 dark:text-gray-300 w-[100px]">服务器地址</label>
+                    <input type="text" id="bark-server" class="flex-1 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm" placeholder="https://api.day.app（自建服填自己的地址）">
+                </div>
+                <div class="flex items-center gap-4">
+                    <label class="text-sm font-bold text-gray-600 dark:text-gray-300 w-[100px]">Device Key</label>
+                    <input type="password" id="bark-device-key" class="flex-1 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm" placeholder="Bark App 里的设备密钥">
+                </div>
+                <div class="flex items-center gap-4">
+                    <label class="text-sm font-bold text-gray-600 dark:text-gray-300 w-[100px]">提示音 / 分组</label>
+                    <input type="text" id="bark-sound" class="w-32 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm" placeholder="default">
+                    <input type="text" id="bark-group" class="flex-1 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm" placeholder="EMBYPULSE">
+                </div>
+                <div class="flex items-center gap-6">
+                    <label class="text-sm font-bold text-gray-600 dark:text-gray-300 w-[100px]">推送消息</label>
+                    <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><input type="checkbox" id="bark-notify-library-new" class="w-4 h-4 rounded text-orange-500">新片入库通知</label>
+                    <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><input type="checkbox" id="bark-notify-request-new" class="w-4 h-4 rounded text-orange-500">新的求片通知</label>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                    系统级独立通道，不需要在「通知规则」里勾选渠道；新片入库通知不受旧的「入库通知总开关」约束，仅由这里的开关控制。Device Key 读取时做掩码，保存时掩码值不会覆盖已存密钥；「测试推送」可直接验证当前表单里尚未保存的值。
+                </p>
+            </div>
+        </div>
     </div>
 
     <!-- Tab 3: 发送历史 -->
@@ -184,6 +224,13 @@ async function init() {
         tgChannels = config.tg_channels || [];
         document.getElementById('wecom-enabled').checked = config.wecom?.enabled || false;
         document.getElementById('wecom-webhook').value = config.wecom?.webhook || '';
+        document.getElementById('bark-enabled').checked = config.bark?.enabled || false;
+        document.getElementById('bark-server').value = config.bark?.server || '';
+        document.getElementById('bark-device-key').value = config.bark?.device_key || '';
+        document.getElementById('bark-sound').value = config.bark?.sound || 'default';
+        document.getElementById('bark-group').value = config.bark?.group || 'EMBYPULSE';
+        document.getElementById('bark-notify-library-new').checked = config.bark?.notify_library_new !== false;
+        document.getElementById('bark-notify-request-new').checked = config.bark?.notify_request_new !== false;
     }
 
     renderRulesTable();
@@ -338,6 +385,27 @@ async function loadHistory() {
     container.innerHTML = html;
 }
 
+// 系统级 Bark 测试推送（1.9.0）：用当前表单值直接验证，无需先保存
+async function testBark() {
+    const payload = {
+        server: document.getElementById('bark-server').value,
+        device_key: document.getElementById('bark-device-key').value
+    };
+    try {
+        const res = await fetch('/api/notify/bark_test', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        showToast(json.status === 'success' ? 'success' : 'error',
+                  json.status === 'success' ? '测试推送已发送' : '测试推送失败',
+                  json.message || '');
+    } catch (e) {
+        showToast('error', '测试推送失败', String(e));
+    }
+}
+
 // 保存所有配置
 async function saveAllRules() {
     // 收集规则数据
@@ -367,6 +435,15 @@ async function saveAllRules() {
         wecom: {
             enabled: document.getElementById('wecom-enabled').checked,
             webhook: document.getElementById('wecom-webhook').value
+        },
+        bark: {
+            enabled: document.getElementById('bark-enabled').checked,
+            server: document.getElementById('bark-server').value,
+            device_key: document.getElementById('bark-device-key').value,
+            sound: document.getElementById('bark-sound').value,
+            group: document.getElementById('bark-group').value,
+            notify_library_new: document.getElementById('bark-notify-library-new').checked,
+            notify_request_new: document.getElementById('bark-notify-request-new').checked
         }
     };
 

@@ -134,7 +134,9 @@ def api_get_bot_settings(request: Request):
         all_config["webhook_token_masked"] = mask_sensitive(webhook_token)
     all_config["webhook_token_source"] = webhook_source
 
-    # 🔒 URL 预览不再携带任何 Token；引导使用请求头传递
+    # 🔒 后端仍不回传明文 Token（凭证字段一律脱敏）。这里只给纯路径，
+    #    设置页会在浏览器本地拼出 Emby Webhook 插件可直接配置的 ?token= 地址；
+    #    Token 由环境变量管理时展示占位符，让用户填入自己掌握的原始值。
     all_config["webhook_url"] = f"{webhook_base_url}/api/v1/webhook"
 
     return {"status": "success", "data": all_config}

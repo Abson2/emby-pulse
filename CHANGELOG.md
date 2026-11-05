@@ -1,5 +1,34 @@
 # 更新日志
 
+## 1.9.0
+
+本次发布新增**系统级 Bark 推送入口**（新片入库 / 新的求片两类消息），并修复 **Emby Webhook 入口因只支持 `?token=` URL 而不可用** 的问题。建议升级前备份配置与数据库。
+
+### 新增：系统级 Bark 推送入口
+- Bark 是**系统级独立通道**，不加入 `notify_rules` 的渠道勾选列表，不受原有「通知总开关 / 入库通知总开关」约束；配置集中在「通知管理 → 推送渠道」的 Bark 卡片：服务器、Device Key、总开关、新片入库开关、新的求片开关、铃声与分组。
+- 两类消息覆盖：`push_new_library_item()` 处理电影入库与剧集新集入库；`push_new_request()` 处理用户提交求片。管理端提供「测试推送」按钮（`POST /api/notify/bark_test`），绕过开关验证服务器与 Key 是否可用。
+- 统一发送模块 `app/domains/notifications/bark_push.py` 只用标准库，POST `{server}/push`；支持自建 Bark 服务器。事件侧统一走 `safe_push()`，**任何异常都吞掉只记日志，绝不阻断求片提交 / 入库通知主流程**。
+- 采用可注入 provider（`bark_push_provider`），边界测试可替换，既有 `set_dependency_providers()` 调用无需改动。
+
+### 安全与可靠性
+- Device Key 属敏感信息：管理端读取一律掩码，运行期才读原文；保存时回填的掩码值**不会覆盖**已存的真实 Key；推送返回值与日志中的 payload **不含** `device_key`。
+- 未启用 / 未配置 Key / 服务器地址非法时直接跳过不发请求；标题、正文、跳转 URL 均做长度截断；HTTP 非 2xx、Bark 返回 `code != 200`、网络异常均返回结构化失败结果而不抛异常。
+
+### 修复：Emby Webhook 入口不可用
+- **根因**：Emby Webhook 插件只能配置一个回调 URL，**无法附带自定义请求头**；而服务端 `_get_webhook_token()` 默认只读 `X-Webhook-Token`，且 `Dockerfile` / `compose` 默认 `WEBHOOK_ALLOW_QUERY_TOKEN=0`，设置页又只提供纯路径并推荐 Header 方式，导致按插件能力配置的 `?token=` 地址一律 401。
+- 现改为**默认兼容** `http://<host>:10307/api/v1/webhook?token=<Token>`；`X-Webhook-Token` 请求头**仍优先读取**。若反代能注入请求头且需收紧访问日志，可显式设 `WEBHOOK_ALLOW_QUERY_TOKEN=0` 回到严格 Header-only 模式。
+- 设置页「推送目标地址」改为生成 Emby 可直接使用的完整地址并支持一键复制；因后端出于安全只回传**脱敏** Token，界面用占位符「你的Token」兜底（绝不把掩码值拼进 URL，避免复制到 Emby 后持续 401/403），用户手动填入原始值时会实时拼出可直接复制的地址。系统设置接口同步返回 URL 模板与替换提示。
+- 后端**仍不向前端回传明文 Webhook Token**（`webhook_url` 保持纯路径、凭证字段一律脱敏），F12 泄露防护未被削弱。
+
+### 部署注意
+- `WEBHOOK_ALLOW_QUERY_TOKEN` 默认值由 `0` 改为 `1`（`Dockerfile` / `compose` / `.env.example` 已同步）。本部署的 Webhook 是 **Emby Server → EMBYPULSE 的内网直连**，服务端直接发起，不经浏览器 / CDN / 公网反代，因此 URL 中的 Token 不会进入浏览器历史、Referer 或公网反代日志，只剩 EMBYPULSE 本机访问日志（内网本地）；内网拓扑下无需为此额外加固。仅当把 Webhook 改走公网反代或把本机日志外发时，才需收紧日志采集或设回 `0`。
+- 注意设置页的 URL 预览基于「当前访问管理端的 host」生成：若从公网域名打开设置页，复制到 Emby 后请把 host 换成实际内网 IP，避免把公网域名写进内网回调。
+- 升级到 1.9.0 后，Emby Webhook 插件里把回调地址改为带 `?token=` 的完整 URL 即可，无需再配置请求头。
+
+### 发布
+- 应用版本升级至 `1.9.0`；compose 默认锁定 `1.9.0`，已发布版本 `1.5.0` / `1.6.0` / `1.7.0` / `1.8.0` / `1.9.0`，可用 `IMAGE_TAG` 切换（回退 1.5.0 用 `IMAGE_TAG=v1.5.0`）。
+- CI 新增「校验系统级 Bark 推送与 Webhook token 兼容」关卡（纯标准库行为回归 84 条）；`verify_patches.py` 新增「问题 9」静态断言，并把「问题 3/5」断言从「默认拒绝 URL token」更新为「默认兼容但不回传明文」。
+
 ## 1.8.0
 
 本次发布新增「工单删除 → 同步移除 TgtoDrive 对应监控关键词」的删单联动。插件 B（TgtoDrive 侧完结清理）保持不变，两条清理路径互不替代。建议升级前备份配置与数据库。

@@ -126,7 +126,9 @@ URL query 会被完整记录于：反向代理访问日志、浏览器历史、�
 - `app/bot/bot.py` 返回的 `webhook_url` 不再带 token，凭证字段始终脱敏；
 - 模板中的 URL 预览改为纯路径 `/api/v1/webhook`。
 
-迁移：Emby Webhook 插件里把 URL 改成不带 query 的纯地址，并添加自定义请求头 `X-Webhook-Token: <token>`。插件不支持自定义头时才临时开启兼容开关，并同步收紧访问日志。
+> **1.9.0 修订（重要）**：上面这条「迁移」建议在实际部署中不可执行 —— Emby Webhook 插件**无法设置自定义请求头**，只能配置一个 URL，导致按纯地址配置后回调一律 401、播放/入库事件完全收不到。因此 1.9.0 把默认策略改为**兼容 `?token=`**：`_get_webhook_token()` 请求头优先、默认回退 query，仅显式 `WEBHOOK_ALLOW_QUERY_TOKEN=0` 才回到严格模式；`Dockerfile` / `compose` / `.env.example` 默认值改为 `1`；设置页给出 Emby 可直接复制的完整地址（脱敏值用占位符兜底，绝不把掩码拼进 URL）。
+>
+> **安全边界没有回退**：后端响应仍不回传明文 Token、模板不硬编码任何 token、凭证字段一律脱敏。而且本部署的 Webhook 由 Emby 服务端在**内网直连**发起，不经浏览器、CDN 与公网反代，原先「凭证进浏览器历史 / Referer / 公网反代日志」的担忧在这条链路上并不成立；唯一残留是 EMBYPULSE 本机访问日志（内网本地，风险很低）。因此默认兼容 `?token=` 是按真实部署拓扑与插件能力做的正确取舍，不是恢复上游的明文拼串做法。收紧日志的要求仅在把回调改走公网反代或日志外发时才适用（见 `SECURITY.md`）。
 
 ---
 
@@ -179,6 +181,8 @@ GET  /api/auth/settings         GET  /api/pwa/user_icon
 
 - `webhook_token` 无论来自 env 还是 config，一律只返回脱敏值，`webhook_url` 不带 token；
 - `templates/settings.html` 的 `updateWebhookPreview()` 改为展示纯 URL，提示改用 `X-Webhook-Token` 请求头。
+
+> **1.9.0 修订**：`updateWebhookPreview()` 现在会在**浏览器本地**拼出 Emby 可用的 `?token=` 地址，但**不引入新的明文泄露**：后端响应依旧不含明文、模板不硬编码 token；界面读到的脱敏值（`****`）一律替换为占位符「你的Token」，只有用户手动填入原始值才拼进地址。F12 能看到的是用户自己刚输入的值，而不是服务端凭证。
 
 ---
 

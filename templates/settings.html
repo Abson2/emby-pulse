@@ -547,7 +547,7 @@
                         接口验证 Token
                         <span class="setting-tip">
                             <i class="fa-solid fa-circle-question setting-tip-icon text-[12px]"></i>
-                            <span class="setting-tooltip">用于验证 Webhook 请求来源，防止恶意请求。<br><br>🔒 推荐使用 Header 方式传递 Token（更安全）：<br><code class='text-emerald-600'>X-Webhook-Token: your_token</code><br><br>🔒 仅支持请求头方式；URL 参数会把 Token 写进日志与浏览器历史，已移除</span>
+                            <span class="setting-tooltip">用于验证 Webhook 请求来源，防止恶意请求。<br><br>Emby Webhook 插件无法附带自定义请求头，只能配置一个 URL，请把此 Token 填入下方回调地址的 <code class='text-emerald-600'>?token=</code> 参数。<br><br>🔒 界面出于安全只显示脱敏值，请填入你在配置 / 环境变量 WEBHOOK_TOKEN 里设置的原始值。<br><br>若反向代理能注入请求头，也可改用 <code class='text-emerald-600'>X-Webhook-Token</code>（服务端优先读取）。</span>
                         </span>
                     </label>
                     <input type="text" id="webhook_token" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-orange-500/50 outline-none transition-all">
@@ -557,14 +557,19 @@
                         推送目标地址
                         <span class="setting-tip">
                             <i class="fa-solid fa-circle-question setting-tip-icon text-[12px]"></i>
-                            <span class="setting-tooltip">将此地址配置到媒体服务器 Webhook 设置中，用于接收播放和入库事件。<br><br>⚠️ URL 参数方式会暴露 Token，推荐使用 Header 方式。</span>
+                            <span class="setting-tooltip">将此地址配置到媒体服务器 Webhook 设置中，用于接收播放和入库事件。<br><br>Emby Webhook 插件只能配置 URL，因此地址必须带 <code class='text-emerald-600'>?token=</code>；请把占位符替换为上方 Token 的原始值。<br><br>🔒 回调由 Emby 服务端在内网直连发起，不经浏览器与公网链路；仅当把 10307 暴露到公网或改走公网反代时，才需要考虑日志中的凭证。</span>
                         </span>
                     </label>
                     <p class="text-[11px] font-mono text-orange-600 dark:text-orange-400 break-all select-all leading-relaxed bg-gray-100 dark:bg-[#2C2C2E] p-3 rounded-xl border border-transparent dark:border-white/5 shadow-inner" id="webhook-url-preview">...</p>
-                    <p class="text-[10px] text-amber-500 dark:text-amber-400 mt-2 flex items-center gap-1">
-                        <i class="fa-solid fa-shield-halved text-[10px]"></i>
-                        推荐使用 Header 方式传递 Token，更安全
-                    </p>
+                    <div class="flex items-center justify-between gap-2 mt-2">
+                        <p class="text-[10px] text-amber-500 dark:text-amber-400 flex items-center gap-1 leading-relaxed">
+                            <i class="fa-solid fa-circle-info text-[10px]"></i>
+                            <span>替换「你的Token」后填入 Emby；若从公网域名打开本页，请把 host 换成内网 IP</span>
+                        </p>
+                        <button type="button" onclick="copyWebhookUrl()" class="shrink-0 text-[10px] px-2.5 py-1 rounded-lg bg-orange-100 dark:bg-orange-500/15 text-orange-600 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-500/25 transition">
+                            <i class="fa-solid fa-copy mr-1"></i>复制
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1633,11 +1638,56 @@ function removeHiddenUser(uid) {
     renderHiddenUsers();
 }
 
-function updateWebhookPreview() {
-    // 🔒 不再把 Token 拼进 URL：URL 会进入访问日志、浏览器历史与 Referer。
-    // 展示纯 URL，并在提示中引导使用 X-Webhook-Token 请求头。
+// 1.9.0：Emby Webhook 插件只能配置一个 URL，无法附带自定义请求头，
+// 因此回调地址必须带 ?token=。后端出于安全只回传脱敏 Token，
+// 这里绝不能把脱敏值拼进地址（否则用户复制到 Emby 会一直被 401/403 拒绝）：
+//   - 输入框是掩码/占位 → 展示「你的Token」，提示用户替换原始值；
+//   - 用户手动填入原始值 → 实时生成可直接复制的完整地址。
+function webhookTokenForUrl() {
+    const el = document.getElementById('webhook_token');
+    const raw = (el && el.value ? el.value : '').trim();
+    if (!raw || raw.indexOf('****') !== -1 || raw.indexOf('由环境变量') !== -1) {
+        return '你的Token';
+    }
+    return encodeURIComponent(raw);
+}
+
+function buildWebhookUrl() {
     const host = window.location.origin;
-    document.getElementById('webhook-url-preview').textContent = `${host}/api/v1/webhook`;
+    return `${host}/api/v1/webhook` + '?token=' + webhookTokenForUrl();
+}
+
+function updateWebhookPreview() {
+    const el = document.getElementById('webhook-url-preview');
+    if (el) el.textContent = buildWebhookUrl();
+}
+
+function copyWebhookUrl() {
+    const url = buildWebhookUrl();
+    const tip = url.indexOf('你的Token') !== -1
+        ? '地址已复制，请把「你的Token」替换为原始 Token'
+        : 'Emby Webhook 地址已复制';
+    // 内网常用 http://IP:10307 访问，属非安全上下文，navigator.clipboard 可能不存在，
+    // 因此提供 execCommand 降级，避免复制按钮直接抛 TypeError。
+    const fallback = () => {
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        document.body.removeChild(ta);
+        showSettingsToast(ok ? tip : '请手动选中上方地址复制', ok ? 'success' : 'error');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(() => {
+            showSettingsToast(tip, 'success');
+        }).catch(fallback);
+    } else {
+        fallback();
+    }
 }
 
 // ==================== 🔥 欢迎语编辑 ====================

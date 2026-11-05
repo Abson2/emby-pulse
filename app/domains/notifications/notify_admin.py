@@ -209,3 +209,46 @@ def api_save_channels_config(request: Request, data: dict):
         return {"status": "success", "message": "保存成功"}
     except Exception as e:
         return {"status": "error", "message": "保存配置失败"}
+
+
+@router.post("/api/notify/bark_test")
+async def api_test_bark(request: Request):
+    """系统级 Bark 测试推送（1.9.0）。
+
+    允许用当前表单里尚未保存的服务器地址 / Device Key 直接测试：掩码值
+    会回退到已保存配置，不会覆盖真实密钥。测试推送绕过开关，但仍要求 Key。
+    """
+    user = request.session.get("user")
+    if not user or not user_service.is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
+
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+
+    try:
+        from app.domains.notifications.bark_push import send_test
+        from app.infra.config.notification_settings import get_bark_runtime_config
+
+        conf = get_bark_runtime_config()
+        server = str(data.get("server") or "").strip()
+        key = data.get("device_key")
+        if server:
+            conf["server"] = server
+        if isinstance(key, str) and key.strip() and "****" not in key:
+            conf["device_key"] = key.strip()
+        result = send_test(config=conf)
+    except Exception as e:
+        return {"status": "error", "message": f"测试推送失败: {e}"}
+
+    return {
+        "status": "success" if result.get("ok") else "error",
+        "message": result.get("detail", "推送完成"),
+        "data": {
+            "skipped": result.get("skipped"),
+            "endpoint": result.get("endpoint"),
+        },
+    }

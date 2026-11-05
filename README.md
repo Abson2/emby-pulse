@@ -79,7 +79,7 @@ NEXT 版是 EmbyPulse-pro 的安全分支，解锁 Pro 全部功能；它基于�
 | 仓库形态 | `amlkiller/emby-pulse` 上游仓库 | **独立公开仓库，非 fork、无 upstream、单干净 commit**，含完整上游源码且全部自持 |
 | 外网添加用户（问题 1） | Cloudflare Tunnel 下 `POST /api/manage/user/new` → 403 | 默认注入 `FORWARDED_ALLOW_IPS`，网关层 + 应用层双层修复 |
 | 求片提交 CSRF（问题 2） | `csfr验证失败：origin不匹配`（实际为 CSRF 403） | 同一根因，同上修复 |
-| 明文 token（问题 3） | webhook 地址为 `/api/v1/webhook?token=<明文>` | 仅读 `X-Webhook-Token` 请求头，URL 退化为纯路径 |
+| 明文 token（问题 3） | webhook 地址为 `/api/v1/webhook?token=<明文>` | 后端不回传明文 Token、不把 token 写死在页面；1.9.0 起按 Emby 插件能力默认兼容 `?token=`，Header 仍优先 |
 | 24 个 API 不鉴权（问题 4） | 鉴权散落各路由，漏写即放行 | 新增默认拒绝 `AuthGateMiddleware`（白名单集中、401/403 分明） |
 | F12 泄露（问题 5） | 设置接口回传明文 token，前端把 token 拼进 URL | 响应脱敏 + 模板不再拼 URL |
 | 部署文件 | 含 `/volume1/docker/...` 示例路径与示例内网 IP | 完全重写 compose / Dockerfile / CI，无任何个人配置 |
@@ -138,11 +138,13 @@ CSRFMiddleware._expected_origins() 只给出 http://<你的域名>
 [4] 内网基准 http       → 422  CSRF PASSED（内网不受影响）
 ```
 
-### 问题 3：token 不再出现在 URL
+### 问题 3：凭证不落明文，同时兼容 Emby Webhook 插件
 
-- 服务端默认**只**从 `X-Webhook-Token` 请求头读取凭证；
-- `webhook_url` 返回值与设置页展示的 URL 都是纯路径 `/api/v1/webhook`；
-- 确需兼容只能配 URL 的旧客户端时，显式设 `WEBHOOK_ALLOW_QUERY_TOKEN=1`，默认关闭。
+- **后端不回传明文 Webhook Token**：`/api/bot/settings` 无论凭证来自环境变量还是配置文件，一律脱敏；`webhook_url` 保持纯路径，模板里不写死任何 token。
+- **1.9.0 起默认兼容 `?token=`**：Emby / Jellyfin 的 Webhook 插件只能配置一个回调 URL，**无法附带自定义请求头**，因此服务端默认接受 `http://<host>:10307/api/v1/webhook?token=<Token>`，`X-Webhook-Token` 请求头仍**优先读取**。
+- 设置页「推送目标地址」会生成 Emby 可直接复制的完整地址。因界面显示的是脱敏值，地址里用占位符「你的Token」兜底，**绝不会把掩码值拼进 URL**；在输入框手动填入原始 Token 时会实时生成可直接使用的地址。
+- 需要收紧访问日志时，显式设 `WEBHOOK_ALLOW_QUERY_TOKEN=0` 可回到严格 Header-only 模式（**需确认媒体服务器插件支持自定义请求头**，否则回调会被 401 拒绝）。
+- **内网直连场景无需额外加固**：Webhook 由 Emby 服务端在内网直接 POST 到 10307，不经浏览器、CDN 与公网反代，因此没有浏览器历史 / Referer / 公网日志泄露面；凭证只留在 EMBYPULSE 本机访问日志。管理端是否对公网暴露与这条链路无关。仅当把 Webhook 改走公网反代、或本机日志外发第三方时，才需要收紧日志采集或设 `WEBHOOK_ALLOW_QUERY_TOKEN=0`。
 
 ### 问题 4：默认拒绝的 API 网关
 
@@ -153,7 +155,7 @@ CSRFMiddleware._expected_origins() 只给出 http://<你的域名>
 ### 问题 5：F12 不再等于后台管理面板
 
 - `/api/bot/settings` 等配置响应中的敏感字段统一脱敏后返回，无论凭证来自环境变量还是配置文件；
-- 设置页模板不再把输入框中的 token 拼进 URL 预览，改为引导使用请求头。
+- 设置页模板不硬编码任何 token；1.9.0 起为满足 Emby 插件能力，会在**浏览器本地**按当前 host 与用户填入的原始值拼出 `?token=` 地址，脱敏值一律用占位符兜底，后端响应依旧不含明文。
 
 ---
 
@@ -285,7 +287,8 @@ SECRET_KEY=
 # ===== 按需启用（留空即不启用对应功能）=====
 # TG_BOT_TOKEN=           # Telegram 机器人 Token（BotFather 创建）
 # TMDB_API_KEY=           # TMDB API Key（缺集扫描 / 合集同步用）
-# WEBHOOK_TOKEN=          # Webhook 安全令牌（生成：openssl rand -hex 16），配 X-Webhook-Token 请求头
+# WEBHOOK_TOKEN=          # Webhook 安全令牌（生成：openssl rand -hex 16）
+#   Emby Webhook 插件填：http://<宿主IP>:10307/api/v1/webhook?token=<此值>
 
 # ===== 求片→TgtoDrive 白名单自动同步插件（本项目独有特性）=====
 # TgtoDrive 默认 host 网络、端口 12366。从 EMBYPULSE 容器访问它，稳定地址是 docker 宿主桥网关。
@@ -297,7 +300,7 @@ TGTODRIVE_URL=http://<DOCKER_HOST_GATEWAY>:12366
 TZ=Asia/Shanghai
 FORWARDED_ALLOW_IPS=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 AUTH_GATE_MODE=enforce
-WEBHOOK_ALLOW_QUERY_TOKEN=0
+WEBHOOK_ALLOW_QUERY_TOKEN=1   # Emby Webhook 插件只能配 ?token= URL；反代可注入 Header 时才改为 0
 # PUBLIC_API_PATHS=
 ```
 
@@ -316,7 +319,7 @@ WEBHOOK_ALLOW_QUERY_TOKEN=0
 
 ### 5.2 `docker-compose.yml`（拉取镜像，格式参考）
 
-把下面内容保存为 `docker-compose.yml`（仓库根目录已提供同款）。镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG` 即可拉取指定版本（如 `IMAGE_TAG=1.7.0` 回退历史版本，`IMAGE_TAG=latest` 追最新），不设置则默认 `1.8.0`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
+把下面内容保存为 `docker-compose.yml`（仓库根目录已提供同款）。镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG` 即可拉取指定版本（如 `IMAGE_TAG=1.8.0` 回退历史版本，`IMAGE_TAG=latest` 追最新），不设置则默认 `1.9.0`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
 
 ```yaml
 services:
@@ -461,7 +464,11 @@ docker compose up -d
 | `FORWARDED_ALLOW_IPS` | `127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16` | 允许 uvicorn 采信代理头；**问题 1/2 主修复** |
 | `AUTH_GATE_MODE` | `enforce` | `enforce` 拦截 / `observe` 只记录 / `off` 关闭 |
 | `PUBLIC_API_PATHS` | 空 | 追加放行路径，逗号分隔 |
-| `WEBHOOK_ALLOW_QUERY_TOKEN` | `0` | 是否兼容旧的 `?token=` 传参 |
+| `WEBHOOK_ALLOW_QUERY_TOKEN` | `1` | 是否兼容 `?token=` URL 传参（Emby Webhook 插件必需）；`0` = 仅允许 `X-Webhook-Token` 请求头 |
 | `TZ` / `HTTP_PORT` | `Asia/Shanghai` / `10307` | 时区 / 宿主机端口 |
 
 完整说明见 `SECURITY.md`；`.env` 各字段获取方式见 **第五节 5.1**。插件 A 自身的运行期配置（TgtoDrive 令牌 / 场景 / 筛选字段 / 轮询兜底间隔 / 触发状态 / 试运行等）在 EMBYPULSE「插件」页内填写，不通过环境变量，详见 **第四节 4.4**。配套清理插件 B 的安装与参数见 `tgtdrive-monitor/README.md`（需装到 TgtoDrive 容器内运行）。
+
+**系统级 Bark 推送（1.9.0，界面配置，不通过环境变量）**：在「通知管理 → 推送渠道」的 Bark 卡片填写服务器（默认 `https://api.day.app`，也支持自建）与 Device Key，打开总开关，再按需打开「新片入库通知」「新的求片通知」两个独立开关，点「测试推送」验证。Bark 是**系统级独立通道**，不加入 `notify_rules` 渠道勾选列表，也不受原有通知总开关约束；推送失败只记日志，绝不影响求片提交 / 入库通知主流程。Device Key 在管理端读取时掩码显示，保存时回填的掩码值不会覆盖已存的真实 Key。
+
+**Emby Webhook 回调地址（1.9.0）**：在 Emby Webhook 插件里填 `http://<内网IP>:10307/api/v1/webhook?token=<WEBHOOK_TOKEN 的原值>`，设置页「系统神经感知 (Webhook) → 推送目标地址」可直接复制该格式；把占位符换成你自己的真实 Token 即可。后端默认已兼容 `?token=`（见第三节问题 3）。该回调走**内网直连**，不经过公网链路；若管理端是从公网域名打开设置页，复制后请把 host 换成实际内网 IP，别把公网域名填进 Emby。

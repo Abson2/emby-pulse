@@ -19,17 +19,27 @@ MAX_WEBHOOK_PAYLOAD = 1024 * 1024
 
 
 def _get_webhook_token(request: Request):
-    """仅从请求头读取 Webhook Token。
+    """读取 Webhook Token：请求头优先，默认兼容 URL 参数 ?token=。
 
-    URL 参数会把凭证写进反向代理访问日志、浏览器历史和 Referer，属于明文
-    传输（社区通报《明文传送 token 这一块》）。旧版 ?token= 兼容默认关闭；
-    确需临时过渡时可设置 WEBHOOK_ALLOW_QUERY_TOKEN=1（不推荐，且应尽快
-    改用 X-Webhook-Token 请求头）。
+    Emby / Jellyfin 的 Webhook 插件只能配置一个回调 URL，无法附带自定义
+    请求头，因此 1.9.0 起默认兼容 query 形式：
+
+        http://<host>:10307/api/v1/webhook?token=<WEBHOOK_TOKEN>
+
+    安全边界：
+    - 若反代能注入请求头，仍优先使用 X-Webhook-Token；
+    - 需要完全禁止 URL 凭证时，显式设置 WEBHOOK_ALLOW_QUERY_TOKEN=0
+      即可回到严格的 Header-only 模式。
+    - 本部署的 Webhook 由 Emby 服务端在**内网直连**发起，不经过浏览器与
+      公网反代，因此没有浏览器历史 / Referer / 公网日志泄露面；凭证只会
+      留在 EMBYPULSE 本机访问日志。若日后把 10307 暴露到公网或改走公网
+      反代，再收紧日志采集或切回 Header-only。
     """
     token = request.headers.get("X-Webhook-Token")
     if token:
         return token
-    if os.getenv("WEBHOOK_ALLOW_QUERY_TOKEN", "") == "1":
+    # 默认 "1"：兼容 Emby Webhook 插件；仅显式设为 "0" 才回到严格模式
+    if os.getenv("WEBHOOK_ALLOW_QUERY_TOKEN", "1") != "0":
         return request.query_params.get("token")
     return None
 
@@ -100,10 +110,14 @@ async def emby_webhook(request: Request):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid Content-Length")
 
-    # 🔒 安全：Header 优先；兼容 URL 参数 ?token=xxx
+    # 🔒 安全：Header 优先；Emby Webhook 插件可用 URL 参数 ?token=xxx
     token = _get_webhook_token(request)
     if not token:
-        raise HTTPException(status_code=401, detail="缺少 Webhook Token，请使用 X-Webhook-Token 请求头")
+        raise HTTPException(
+            status_code=401,
+            detail="缺少 Webhook Token：请配置 X-Webhook-Token 请求头，"
+                   "或在回调 URL 中使用 ?token=<Token>",
+        )
 
     # 🔒 常量时间比对，防止时序攻击
     expected = get_webhook_token() or ""

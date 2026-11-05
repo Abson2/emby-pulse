@@ -7,8 +7,10 @@
 #   [问题 1/2] 默认注入 FORWARDED_ALLOW_IPS，让 uvicorn 采信 Cloudflare
 #              Tunnel / 内网反代下发的 X-Forwarded-Proto，修复
 #              「外网无法添加用户」「求片提交 CSRF Origin 不匹配」。
-#   [问题 3/4/5] 默认 AUTH_GATE_MODE=enforce、WEBHOOK_ALLOW_QUERY_TOKEN=0，
-#              与源码中的鉴权网关 / 去明文 token 改动配套。
+#   [问题 3/4/5] 默认 AUTH_GATE_MODE=enforce；WEBHOOK_ALLOW_QUERY_TOKEN=1
+#              默认兼容 Emby Webhook 插件只能配置 ?token= URL 的限制，
+#              后端仍不向前端回传明文 Token（凭证字段一律脱敏）。
+#              Header 方式仍优先，可用 WEBHOOK_ALLOW_QUERY_TOKEN=0 切回严格模式。
 #  [交付] OCI 元数据、构建期加固产物自检、显式 COPY 白名单。
 #
 # 说明：沿用上游的 compileall 字节码构建方式，是为了保持运行时行为与已验证
@@ -26,7 +28,7 @@ RUN python -m compileall -b app/ && \
 FROM python:3.12-slim
 WORKDIR /workspace
 
-ENV APP_VERSION=1.8.0-hardened \
+ENV APP_VERSION=1.9.0-hardened \
     TZ=Asia/Shanghai \
     PATH="/workspace/.venv/bin:$PATH" \
     UV_COMPILE_BYTECODE=1 \
@@ -34,10 +36,10 @@ ENV APP_VERSION=1.8.0-hardened \
     PYTHONUNBUFFERED=1 \
     FORWARDED_ALLOW_IPS="127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16" \
     AUTH_GATE_MODE=enforce \
-    WEBHOOK_ALLOW_QUERY_TOKEN=0
+    WEBHOOK_ALLOW_QUERY_TOKEN=1
 
 LABEL org.opencontainers.image.title="emby-pulse hardened" \
-      org.opencontainers.image.description="Independent hardened build: Cloudflare Tunnel CSRF fix, default-deny API gate, no plaintext webhook token" \
+      org.opencontainers.image.description="Independent hardened build: Cloudflare Tunnel CSRF fix, default-deny API gate, Emby webhook ?token= compatibility, system-level Bark push" \
       org.opencontainers.image.source="https://github.com/Abson2/emby-pulse"
 
 # 按锁文件安装依赖，利用层缓存

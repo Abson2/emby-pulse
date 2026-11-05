@@ -253,11 +253,18 @@ def api_get_settings(request: Request):
         result_data["webhook_token_masked"] = mask_sensitive(webhook_token)
     
     result_data["env_override_fields"] = env_override_fields
-    if webhook_source == "env":
-        result_data["webhook_url"] = "（Webhook Token 由环境变量管理，请在 Emby 中配置 Header）"
-    else:
-        result_data["webhook_url"] = f"{get_media_server_main_public_or_host()}/api/v1/webhook"
+    # 1.9.0：Emby Webhook 插件不支持自定义请求头，只能配置一个 URL。
+    # 这里给出可直接复制的地址模板（占位符，不含明文 Token），由用户替换。
+    result_data["webhook_url"] = (
+        f"{get_media_server_main_public_or_host()}/api/v1/webhook?token=<WEBHOOK_TOKEN>"
+    )
+    result_data["webhook_token_hint"] = (
+        "Token 由环境变量 WEBHOOK_TOKEN 管理，请将 <WEBHOOK_TOKEN> 替换为该环境变量的值"
+        if webhook_source == "env"
+        else "请将 <WEBHOOK_TOKEN> 替换为上方「接口验证 Token」的原始值"
+    )
     result_data["webhook_header_name"] = "X-Webhook-Token"
+    result_data["webhook_query_token_enabled"] = True
     result_data["webhook_token_available"] = bool(webhook_token and webhook_token != "embypulse" and webhook_token not in ("emby", "test", "123456", "password"))
     
     return {"status": "success", "data": result_data}

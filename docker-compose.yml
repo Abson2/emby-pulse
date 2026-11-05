@@ -6,9 +6,9 @@ name: embypulse-pro
 
 services:
   embypulse-pro:
-    # 版本锁定：默认拉取 1.8.0；可在 .env 设置 IMAGE_TAG 指定历史版本（如 1.7.0）或 latest
-    # 已发布版本：1.5.0 / 1.6.0 / 1.7.0 / 1.8.0（回退 1.5.0 请用 IMAGE_TAG=v1.5.0）
-    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.8.0}
+    # 版本锁定：默认拉取 1.9.0；可在 .env 设置 IMAGE_TAG 指定历史版本（如 1.8.0）或 latest
+    # 已发布版本：1.5.0 / 1.6.0 / 1.7.0 / 1.8.0 / 1.9.0（回退 1.5.0 请用 IMAGE_TAG=v1.5.0）
+    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.0}
     container_name: embypulse-pro
     restart: unless-stopped
 
@@ -30,8 +30,10 @@ services:
       - "FORWARDED_ALLOW_IPS=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
       # 问题 4：默认拒绝的 API 鉴权网关
       - AUTH_GATE_MODE=enforce
-      # 问题 3：禁止在 URL 中明文传递 webhook token
-      - WEBHOOK_ALLOW_QUERY_TOKEN=0
+      # 问题 3：Emby Webhook 插件无法设置自定义请求头，只能配置 ?token= URL。
+      #         该回调走内网直连（不经浏览器/公网反代），故默认兼容；
+      #         如日后改走公网反代，可设 0 回到 Header-only（需插件支持自定义头）。
+      - WEBHOOK_ALLOW_QUERY_TOKEN=1
 
     env_file:
       - ./.env

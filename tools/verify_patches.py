@@ -89,19 +89,31 @@ compose = read("docker-compose.yml")
 check("Dockerfile 默认 FORWARDED_ALLOW_IPS", "FORWARDED_ALLOW_IPS" in dockerfile)
 check("compose 默认 FORWARDED_ALLOW_IPS", "FORWARDED_ALLOW_IPS" in compose)
 
-print("== 问题 3: 明文传送 token ==")
+print("== 问题 3: 明文传送 token（1.9.0 起兼容 Emby ?token= URL）==")
 webhook = read("app/domains/system/webhook.py")
 wns = exec_nodes(webhook, {"_get_webhook_token"})
 os.environ.pop("WEBHOOK_ALLOW_QUERY_TOKEN", None)
 q = FakeRequest("", {}, {"token": "QUERY_SECRET_VALUE"})
-check("默认拒绝 URL 中的 token", wns["_get_webhook_token"](q) is None)
+check("默认兼容 Emby Webhook 的 ?token= URL",
+      wns["_get_webhook_token"](q) == "QUERY_SECRET_VALUE")
+check("无 token 时返回 None", wns["_get_webhook_token"](FakeRequest("", {}, {})) is None)
+os.environ["WEBHOOK_ALLOW_QUERY_TOKEN"] = "0"
+check("显式关闭后回到严格 Header-only",
+      wns["_get_webhook_token"](q) is None)
 os.environ["WEBHOOK_ALLOW_QUERY_TOKEN"] = "1"
-check("兼容开关显式开启才生效",
+check("显式开启兼容开关仍生效",
       wns["_get_webhook_token"](q) == "QUERY_SECRET_VALUE")
 os.environ.pop("WEBHOOK_ALLOW_QUERY_TOKEN", None)
 h = FakeRequest("", {"X-Webhook-Token": "HEADER_SECRET"}, {"token": "QUERY_SECRET_VALUE"})
 check("请求头优先", wns["_get_webhook_token"](h) == "HEADER_SECRET")
-check("Dockerfile 默认关闭 query token", "WEBHOOK_ALLOW_QUERY_TOKEN=0" in dockerfile)
+hs = FakeRequest("", {"X-Webhook-Token": "HEADER_SECRET"}, {})
+os.environ["WEBHOOK_ALLOW_QUERY_TOKEN"] = "0"
+check("严格模式下仍接受请求头", wns["_get_webhook_token"](hs) == "HEADER_SECRET")
+os.environ.pop("WEBHOOK_ALLOW_QUERY_TOKEN", None)
+check("Dockerfile 默认允许 query token", "WEBHOOK_ALLOW_QUERY_TOKEN=1" in dockerfile)
+check("compose 默认允许 query token", "WEBHOOK_ALLOW_QUERY_TOKEN=1" in compose)
+check("401 提示同时覆盖 Header 与 URL 两种方式",
+      "X-Webhook-Token 请求头" in webhook and "?token=<Token>" in webhook)
 
 print("== 问题 4: 默认拒绝鉴权网关 ==")
 gate_path = "app/core/auth_gate_middleware.py"
@@ -125,14 +137,21 @@ check("AuthGate 位于会话中间件内层",
       < mw.index("app.add_middleware(DatabaseSessionMiddleware)"))
 check("compose 默认 AUTH_GATE_MODE", "AUTH_GATE_MODE" in compose)
 
-print("== 问题 5: F12 泄露后台配置 ==")
+print("== 问题 5: F12 泄露后台配置（URL 兼容但不回传明文）==")
 bot = read("app/bot/bot.py")
 tpl = read("templates/settings.html")
-check("后端不再拼 token 到 webhook_url", "/api/v1/webhook?token=" not in bot)
-check("后端不再直接回传明文 webhook_token",
+check("后端不把明文 token 拼进 webhook_url", "/api/v1/webhook?token=" not in bot)
+check("后端不直接回传明文 webhook_token",
       'all_config["webhook_token"] = webhook_token' not in bot)
-check("模板不再把 token 拼进 URL", "webhook?token=" not in tpl)
-check("模板 URL 预览为纯路径", "${host}/api/v1/webhook`" in tpl)
+check("后端 Webhook Token 统一脱敏",
+      'all_config["webhook_token"] = mask_sensitive(webhook_token)' in bot
+      and 'all_config["webhook_token"] = "****（由环境变量设置）"' in bot)
+check("模板不硬编码完整带 token 的 URL", "webhook?token=" not in tpl)
+check("设置页拼出 Emby 可用的 ?token= 地址",
+      "'?token='" in tpl and "/api/v1/webhook" in tpl)
+check("脱敏值不会被误拼进 URL（占位符兜底）",
+      "你的Token" in tpl and "raw.indexOf('****')" in tpl)
+check("模板 URL 预览基于当前 host", "${host}/api/v1/webhook`" in tpl)
 
 print("== 交付与配置隔离 ==")
 check("compose 引用自己的镜像", "ghcr.io/abson2/emby-pulse-hardened" in compose)
@@ -222,6 +241,77 @@ check("原推送事件驱动未被破坏",
       and 'if data.action in ("approve", "manual") and push_candidates:' in mr)
 check("模块级 logger 已定义（修复 push 钩子异常分支）",
       'logger = logging.getLogger("uvicorn")' in mr)
+
+print("== 问题 9: 系统级 Bark 推送 + Emby Webhook 兼容（1.9.0） ==")
+bark = read("app/domains/notifications/bark_push.py")
+ncfg = read("app/infra/config/notification_settings.py")
+submit = read("app/domains/media_requests/submit_router.py")
+nitem = read("app/bot/notification_bot/notification_bot_library_new_item_service.py")
+nep = read("app/bot/notification_bot/notification_bot_library_new_episode_service.py")
+nadmin = read("app/domains/notifications/notify_admin.py")
+ntpl = read("templates/notify_admin.html")
+settings_tpl = read("templates/settings.html")
+system_router = read("app/domains/system/router.py")
+
+check("系统级 Bark 模块存在且提供统一入口",
+      "def safe_push(kind, **kwargs):" in bark)
+check("提供新片入库推送", "def push_new_library_item(" in bark)
+check("提供新的求片推送", "def push_new_request(" in bark)
+check("提供测试推送", "def send_test(" in bark)
+check("两类消息各有独立开关",
+      '"notify_library_new"' in bark and '"notify_request_new"' in bark)
+check("敏感 Key 从返回结构中剔除", 'if k != "device_key"' in bark)
+check("失败吞掉异常且只记日志",
+      "except Exception as e:" in bark and "logger.warning" in bark)
+check("只使用标准库（urllib，不引第三方 SDK）",
+      "import urllib.request" in bark and "import requests" not in bark)
+
+check("Bark 配置层提供运行期读取与保存",
+      "def get_bark_runtime_config() -> dict:" in ncfg
+      and "def set_bark_config(data: dict) -> None:" in ncfg)
+check("管理端读取 Bark 配置做掩码",
+      '"bark": get_bark_config(masked=masked)' in ncfg)
+check("保存时掩码值不覆盖真实 Device Key",
+      '"****" not in key' in ncfg)
+check("系统设置保存接口可写入 Bark 配置",
+      'if "bark" in data:' in ncfg and "set_bark_config(data[\"bark\"])" in ncfg)
+
+check("求片提交事件接入 Bark",
+      '"request_new"' in submit and "_bark_push_provider" in submit)
+check("新片入库事件接入 Bark（电影/媒体项目）",
+      '"library_new"' in nitem and nitem.count("_bark_notify_new_item(item)") >= 2)
+check("剧集新集入库事件接入 Bark",
+      '"library_new"' in nep and nep.count("_bark_notify_new_episode(data)") >= 2)
+check("Bark 采用可注入 provider（不破坏边界测试）",
+      "bark_push_provider=None" in submit
+      and "bark_push_provider=None" in nitem
+      and "bark_push_provider=None" in nep)
+check("管理端提供 Bark 测试推送接口",
+      '@router.post("/api/notify/bark_test")' in nadmin)
+check("测试推送接口要求管理员", "user_service.is_admin_user(request)" in nadmin)
+check("通知管理页提供 Bark 配置卡片",
+      "bark-enabled" in ntpl and "testBark()" in ntpl)
+check("通知管理页两类消息开关独立",
+      "bark-notify-library-new" in ntpl and "bark-notify-request-new" in ntpl)
+
+check("设置页不再错误地只推荐 Header 方式",
+      "推荐使用 Header 方式传递 Token，更安全" not in settings_tpl)
+check("设置页明确说明 Emby 无法附带请求头",
+      "Emby Webhook 插件无法附带自定义请求头" in settings_tpl)
+check("设置页提供复制 Emby 地址入口",
+      "copyWebhookUrl()" in settings_tpl)
+check("系统设置接口给出可复制的 URL 模板",
+      "?token=<WEBHOOK_TOKEN>" in system_router
+      and "webhook_query_token_enabled" in system_router)
+check("系统设置接口不再要求 Emby 配置 Header",
+      "请在 Emby 中配置 Header" not in system_router)
+
+check("应用版本升级到 1.9.0", 'APP_VERSION = "1.9.0"' in read("app/shared/version.py"))
+check("Dockerfile 版本为 1.9.0-hardened", "APP_VERSION=1.9.0-hardened" in dockerfile)
+check("compose 默认拉取 1.9.0", "IMAGE_TAG:-1.9.0" in compose)
+check("CHANGELOG 含 1.9.0 发版说明", "## 1.9.0" in read("CHANGELOG.md"))
+check("CI 增加 Bark / Webhook 回归步骤",
+      "tests/test_bark_push.py" in read(".github/workflows/docker-publish.yml"))
 
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:
