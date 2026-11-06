@@ -1,5 +1,40 @@
 # 更新日志
 
+## 2.0.2
+
+主线架构优化收口版（v2.0.1 之后）。**零功能变化**：全部改动为内部等价重构、测试补强与文档同步，对外接口、原有输入输出行为、配置键、数据库 schema 均未改动，功能与 `2.0.1` / `1.9.10` 完全等价。按「风险最小、稳定性、安全性、100% 功能保留」推进，每批独立可 revert。完整决策记录与客观边界见 [docs/REFACTOR_2.0.md](docs/REFACTOR_2.0.md) 第 8 节。
+
+### 1. 公共逻辑抽离（B1）
+
+- 新增 `app/bot/notification_bot/_library_common.py`：两个双胞胎入库通知 service 的 provider 装配样板（48 行 → 15 行）与 `_format_overview` / `_format_type` / `_get_base_url` / `_get_platform` 四个同构纯函数收敛为薄包装，两文件 291+329 → 249+293 行，净减 78 行重复。
+- 公共模块**不持有任何 provider 状态**，`apply_dependency_providers(globals(), ...)` 只写调用方命名空间，两个 service 各自注入的桩仍互不串扰。
+- `tools/check_notification_bot_subscription.py` 的 AST 抽取命名空间补入真实公共模块（该脚本忽略 import 语句），既有订阅链路 29/0 恢复全绿。
+
+### 2. DDL 门控与重复消除（B3 / B3-B）
+
+- 新增 `app/infra/db/ensure_once.py` 通用一次性门控（按 key 缓存 / 异常不写缓存 / reset / 线程锁）；`message_dao.ensure_announcement_tables()` 迁入，原有模块级状态名与 `reset_announcement_tables_cache()` 全部保留。
+- 全库 40 个顶层 `ensure_*` 完整分类，严格 AST 匹配出 20 个逐字同构的纯建表样板（18 个 DAO 文件），新增无状态 `app/infra/db/ddl_bootstrap.py`，调用点收敛为一行，`+38/-86` 净减 48 行重复。连接次数 / cursor 创建 / DDL 顺序 / commit 次数 / 异常传播逐事件等价。
+- **不引入缓存**：带 PRAGMA / ALTER / 业务 SQL 的迁移型 `ensure_*` 一律不接入。
+
+### 3. 性能与安全（B4 / S5 / S6）
+
+- `SystemStore.execute_many()` 纯加法：多条写语句共用 1 连接 1 事务，失败整批回滚；`execute()` 逐条提交语义一行未动。
+- `sanitize_rich_html()` 对 `style` 清洗 `url()` / `expression()` / `@import` / `behavior:` / `-moz-binding`，合法声明逐字不变（只收紧非法输入）。
+- 表名 f-string 拼接由集中注册表管理，静态断言证明非用户输入。
+
+### 4. 等价性验证与回归
+
+- 新增 `tests/test_b1_library_common_equivalence.py`（53/0）与 `tests/test_b_batch_equivalence.py`（37/0，含 B3-B 第 5 节旧骨架 oracle 逐事件比对），两者接入 CI。
+- `tests/test_refactor_2_0_equivalence.py` 88/0；`tools/verify_patches.py` 238/0（新增问题 19 / 20 组）；`tools/check_security_contracts.py` 44/0。
+- **静态断言纪律**：判断调用存在 / 不存在一律用 `ast.Call` + `ast.Name`，不用裸子串（避免 helper 定义行自匹配，B3-B 的 21→20 与第二批 87/1 同源）。
+- 全量 171 个 `tests/*.py + tools/*.py` 脚本与 HEAD 干净基线对比，失败集合完全一致，未引入任何新失败；CI 官方 14 项、`compileall`、`node --check`、YAML 解析、凭证扫描全绿。
+
+### 5. 版本与文档同步
+
+- 版本号 `2.0.1` → `2.0.2`：`app/shared/version.py`、`Dockerfile`（`2.0.2-hardened`）、`docker-compose.yml`（默认 `IMAGE_TAG:-2.0.2`）、`templates/request.html`（`request_app.js?v=2.0.2`，每次发版必改）、README、CHANGELOG；`verify_patches.py` 与等价性测试的版本断言同步更新。
+- **`v2.0` / `v2.0.1` tag 与已发布镜像不重推**（避免已部署实例、Release 与镜像摘要漂移）；`IMAGE_TAG=1.9.10` 回退路径保持不变。
+- **GitHub 主页按既有约定保持简洁**：本次零功能变化，功能清单与当前使用说明不变，仅同步版本锁定；各版本详细更新说明以本文件与 GitHub Releases 为准，主页不展开。
+
 ## 2.0.1
 
 零风险补丁版（v2.0 之后）。按「风险最小、稳定性、安全性、100% 功能保留」筛选，只做确凿同类 bug 修复、安全契约固化与测试补强，**不改对外接口、不删任何特性、不做 DI 容器 / 前端公共 JS / DDL 通用化等运行时行为大改**。完整决策记录见 [docs/REFACTOR_2.0.md](docs/REFACTOR_2.0.md) 第 7 节。

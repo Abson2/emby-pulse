@@ -251,7 +251,7 @@ DDL：app/infra/db/schema_registry.py <── schema_bootstrap.ensure_registered
 | `docs/REFACTOR_2.0.md` | 本文档 |
 
 > `2.0.1` 补丁版按同一清单同步为 `2.0.1`（`APP_VERSION=2.0.1-hardened` / `IMAGE_TAG:-2.0.1` / `request_app.js?v=2.0.1` / `## 2.0.1` / README 主页收敛），`v2.0` tag 保持不动。
-> 后续主线优化批次（第 8 节）**不改版本号、不发版**，只推进架构优化本身。
+> 第 8 节主线优化批次在推进期间**不改版本号、不发版**，只推进架构优化本身；主线收口后按同一清单统一发布 `2.0.2`（`APP_VERSION=2.0.2-hardened` / `IMAGE_TAG:-2.0.2` / `request_app.js?v=2.0.2` / `## 2.0.2`），`v2.0` / `v2.0.1` tag 均不重推。本次为零功能变化，主页功能清单与使用说明不变，仅同步版本锁定。
 
 **兼容性**：所有旧版本标签（`v1.9.10` 等）与 `IMAGE_TAG` 回退路径保持不变；对外 API、模板变量、配置键、DB schema 均不改。
 
@@ -382,3 +382,16 @@ C 批建议等 CI 具备 pytest + FastAPI 集成环境后再启动。
 ### 8.4 本批教训：静态断言必须判定「真实调用」，不能用裸子串
 
 B3-B 的调用点计数最初写成 `"ensure_registered_tables(" in src`，结果把 `ddl_bootstrap.py` 里 **helper 自身的定义行** `def ensure_registered_tables(...)` 也算成调用点，得到 21（真实为 20），并连带让「签名不变」断言误判。这与第二批 `tests/test_refactor_2_0_equivalence.py` 的 87/1 误报同源：检查脚本自身的字符串 / 定义行会被裸子串命中。**约定**：判断某调用「存在 / 不存在」时，一律用 `ast.Call` + `ast.Name` 精确判定函数体内真实调用，或用精确正则锚定，不用裸子串；`tests/test_b_batch_equivalence.py` 第 5 节与 `verify_patches.py` 问题 20 组均已按此实现。
+
+### 8.5 剩余项要在 100% 保留功能下推进，各自先补什么
+
+先把「等价」定义成可机器判定：对同一输入集，新旧实现的**可观察结果逐字节相同**，且 golden **必须在改代码前采集**（先建基线）。分层：SQL 层 = `sqlite_master` + 数据行 + SQL 事件序列 + 异常时机；JS 层 = DOM 输出；HTTP 层 = 状态码 / 响应体 / 头 + DB 终态；副作用层 = 日志 / 通知 payload。
+
+| 项 | 必须补齐的前提 | 结论 |
+| --- | --- | --- |
+| 迁移型 `ensure_*` | 内存 SQLite 双库 oracle，按「空库 / 半迁移库 / 全量库」三种初态跑两轮比 schema + 数据行 + 事件序列；**纯标准库即可，零新依赖** | **可继续做**：21 个剩余里 `ensure_announcement_tables` / `ensure_calendar_notify_config_table` / `ensure_users_meta_column` 仍是 `connect+注册表DDL` 骨架，可拆「helper + 保留附加语句」并复用 B3-B 事件序列 oracle；126/77/33/19 行的 4 个大型迁移（PRAGMA/ALTER/数据迁移）只补幂等契约、不抽公共逻辑、不接缓存；另 10 个「其它」（建目录 / env 管理员 / token）不是 DDL，不进批次 |
+| B2 前端公共 JS | Node + jsdom/linkedom，8 处对 falsy / 非字符串 / 引号实体 / 换行 / Unicode 输入矩阵逐页采 golden | **统一与硬约束互斥**：实测 8 处为正则 `&#039;`（+falsy 检查）、`(unsafe\|\|'').toString()` + 正则、DOM `textContent` 有/无 falsy 检查、DOM `innerText`、`&#39;` 等 4 类行为；统一后至少 3 类输出必然变化。终点是「按页保留 + 契约锁」（已做），或明确授权输出变更后按功能变更发版 + 逐页灰度 |
+| B5 写入侧统一净化 | 枚举 Quill 产出 HTML 全集（对齐 / 缩进 / 列表 / 颜色 / 字号 / 链接 / 图片）经 `sanitize_rich_html` 的输出固化为 golden；任何统一使 golden 变化即否决 | `_RICH_ALLOWED_ATTRS` 中 `span`/`div` 只允许 `style`，`class` 不在白名单，统一会剥离 `ql-align-*`；且「网页存储走富文本净化 / 用户级纯文本通知走 `to_plain_text`」是修实体乱码时确立的隔离边界，不是冗余 |
+| C 批大重构 | CI 具备 pytest + FastAPI + 全依赖；建四层快照（API 响应 / DB 全量 dump / 模板渲染 HTML / 116 处 provider 装配状态），每个拆分单独分支逐字节比对零差异才合并 | 属工程环境建设，需另起一轮；C5 移除 `unsafe-eval` 会让 Alpine 表达式失效，属功能破坏，必须排除或先重写表达式 |
+
+**口径**：第 ① 项是 `2.0.2` 之后可低风险推进的增量；②③ 的「完成」是确认不该做；④ 是环境建设。三者都不构成本版欠账。第 8 节全部落地项已随 `v2.0.2` 发布。
