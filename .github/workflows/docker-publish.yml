@@ -37,6 +37,12 @@ jobs:
       - name: 校验 2.0 重构等价性 / 安全加固 / 公告推送乱码修复
         run: python tests/test_refactor_2_0_equivalence.py
 
+      - name: 校验 B1 入库通知公共逻辑抽离等价性
+        run: python tests/test_b1_library_common_equivalence.py
+
+      - name: 校验 B3 / B4 / S5 等价性与特征契约
+        run: python tests/test_b_batch_equivalence.py
+
       - name: 校验 2.0 系统安全契约（CSRF / 鉴权 / CSP / SSRF / 路径穿越 / 净化）
         run: python tools/check_security_contracts.py .
 

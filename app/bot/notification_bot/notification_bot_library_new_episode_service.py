@@ -9,6 +9,7 @@ from app.infra.config.media_server_settings import (
     get_media_server_main_public_or_host,
 )
 from app.infra.config.notification_settings import get_enable_library_notify
+from app.bot.notification_bot import _library_common
 
 
 logger = logging.getLogger("uvicorn")
@@ -56,41 +57,21 @@ def set_dependency_providers(
     logger_provider=None,
     bark_push_provider=None,
 ):
-    global _enable_library_notify_provider
-    global _media_quality_info_provider
-    global _media_server_main_public_or_host_provider
-    global _media_server_host_provider
-    global _notify_channels_provider
-    global _get_plugin_provider
-    global _report_cover_url_provider
-    global _datetime_provider
-    global _re_provider
-    global _logger_provider
-    global _bark_push_provider
-
-    if enable_library_notify_provider is not None:
-        _enable_library_notify_provider = enable_library_notify_provider
-    if media_quality_info_provider is not None:
-        _media_quality_info_provider = media_quality_info_provider
-    if media_server_main_public_or_host_provider is not None:
-        _media_server_main_public_or_host_provider = media_server_main_public_or_host_provider
-    if media_server_host_provider is not None:
-        _media_server_host_provider = media_server_host_provider
-    if notify_channels_provider is not None:
-        _notify_channels_provider = notify_channels_provider
-    if get_plugin_provider is not None:
-        _get_plugin_provider = get_plugin_provider
-    if report_cover_url_provider is not None:
-        _report_cover_url_provider = report_cover_url_provider
-    if datetime_provider is not None:
-        _datetime_provider = datetime_provider
-    if re_provider is not None:
-        _re_provider = re_provider
-    if logger_provider is not None:
-        _logger_provider = logger_provider
-    if bark_push_provider is not None:
-        _bark_push_provider = bark_push_provider
-
+    """2.0 B1：装配样板收敛到 _library_common，签名与逐项覆盖语义不变。"""
+    _library_common.apply_dependency_providers(
+        globals(),
+        enable_library_notify_provider=enable_library_notify_provider,
+        media_quality_info_provider=media_quality_info_provider,
+        media_server_main_public_or_host_provider=media_server_main_public_or_host_provider,
+        media_server_host_provider=media_server_host_provider,
+        notify_channels_provider=notify_channels_provider,
+        get_plugin_provider=get_plugin_provider,
+        report_cover_url_provider=report_cover_url_provider,
+        datetime_provider=datetime_provider,
+        re_provider=re_provider,
+        logger_provider=logger_provider,
+        bark_push_provider=bark_push_provider,
+    )
 
 def _format_episode_suffix(episodes):
     season_groups = defaultdict(list)
@@ -132,14 +113,7 @@ def _format_episode_suffix(episodes):
 
 
 def _format_overview(series_info):
-    overview = str(series_info.get("Overview") or "")
-    overview = _re_provider().sub(r"<[^>]+>", "", overview).strip()
-    if not overview:
-        overview = "暂无简介..."
-    if len(overview) > 150:
-        overview = overview[:140] + "..."
-    return overview
-
+    return _library_common.format_overview(series_info, _re_provider())
 
 def _get_quality_info(episodes):
     quality_info = {"quality": "", "video_codec": "", "audio_codec": "", "resolution": "", "hdr": "", "quality_icon": ""}
@@ -152,11 +126,10 @@ def _get_quality_info(episodes):
 
 
 def _get_base_url():
-    base_url = _media_server_main_public_or_host_provider()() or _media_server_host_provider()()
-    if base_url and not base_url.startswith(("http://", "https://")):
-        base_url = "https://" + base_url
-    return base_url
-
+    return _library_common.get_base_url(
+        _media_server_main_public_or_host_provider(),
+        _media_server_host_provider(),
+    )
 
 def _render_caption(tpl_vars, series_name, title_suffix, year, rating, overview):
     try:
@@ -173,16 +146,7 @@ def _render_caption(tpl_vars, series_name, title_suffix, year, rating, overview)
 
 
 def _get_platform(channels):
-    return (
-        "all"
-        if "tg_bot" in channels and "wecom" in channels
-        else "tg"
-        if "tg_bot" in channels
-        else "wecom"
-        if "wecom" in channels
-        else "none"
-    )
-
+    return _library_common.get_platform(channels)
 
 def _bark_notify_new_episode(data):
     """系统级 Bark 剧集入库通知：由 Bark 自身开关控制，失败绝不影响主流程。

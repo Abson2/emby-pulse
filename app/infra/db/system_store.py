@@ -45,5 +45,27 @@ class SystemStore:
             conn.commit()
             return cur.rowcount
 
+    def execute_many(self, statements) -> int:
+        """2.0 批次 B4：多条写语句共用一次连接与一次事务（纯加法）。
+
+        `statements` 是 ``(sql, params)`` 序列；返回最后一条语句的 rowcount。
+        任一句失败则整批回滚并抛出，避免留下半批数据。
+
+        该方法**不替换** ``execute()``：既有调用点每条语句独立提交的语义
+        完全不变，只有新增的批量场景才显式使用它，保证 100% 行为等价。
+        """
+        rowcount = 0
+        with self.connect() as conn:
+            cur = conn.cursor()
+            try:
+                for sql, params in statements:
+                    cur.execute(sql, params)
+                    rowcount = cur.rowcount
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        return rowcount
+
 
 system_store = SystemStore()

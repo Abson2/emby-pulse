@@ -109,6 +109,18 @@ def load_notification_bot_methods() -> dict:
     return ns
 
 
+def load_library_common_stub():
+    """2.0 B1：两个 handler service 的注入函数现在委托 `_library_common`。
+
+    本脚本用 AST 抽取源码、会忽略 import 语句，因此这里加载真实公共模块的
+    实现注入受控命名空间，保证断言跑的是产品代码而不是复刻桩。
+    """
+    import runpy
+
+    path = os.path.join(ROOT, "app/bot/notification_bot/_library_common.py")
+    return types.SimpleNamespace(**runpy.run_path(path))
+
+
 def load_handler_service(rel: str) -> dict:
     """保留模块顶层函数与赋值，忽略 import；缺失的全局名由 ns 预置。"""
     tree = ast.parse(_src(rel))
@@ -121,6 +133,7 @@ def load_handler_service(rel: str) -> dict:
         "re": re,
         "logging": logging,
         "defaultdict": collections.defaultdict,
+        "_library_common": load_library_common_stub(),
         "REPORT_COVER_URL": "",
         "get_enable_library_notify": lambda: False,
         "get_media_server_host": lambda: "",

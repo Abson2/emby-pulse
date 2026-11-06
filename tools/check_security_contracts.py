@@ -139,6 +139,12 @@ check("网页端存储仍保留 sanitize_html / sanitize_rich_html（不削弱 X
       and "sanitize_html(data.content, max_length=5000)" in msg
       and "sanitize_rich_html(data.content, max_length=50000)" in ann)
 
+check("S5 style 属性危险 CSS 值被清洗（合法声明不变）",
+      "_RICH_UNSAFE_STYLE" in secu and "url\\s*\\([^)]*\\)" in secu)
+check("S6 表名 f-string 拼接走集中注册表（非用户输入，防御性）",
+      "TABLE_SCHEMAS" in read("app/infra/db/schema_registry.py")
+      and "def ensure_registered_table(" in read("app/infra/db/schema_bootstrap.py"))
+
 print("== 9. 行为级净化断言（直接执行 security_utils） ==")
 spec = importlib.util.spec_from_file_location(
     "ep_sec_contract", os.path.join(ROOT, "app/core/security_utils.py"))

@@ -251,6 +251,7 @@ DDL：app/infra/db/schema_registry.py <── schema_bootstrap.ensure_registered
 | `docs/REFACTOR_2.0.md` | 本文档 |
 
 > `2.0.1` 补丁版按同一清单同步为 `2.0.1`（`APP_VERSION=2.0.1-hardened` / `IMAGE_TAG:-2.0.1` / `request_app.js?v=2.0.1` / `## 2.0.1` / README 主页收敛），`v2.0` tag 保持不动。
+> 后续主线优化批次（第 8 节）**不改版本号、不发版**，只推进架构优化本身。
 
 **兼容性**：所有旧版本标签（`v1.9.10` 等）与 `IMAGE_TAG` 回退路径保持不变；对外 API、模板变量、配置键、DB schema 均不改。
 
@@ -339,3 +340,40 @@ C 批建议等 CI 具备 pytest + FastAPI 集成环境后再启动。
 `v2.0` 已发布、tag 与 GHCR 镜像均已推送。本批先作为 `main` 上的收尾提交（`2a94e83`），随后发布 **`v2.0.1` 零风险补丁版**：按第 5 节清单把 6 个版本点从 `2.0` 同步到 `2.0.1`（含 `request_app.js?v=2.0.1` 缓存破坏），并同步 `verify_patches.py` / 等价性测试的版本断言。**`v2.0` tag 不重推**（重推会让已部署实例、Release 与镜像摘要漂移），`IMAGE_TAG=1.9.10` 回退路径不变。
 
 同时按用户要求把 **GitHub 主页 README 收敛**为「功能清单 + 使用说明」：保留原 4 段式结构，删除按版本罗列的修复史与各版本根因 / 症状说明，详细更新说明一律指向 [CHANGELOG](../CHANGELOG.md) 对应版本与 GitHub Releases；`verify_patches.py` 新增「问题 18」组把该约定固化为 CI 断言。
+
+---
+
+## 8. 主线优化第三批（v2.0.1 之后：架构优化本体）
+
+方向校准：主线是「把项目优化成 2.0」——消除重复、抽离公共逻辑、解耦、提升效率；补丁发版 / 主页文档 / CI 确认 / 任务状态清理均为支线。本批**只动优化本体**：不改版本号、不改 README、不打 tag、不改对外接口，每批独立可 revert。
+
+### 8.1 本批落地
+
+| 批次 | 改动 | 等价性证明 |
+| --- | --- | --- |
+| **B1** | 新建 `app/bot/notification_bot/_library_common.py`；两个双胞胎 service 的 provider 装配样板（48 行 → 15 行）与 `_format_overview` / `_format_type` / `_get_base_url` / `_get_platform` 四个同构纯函数收敛为薄包装。两文件 291+329 → 249+293 行，**净减 78 行重复** | `tests/test_b1_library_common_equivalence.py` 53/0：签名 11 个 keyword-only 参数不变、逐项覆盖 / None 不覆盖、**两模块 provider 状态互不串扰**、纯函数与旧实现逐字复制的 oracle 多组输入一致、后半段 handler / Bark / 用户级广播静态契约完整 |
+| **B3** | 新建 `app/infra/db/ensure_once.py` 通用门控（按 key 缓存 / 异常不写缓存 / reset / 线程锁）；`message_dao.ensure_announcement_tables()` 迁入，**保留** `_announcement_tables_ready` / `_announcement_tables_lock` / `reset_announcement_tables_cache()` 全部对外符号 | 既有 2.0 等价性测试中 DDL 连接次数 / 换库失效 / 异常重试 / reset 断言全部保持 88/0；B 批脚本另测门控本身 |
+| **B4** | `SystemStore.execute_many()` 纯加法：多条写语句共用 1 连接 1 事务，失败整批回滚；`execute()` 逐条提交语义**一行未动** | 内存 SQLite 验证两条语句 1 次连接、失败批次零残留、`execute()` 源码仍为原实现 |
+| **S5** | `sanitize_rich_html` 对 `style` 清洗 `url()` / `expression()` / `@import` / `behavior:` / `-moz-binding`，合法声明逐字不变（只收紧非法输入，符合等价性契约第 2 条） | 合法 `style` 输出比对、4 类危险值剥离、script / onerror / javascript: 与 `<p>欢迎大家</p>` 回归全绿 |
+| **S6 + 测试** | 静态断言「表名 f-string 走集中注册表」；新增两个纯标准库回归、CI 接入 2 步、`verify_patches.py` 问题 19 组、安全契约 S5/S6 断言 | 全套 16 项回归 0 失败 |
+| 兼容修复 | `check_notification_bot_subscription.py` 的 AST 抽取命名空间补入 `_library_common` **真实实现**（该脚本忽略 import 语句） | 既有订阅链路 29/0 恢复全绿 |
+
+**关键设计**：B1 的公共模块**不持有任何 provider 状态**，`apply_dependency_providers(globals(), ...)` 只写调用方命名空间，因此 `bot_service.py` 分别给两个 service 注入的桩仍各自独立；这是双胞胎 service 能安全抽离的前提。
+
+### 8.2 剩余项与客观约束（不编造完成）
+
+| 项 | 状态 | 为什么本批不动 |
+| --- | --- | --- |
+| **B2 前端公共 JS** | 前置证据已实测 | 8 处 `escapeHtml` 实测为 **4 类不同实现**：DOM `textContent`、DOM `innerText`、正则 `&#039;`、正则 `&#39;`，且对 falsy 值 / 非字符串输入处理不同；三版 `parseMarkdown` 也不一致。**删除或统一定义必然改变页面输出**，与「合法输入输出逐字不变」直接冲突。需 DOM 级契约测试逐页灰度，纯标准库 CI 做不到 |
+| **B5 写入侧统一净化** | 未动 | `class="ql-align-*"` 等 Quill 属性在净化白名单外，会改变公告对齐格式（合法输入被改） |
+| **B3 余下 39 个 `ensure_*`** | 未动 | 部分带运行时动态加列 / 数据迁移语义，套缓存会破坏；需先逐个分类「纯建表 / 带迁移」。通用门控已就位，后续可低风险接入 |
+| **P1 连接复用（B4 完全版）** | 部分 | 本批只加 `execute_many()`；把既有 `execute()` 改成复用连接会改变 WAL 并发与事务边界，需并发写压测 |
+| **P6 / P7 / C1–C6** | 未动 | C5 移除 `unsafe-eval` 会让 Alpine 表达式直接失效（**功能破坏**）；C1 牵动 116 处 provider 与全部边界测试；C3 拆分 `request_app.js` 历史上踩过 `x-data` 作用域与 JS 缓存坑。均需 pytest + FastAPI 集成环境逐字节证明等价 |
+| `report_service` / `stats_queries` N+1 | 待核查 | 静态分析未逐条核实，不做无依据结论 |
+
+### 8.3 完成度口径
+
+- **A 批低风险清理：100%**。
+- **B 批**：B1 完成、B3 完成「通用门控 + 首个接入」、B4 完成纯加法部分、S5 完成；B2 / B5 / B3 余量因等价性无法证明而按硬约束暂停。
+- **C 批：0%，仅规划**。这不是遗漏，而是「100% 功能保留」在纯标准库 CI 条件下的必然边界；强行执行会产出无法证明等价的全库改动。
+- 所有落地项均按「先建基线 → 改动 → 纯标准库等价性验证 → 全量回归 → 独立提交」推进，可单独 revert。

@@ -719,6 +719,50 @@ check("主页版本锁定与实际 compose 一致",
       "IMAGE_TAG:-2.0.1" in readme
       and "ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-2.0.1}" in readme)
 
+print("== 问题 19: 2.0 主线优化 B 批（公共逻辑抽离 / 性能 / 安全） ==")
+LIB_BASE = "app/bot/notification_bot/"
+item19 = read(LIB_BASE + "notification_bot_library_new_item_service.py")
+ep19 = read(LIB_BASE + "notification_bot_library_new_episode_service.py")
+check("B1 新增入库通知公共模块",
+      os.path.isfile(os.path.join(ROOT, LIB_BASE + "_library_common.py"))
+      and "class _RichHtmlSanitizer" not in read(LIB_BASE + "_library_common.py"))
+check("B1 两个 service 均接入公共模块且对外符号保留",
+      all("from app.bot.notification_bot import _library_common" in s
+          and "def set_dependency_providers(" in s
+          and "def _get_base_url():" in s
+          and "def _get_platform(channels):" in s
+          for s in (item19, ep19))
+      and "def handle_library_new_item(bot, item):" in item19
+      and "def handle_library_new_episode(bot, data):" in ep19)
+check("B1 装配门控保持各模块状态独立（不共享全局 provider）",
+      all("apply_dependency_providers(" in s and "globals()" in s
+          for s in (item19, ep19))
+      and "_PROVIDER_ATTRS" in read(LIB_BASE + "_library_common.py")
+      and "namespace[attr] = value" in read(LIB_BASE + "_library_common.py"))
+check("B3 新增通用 EnsureOnce 门控（异常不写缓存 / reset / 按 key 失效）",
+      "class EnsureOnce" in read("app/infra/db/ensure_once.py")
+      and "def reset(" in read("app/infra/db/ensure_once.py")
+      and "def run(" in read("app/infra/db/ensure_once.py"))
+check("B3 公告表缓存迁到通用门控且原符号不变",
+      all(s in read("app/domains/notifications/message_dao.py") for s in (
+          "from app.infra.db.ensure_once import EnsureOnce",
+          "_announcement_tables_ready", "_announcement_tables_lock",
+          "def reset_announcement_tables_cache()", "def ensure_announcement_tables()")))
+check("B4 新增 execute_many（单事务/回滚）且 execute 原语义不变",
+      "def execute_many(self, statements) -> int:" in read("app/infra/db/system_store.py")
+      and "conn.rollback()" in read("app/infra/db/system_store.py")
+      and "def execute(self, sql: str, params=()) -> int:" in read("app/infra/db/system_store.py"))
+check("S5 富文本 style 危险值清洗为纯收紧（合法声明不动）",
+      "_RICH_UNSAFE_STYLE" in read("app/core/security_utils.py"))
+check("B 批等价性回归接入 CI",
+      all(s in ci for s in (
+          "tests/test_b1_library_common_equivalence.py",
+          "tests/test_b_batch_equivalence.py")))
+check("B 批不触碰对外接口与用户级通知入口",
+      all(s in read("app/domains/users/user_notify_service.py") for s in (
+          "def push_user_notify(", "def notify_users_by_flag(",
+          "def notify_request_users(")))
+
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:
     for f in FAILS:

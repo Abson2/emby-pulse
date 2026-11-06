@@ -1,5 +1,6 @@
 import threading
 
+from app.infra.db.ensure_once import EnsureOnce
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
@@ -12,12 +13,14 @@ ANNOUNCEMENT_TABLES = ("announcements", "announcement_reads")
 # 锁保证并发请求不重复执行；显式 reset 钩子供测试与运维使用。
 _announcement_tables_lock = threading.Lock()
 _announcement_tables_ready: dict = {}
+# 2.0 B3：缓存门控收敛到通用 EnsureOnce；传入原有 lock / ready 字典，
+# 模块级变量名与语义全部保留，对外行为不变。
+_announcement_bootstrap = EnsureOnce(_announcement_tables_lock, _announcement_tables_ready)
 
 
 def reset_announcement_tables_cache() -> None:
     """清空公告表 bootstrap 缓存（测试 / 迁移 / 数据库被外部重建时调用）。"""
-    with _announcement_tables_lock:
-        _announcement_tables_ready.clear()
+    _announcement_bootstrap.reset()
 
 
 def ensure_msg_tables() -> None:
@@ -296,17 +299,15 @@ def set_users_unmuted(user_ids) -> None:
 
 
 def ensure_announcement_tables() -> None:
-    db_path = system_store.db_path
-    with _announcement_tables_lock:
-        if _announcement_tables_ready.get(db_path):
-            return
+    def _bootstrap():
         with system_store.connect() as conn:
             cursor = conn.cursor()
             for table_name in ANNOUNCEMENT_TABLES:
                 ensure_registered_table(cursor, table_name)
             conn.commit()
-        # 仅在 DDL 全部成功后标记，失败时下次调用会重试
-        _announcement_tables_ready[db_path] = True
+
+    # 仅在 DDL 全部成功后标记，失败时下次调用会重试；按 db_path 缓存换库自动失效
+    _announcement_bootstrap.run(system_store.db_path, _bootstrap)
 
 
 def list_announcements(active_only: bool = False):

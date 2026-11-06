@@ -175,6 +175,14 @@ _RICH_ALLOWED_ATTRS = {
 }
 _RICH_SAFE_URL_PREFIXES = ('http://', 'https://', 'mailto:', '/', '#')
 
+# 2.0 安全 S5：style 属性允许保留，但清洗可被引擎执行 / 外链加载的 CSS 值。
+# 仅收紧非法或恶意输入；合法的 color / text-align / font-* 等声明逐字不变。
+_RICH_UNSAFE_STYLE = re.compile(
+    r'url\s*\([^)]*\)|expression\s*\([^)]*\)|@import'
+    r'|behavior\s*:|vbscript\s*:|-moz-binding\s*:',
+    re.IGNORECASE,
+)
+
 
 class _RichHtmlSanitizer(HTMLParser):
     """依赖标准库、无第三方依赖的富文本净化器。
@@ -202,6 +210,9 @@ class _RichHtmlSanitizer(HTMLParser):
                 lowered = value.strip().lower()
                 if lowered and not lowered.startswith(_RICH_SAFE_URL_PREFIXES):
                     continue
+            if name == 'style' and value:
+                # 危险 CSS 值整体移除，剩余合法声明保持原样
+                value = _RICH_UNSAFE_STYLE.sub('', value)
             safe.append(f' {name}="{html.escape(value or "", quote=True)}"')
         return ''.join(safe)
 

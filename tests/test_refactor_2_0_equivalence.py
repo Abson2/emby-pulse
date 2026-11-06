@@ -120,6 +120,12 @@ def install_app_stub_packages():
 print("== 1. 插件日志：新旧实现逐行等价（A1/A2） ==")
 install_app_stub_packages()
 
+# 2.0 B3：message_dao 的缓存门控改用通用 EnsureOnce，测试环境注册真实实现
+_ensure_once_mod = load_module(
+    "app.infra.db.ensure_once",
+    os.path.join(ROOT, "app/infra/db/ensure_once.py"))
+sys.modules["app.infra.db"].ensure_once = _ensure_once_mod
+
 ddl_calls: list[str] = []
 store_new = FakeStore()
 sys.modules["app.infra.db.schema_bootstrap"] = types.ModuleType("app.infra.db.schema_bootstrap")
