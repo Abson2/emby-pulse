@@ -11,6 +11,8 @@
                  x-data="{
                     avatarUploading: false, avatarMsg: '',
                     pwModalOpen: false, oldPw: '', newPw: '', confirmPw: '', pwMsg: '', pwLoading: false,
+                    notifySettingsModalOpen: false, notifySettingsLoading: false, notifySettingsSaving: false, notifyMsg: '',
+                    notifySettings: { channel: 'none', bark_url: '', webhook_url: '', notify_new_item: false, notify_admin_message: false, notify_announcement: false, notify_wishlist: false },
                     async uploadAvatar(e) {
                         const file = e.target.files[0];
                         if (!file) return;
@@ -40,7 +42,33 @@
                             if (d.status === 'success') { this.oldPw=''; this.newPw=''; this.confirmPw=''; setTimeout(() => this.pwModalOpen = false, 1500); }
                         } catch(_) { this.pwMsg = '网络异常'; }
                         this.pwLoading = false;
-                    }
+                    },
+                    async loadNotifySettings() {
+                        this.notifySettingsModalOpen = true; this.notifySettingsLoading = true; this.notifyMsg = '';
+                        try {
+                            const res = await fetch('/api/user/notify_settings');
+                            const d = await res.json();
+                            if (d.status === 'success' && d.data) {
+                                this.notifySettings = Object.assign({
+                                    channel: 'none', bark_url: '', webhook_url: '',
+                                    notify_new_item: false, notify_admin_message: false,
+                                    notify_announcement: false, notify_wishlist: false
+                                }, d.data);
+                            }
+                        } catch(_) { this.notifyMsg = '加载失败'; }
+                        this.notifySettingsLoading = false;
+                    },
+                    async saveNotifySettings() {
+                        this.notifySettingsSaving = true; this.notifyMsg = '';
+                        try {
+                            const res = await fetch('/api/user/notify_settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(this.notifySettings) });
+                            const d = await res.json();
+                            this.notifyMsg = d.message || '操作完成';
+                            if (d.status === 'success') { setTimeout(() => this.notifySettingsModalOpen = false, 1200); }
+                        } catch(_e) { this.notifyMsg = '网络异常'; }
+                        this.notifySettingsSaving = false;
+                    },
+                    setNotifyChannel(c) { this.notifySettings.channel = c; }
                  }">
                 <div class="absolute inset-0 bg-gradient-to-b from-brand-500/5 to-transparent z-0"></div>
                 <!-- 头像（点击上传）+ 修改密码小按钮 -->
@@ -410,6 +438,9 @@
                     <button @click="libSettingsModalOpen = true; loadLibrarySettings()" class="py-2.5 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-400 dark:hover:bg-indigo-500/20 text-xs font-bold transition flex flex-col items-center justify-center border border-indigo-200 dark:border-indigo-500/20"><i class="fa-solid fa-photo-film text-lg mb-1"></i> 媒体库设置</button>
                     <button @click="entertainmentModalOpen = true" class="py-2.5 rounded-xl bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-500/10 dark:text-purple-400 dark:hover:bg-purple-500/20 text-xs font-bold transition flex flex-col items-center justify-center border border-purple-200 dark:border-purple-500/20"><i class="fa-solid fa-gamepad text-lg mb-1"></i> 娱乐功能</button>
                 </div>
+
+                <!-- 🔥 用户级通知设置（与管理端 Bark 互不干预） -->
+                <button @click="loadNotifySettings()" class="w-full mt-2 py-2.5 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20 text-xs font-bold transition flex flex-col items-center justify-center border border-emerald-200 dark:border-emerald-500/20"><i class="fa-solid fa-bell text-lg mb-1"></i> 通知设置</button>
                 
             </div>
 
@@ -1361,6 +1392,121 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- 🔥 用户级通知设置弹窗（10308「我的 → 通知设置」，与管理端 Bark 互不干预） -->
+<template x-teleport="body">
+    <div x-show="notifySettingsModalOpen" class="fixed inset-0 z-[300] flex items-center justify-center p-4" x-cloak>
+        <div x-show="notifySettingsModalOpen" x-transition.opacity @click="notifySettingsModalOpen = false" class="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"></div>
+        <div x-show="notifySettingsModalOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-10 scale-95" x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+             class="relative w-full max-w-md bg-white dark:bg-[#111] border border-slate-200 dark:border-white/5 rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+
+            <!-- 标题 -->
+            <div class="p-5 border-b border-slate-100 dark:border-white/5 flex justify-between items-center shrink-0 bg-slate-50/50 dark:bg-white/5">
+                <div>
+                    <h3 class="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-bell text-emerald-500"></i> 通知设置
+                    </h3>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">选择推送渠道与接收内容（仅影响你本人）</p>
+                </div>
+                <button @click="notifySettingsModalOpen = false" class="w-8 h-8 rounded-full bg-slate-200/50 dark:bg-white/10 text-slate-500 hover:text-rose-500 flex justify-center items-center transition-colors">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            <!-- 内容 -->
+            <div class="flex-1 h-0 overflow-y-auto p-4 bg-slate-50 dark:bg-[#0a0a0a] space-y-4">
+                <div x-show="notifySettingsLoading" class="flex flex-col items-center justify-center py-12 gap-3">
+                    <i class="fa-solid fa-circle-notch fa-spin text-2xl text-emerald-500"></i>
+                    <div class="text-sm text-slate-500">加载中...</div>
+                </div>
+
+                <div x-show="!notifySettingsLoading">
+                    <!-- 渠道选择 -->
+                    <div>
+                        <div class="text-[11px] font-black tracking-widest uppercase text-slate-400 mb-2">推送渠道（二选一）</div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button @click="setNotifyChannel('bark')" :class="notifySettings.channel === 'bark' ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-white/5 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10'" class="py-2.5 rounded-xl text-xs font-bold transition flex flex-col items-center justify-center">
+                                <i class="fa-solid fa-bell text-lg mb-1"></i> Bark 链接
+                            </button>
+                            <button @click="setNotifyChannel('webhook')" :class="notifySettings.channel === 'webhook' ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-white/5 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10'" class="py-2.5 rounded-xl text-xs font-bold transition flex flex-col items-center justify-center">
+                                <i class="fa-solid fa-webhook text-lg mb-1"></i> 自定义 Webhook
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Bark 链接输入 -->
+                    <div x-show="notifySettings.channel === 'bark'">
+                        <label class="text-[11px] font-black tracking-widest uppercase text-slate-400 mb-1.5 block">Bark 推送链接</label>
+                        <input type="text" x-model="notifySettings.bark_url" placeholder="https://你的Bark服务/DeviceKey" class="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-[13px] outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <!-- Webhook 输入 -->
+                    <div x-show="notifySettings.channel === 'webhook'">
+                        <label class="text-[11px] font-black tracking-widest uppercase text-slate-400 mb-1.5 block">Webhook 地址</label>
+                        <input type="text" x-model="notifySettings.webhook_url" placeholder="https://你的Webhook接收地址" class="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-[13px] outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <!-- 接收内容开关 -->
+                    <div>
+                        <div class="text-[11px] font-black tracking-widest uppercase text-slate-400 mb-2">接收内容</div>
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between p-3 bg-white dark:bg-white/5 rounded-xl border border-slate-100 dark:border-white/5">
+                                <div>
+                                    <div class="text-sm font-bold text-slate-800 dark:text-white">新片入库通知</div>
+                                    <div class="text-[10px] text-slate-400">新影视入库时提醒</div>
+                                </div>
+                                <button @click="notifySettings.notify_new_item = !notifySettings.notify_new_item" :class="notifySettings.notify_new_item ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'" class="w-11 h-6 rounded-full relative transition-colors shrink-0">
+                                    <span :class="notifySettings.notify_new_item ? 'translate-x-5' : 'translate-x-0.5'" class="absolute top-0.5 left-0 w-5 h-5 bg-white rounded-full transition-transform"></span>
+                                </button>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-white dark:bg-white/5 rounded-xl border border-slate-100 dark:border-white/5">
+                                <div>
+                                    <div class="text-sm font-bold text-slate-800 dark:text-white">管理员消息</div>
+                                    <div class="text-[10px] text-slate-400">管理员在消息界面发给你的消息</div>
+                                </div>
+                                <button @click="notifySettings.notify_admin_message = !notifySettings.notify_admin_message" :class="notifySettings.notify_admin_message ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'" class="w-11 h-6 rounded-full relative transition-colors shrink-0">
+                                    <span :class="notifySettings.notify_admin_message ? 'translate-x-5' : 'translate-x-0.5'" class="absolute top-0.5 left-0 w-5 h-5 bg-white rounded-full transition-transform"></span>
+                                </button>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-white dark:bg-white/5 rounded-xl border border-slate-100 dark:border-white/5">
+                                <div>
+                                    <div class="text-sm font-bold text-slate-800 dark:text-white">全站公告</div>
+                                    <div class="text-[10px] text-slate-400">管理员发布的全站公告</div>
+                                </div>
+                                <button @click="notifySettings.notify_announcement = !notifySettings.notify_announcement" :class="notifySettings.notify_announcement ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'" class="w-11 h-6 rounded-full relative transition-colors shrink-0">
+                                    <span :class="notifySettings.notify_announcement ? 'translate-x-5' : 'translate-x-0.5'" class="absolute top-0.5 left-0 w-5 h-5 bg-white rounded-full transition-transform"></span>
+                                </button>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-white dark:bg-white/5 rounded-xl border border-slate-100 dark:border-white/5">
+                                <div>
+                                    <div class="text-sm font-bold text-slate-800 dark:text-white">心愿清单状态变动</div>
+                                    <div class="text-[10px] text-slate-400">我的心愿状态变化时提醒（有变动才推）</div>
+                                </div>
+                                <button @click="notifySettings.notify_wishlist = !notifySettings.notify_wishlist" :class="notifySettings.notify_wishlist ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'" class="w-11 h-6 rounded-full relative transition-colors shrink-0">
+                                    <span :class="notifySettings.notify_wishlist ? 'translate-x-5' : 'translate-x-0.5'" class="absolute top-0.5 left-0 w-5 h-5 bg-white rounded-full transition-transform"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-[10px] text-slate-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-info-circle"></i> 推送内容不含网址：反代后无法推送最新网址，且可能暴露真实端口。
+                    </div>
+                </div>
+            </div>
+
+            <!-- 保存 -->
+            <div class="p-4 border-t border-slate-100 dark:border-white/5 shrink-0 bg-white dark:bg-[#1C1C1E]">
+                <div x-show="notifyMsg" x-text="notifyMsg" class="text-[11px] mb-2 text-center" :class="notifyMsg.includes('已保存') ? 'text-emerald-500' : 'text-rose-500'"></div>
+                <button @click="saveNotifySettings()" :disabled="notifySettingsSaving" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-xl text-sm font-bold transition flex items-center justify-center gap-2">
+                    <i x-show="!notifySettingsSaving" class="fa-solid fa-check"></i>
+                    <i x-show="notifySettingsSaving" class="fa-solid fa-spinner fa-spin"></i>
+                    <span x-text="notifySettingsSaving ? '保存中...' : '保存设置'"></span>
+                </button>
             </div>
         </div>
     </div>

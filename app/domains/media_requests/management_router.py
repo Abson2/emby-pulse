@@ -472,6 +472,15 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
                             img_url = f"https://image.tmdb.org/t/p/w300{poster}"
 
                     msg = f"{status_icon} <b>求片状态更新</b>\n\n📺 <b>内容：</b>{title_text} ({year})\n📢 <b>状态：</b>{status_text}"
+                    # 用户级「心愿清单状态变动」推送（仅本批有状态变动的工单触发，有变动才推）
+                    try:
+                        from app.domains.users import user_notify_service as _uns
+                        _uns.notify_request_users(
+                            ni["tmdb_id"], ni["season"], "notify_wishlist",
+                            f"求片状态更新：{title_text}", status_text,
+                        )
+                    except Exception as _e:
+                        logger.warning(f"[用户通知] 心愿清单状态变动推送失败: {_e}")
 
                     # 发送通知给所有请求该片的用户
                     for u in ni['users']:

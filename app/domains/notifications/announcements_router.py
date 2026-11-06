@@ -72,6 +72,17 @@ def create_announcement(data: AnnouncementModel, request: Request):
         admin_name,
     )
 
+    # 用户级通知：全站公告发布后，向开启「全站公告」开关的用户广播（正文取纯文本，不含网址）
+    try:
+        from app.domains.users import user_notify_service as _uns
+        _uns.notify_users_by_flag(
+            "notify_announcement",
+            sanitize_html(data.title),
+            sanitize_html(data.content, max_length=2000),
+        )
+    except Exception as _e:
+        print(f"[公告] 用户级通知推送失败: {_e}", flush=True)
+
     return {"status": "success", "message": "公告创建成功", "id": ann_id}
 
 

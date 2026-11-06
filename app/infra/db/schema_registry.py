@@ -843,7 +843,8 @@ TABLE_ALTERS = {
         "ALTER TABLE users_meta ADD COLUMN tags TEXT DEFAULT ''",
         "ALTER TABLE users_meta ADD COLUMN emby_pw_hash TEXT DEFAULT ''",
         "ALTER TABLE users_meta ADD COLUMN admin_enabled_folders TEXT",
-        "ALTER TABLE users_meta ADD COLUMN hidden_libraries TEXT DEFAULT ''"
+        "ALTER TABLE users_meta ADD COLUMN hidden_libraries TEXT DEFAULT ''",
+        "ALTER TABLE users_meta ADD COLUMN user_notify_settings TEXT DEFAULT ''"
     ],
     "invitations": [
         "ALTER TABLE invitations ADD COLUMN template_user_id TEXT",

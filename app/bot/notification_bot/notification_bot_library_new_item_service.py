@@ -117,6 +117,32 @@ def _get_base_url():
     return base_url
 
 
+def _build_tpl_vars(item):
+    """构造「自定义通知模板」插件渲染所需的变量（Bark / TG / 企业微信 共用）。"""
+    name = item.get("Name", "未知")
+    year = item.get("ProductionYear", "")
+    rating = item.get("CommunityRating", "N/A")
+    overview = _format_overview(item)
+    type_raw = item.get("Type")
+    type_cn, type_icon = _format_type(type_raw)
+    quality_info = _media_quality_info_provider()(item.get("Id", ""))
+    return {
+        "name": name,
+        "type_icon": type_icon,
+        "type_cn": type_cn,
+        "year": year,
+        "rating": rating,
+        "time": _datetime_provider().datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "overview": overview,
+        "quality": quality_info.get("quality", ""),
+        "quality_icon": quality_info.get("quality_icon", "🎬"),
+        "video_codec": quality_info.get("video_codec", ""),
+        "audio_codec": quality_info.get("audio_codec", ""),
+        "resolution": quality_info.get("resolution", ""),
+        "hdr": quality_info.get("hdr", ""),
+    }
+
+
 def _render_caption(tpl_vars, type_icon, type_cn, name, year, rating, overview):
     try:
         tpl_plugin = _get_plugin_provider()("notify_template")
@@ -150,24 +176,24 @@ def _bark_notify_new_item(item):
     独立于「入库通知总开关」：Emby 入库事件只要到达这里，Bark 就会按自身
     enabled / notify_library_new 两个开关决定是否推送，避免旧总开关未开启
     导致新通道静默不生效。
+
+    正文直接复用「自定义通知模板」插件（notify_template）渲染，与管理端
+    TG / 企业微信 走同一套风格模板，保证多渠道文案一致。
     """
     try:
-        play_url = ""
-        try:
-            base_url = _get_base_url()
-            if base_url and base_url.startswith(("http://", "https://")):
-                play_url = (f"{base_url}/web/index.html#!/item?id={item.get('Id', '')}"
-                            f"&serverId={item.get('ServerId', '')}")
-        except Exception:
-            play_url = ""
+        tpl_vars = _build_tpl_vars(item)
+        body = _render_caption(
+            tpl_vars, tpl_vars["type_icon"], tpl_vars["type_cn"],
+            tpl_vars["name"], tpl_vars["year"], tpl_vars["rating"], tpl_vars["overview"],
+        )
         res = _bark_push_provider()(
             "library_new",
+            body=body,
             name=str(item.get("Name") or ""),
             item_type=str(item.get("Type") or ""),
             year=item.get("ProductionYear", ""),
             rating=item.get("CommunityRating", ""),
             overview=_format_overview(item),
-            play_url=play_url,
         )
         if res and not res.get("skipped"):
             _logger_provider().info(f"[Bark] 新片入库通知: {res.get('detail')}")
@@ -179,38 +205,34 @@ def handle_library_new_item(bot, item):
     # 系统级 Bark 通道独立于「入库通知总开关」，仅由自身开关控制
     _bark_notify_new_item(item)
 
+    # 用户级通知：新片入库后，向开启「新片入库」开关的用户广播（正文复用模板，不含网址）
+    try:
+        _tpl_vars = _build_tpl_vars(item)
+        _body = _render_caption(
+            _tpl_vars, _tpl_vars["type_icon"], _tpl_vars["type_cn"],
+            _tpl_vars["name"], _tpl_vars["year"], _tpl_vars["rating"], _tpl_vars["overview"],
+        )
+        from app.domains.users import user_notify_service as _uns
+        _uns.notify_users_by_flag("notify_new_item", "新片入库", _body)
+    except Exception as _e:
+        _logger_provider().warning(f"[用户通知] 新片入库广播推送失败: {_e}")
+
     if not _enable_library_notify_provider()():
         return
 
     try:
-        name = item.get("Name", "未知")
-        year = item.get("ProductionYear", "")
-        rating = item.get("CommunityRating", "N/A")
-        overview = _format_overview(item)
-
+        tpl_vars = _build_tpl_vars(item)
+        type_icon = tpl_vars["type_icon"]
+        type_cn = tpl_vars["type_cn"]
+        name = tpl_vars["name"]
+        year = tpl_vars["year"]
+        rating = tpl_vars["rating"]
+        overview = tpl_vars["overview"]
         type_raw = item.get("Type")
-        type_cn, type_icon = _format_type(type_raw)
-
-        quality_info = _media_quality_info_provider()(item.get("Id", ""))
 
         base_url = _get_base_url()
         play_url = f"{base_url}/web/index.html#!/item?id={item['Id']}&serverId={item.get('ServerId','')}"
 
-        tpl_vars = {
-            "name": name,
-            "type_icon": type_icon,
-            "type_cn": type_cn,
-            "year": year,
-            "rating": rating,
-            "time": _datetime_provider().datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "overview": overview,
-            "quality": quality_info.get("quality", ""),
-            "quality_icon": quality_info.get("quality_icon", "🎬"),
-            "video_codec": quality_info.get("video_codec", ""),
-            "audio_codec": quality_info.get("audio_codec", ""),
-            "resolution": quality_info.get("resolution", ""),
-            "hdr": quality_info.get("hdr", ""),
-        }
         caption = _render_caption(tpl_vars, type_icon, type_cn, name, year, rating, overview)
 
         keyboard = None

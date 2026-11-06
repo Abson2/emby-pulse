@@ -43,6 +43,7 @@ def build_user_portal_app(app, request_port: int):
         "/api/pro/status",
         "/api/pro/activate",
         "/api/notifications",
+        "/api/user/notify_settings",
         "/api/pwa/",
         "/api/ping",
         "/api/live",

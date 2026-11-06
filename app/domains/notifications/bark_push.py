@@ -143,11 +143,19 @@ def send(title, body, *, url=None, group=None, sound=None, level=None,
 
 def push_new_library_item(*, name="", series_name="", episode_info="",
                          item_type="", year="", rating="", overview="",
-                         play_url="", config=None, transport=None):
-    """新片入库通知（电影 / 剧集新集共用）。"""
+                         play_url="", body=None, config=None, transport=None):
+    """新片入库通知（电影 / 剧集新集共用）。
+
+    若传入 ``body``（已由「自定义通知模板」插件渲染好的正文），则直接使用，
+    不再内部拼装固定格式——保证 Bark 与管理端 TG / 企业微信 使用同一套风格模板。
+    """
     conf = _runtime_config(config)
     if not _event_allowed(conf, "notify_library_new"):
         return {"ok": True, "skipped": True, "detail": "新片入库 Bark 通知未启用"}
+
+    if body:
+        return send("新片入库", str(body), url=play_url,
+                    config=conf, transport=transport)
 
     display = str(series_name or name or "未知影片")
     suffix = f" {episode_info}" if episode_info else ""

@@ -387,6 +387,17 @@ def send_message(data: SendMessageModel, request: Request):
         sanitize_html(data.content[:100]),
     )
 
+    # 用户级通知：管理员发消息后，推送给该用户（若已开启「管理员消息」开关）
+    try:
+        from app.domains.users import user_notify_service as _uns
+        _uns.push_user_notify(
+            data.user_id, "管理员消息",
+            sanitize_html(data.content, max_length=5000),
+            flag_key="notify_admin_message",
+        )
+    except Exception as _e:
+        print(f"[消息中心] 用户级通知推送失败: {_e}", flush=True)
+
     return {"status": "success", "message": "发送成功"}
 
 

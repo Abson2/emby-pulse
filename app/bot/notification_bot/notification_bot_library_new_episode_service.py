@@ -185,28 +185,46 @@ def _get_platform(channels):
 
 
 def _bark_notify_new_episode(data):
-    """系统级 Bark 剧集入库通知：由 Bark 自身开关控制，失败绝不影响主流程。"""
+    """系统级 Bark 剧集入库通知：由 Bark 自身开关控制，失败绝不影响主流程。
+
+    正文复用「自定义通知模板」插件的 library_new_episode 模板，与 TG / 企业微信
+    风格一致（通过 push_new_library_item 的 body 覆盖实现）。
+    """
     try:
         info = data.get("series_info") or {}
         series_id = data.get("series_id", "")
-        play_url = ""
-        try:
-            base_url = _get_base_url()
-            if base_url and base_url.startswith(("http://", "https://")):
-                play_url = (f"{base_url}/web/index.html#!/item?id={series_id}"
-                            f"&serverId={info.get('ServerId', '')}")
-        except Exception:
-            play_url = ""
+        title_suffix = _format_episode_suffix(data.get("episodes") or [])
+        series_name = info.get("Name", "未知剧集")
+        year = info.get("ProductionYear", "")
+        rating = info.get("CommunityRating", "N/A")
+        overview = _format_overview(info)
+        quality_info = _get_quality_info(data.get("episodes") or [])
+
+        tpl_vars = {
+            "series_name": series_name,
+            "episode_info": title_suffix,
+            "year": year,
+            "rating": rating,
+            "time": _datetime_provider().datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "overview": overview,
+            "quality": quality_info.get("quality", ""),
+            "quality_icon": quality_info.get("quality_icon", "📺"),
+            "video_codec": quality_info.get("video_codec", ""),
+            "audio_codec": quality_info.get("audio_codec", ""),
+            "resolution": quality_info.get("resolution", ""),
+            "hdr": quality_info.get("hdr", ""),
+        }
+        body = _render_caption(tpl_vars, series_name, title_suffix, year, rating, overview)
         res = _bark_push_provider()(
             "library_new",
+            body=body,
             name=str(info.get("Name") or ""),
             series_name=str(info.get("Name") or ""),
-            episode_info=_format_episode_suffix(data.get("episodes") or []),
+            episode_info=title_suffix,
             item_type="Series",
             year=info.get("ProductionYear", ""),
             rating=info.get("CommunityRating", ""),
             overview=_format_overview(info),
-            play_url=play_url,
         )
         if res and not res.get("skipped"):
             _logger_provider().info(f"[Bark] 新片入库通知: {res.get('detail')}")
@@ -217,6 +235,35 @@ def _bark_notify_new_episode(data):
 def handle_library_new_episode(bot, data):
     # 系统级 Bark 通道独立于「入库通知总开关」，仅由自身开关控制
     _bark_notify_new_episode(data)
+
+    # 用户级通知：新剧集入库后，向开启「新片入库」开关的用户广播（正文复用模板，不含网址）
+    try:
+        info = data.get("series_info") or {}
+        title_suffix = _format_episode_suffix(data.get("episodes") or [])
+        series_name = info.get("Name", "未知剧集")
+        year = info.get("ProductionYear", "")
+        rating = info.get("CommunityRating", "N/A")
+        overview = _format_overview(info)
+        quality_info = _get_quality_info(data.get("episodes") or [])
+        _tpl_vars = {
+            "series_name": series_name,
+            "episode_info": title_suffix,
+            "year": year,
+            "rating": rating,
+            "time": _datetime_provider().datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "overview": overview,
+            "quality": quality_info.get("quality", ""),
+            "quality_icon": quality_info.get("quality_icon", "📺"),
+            "video_codec": quality_info.get("video_codec", ""),
+            "audio_codec": quality_info.get("audio_codec", ""),
+            "resolution": quality_info.get("resolution", ""),
+            "hdr": quality_info.get("hdr", ""),
+        }
+        _body = _render_caption(_tpl_vars, series_name, title_suffix, year, rating, overview)
+        from app.domains.users import user_notify_service as _uns
+        _uns.notify_users_by_flag("notify_new_item", "新片入库", _body)
+    except Exception as _e:
+        _logger_provider().warning(f"[用户通知] 新剧集入库广播推送失败: {_e}")
 
     if not _enable_library_notify_provider()():
         return

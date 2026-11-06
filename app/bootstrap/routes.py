@@ -34,11 +34,13 @@ def register_routes(app: FastAPI) -> None:
     from app.domains.media_requests import gaps
     from app.domains.playback import router as history
     from app.domains.users import router as users
+    from app.domains.users import user_notify_router
     from .plugin_routes import register_calendar_notify_routes, register_plugin_routes
 
     app.include_router(views.router)
     app.include_router(auth.router)
     app.include_router(users.router)
+    app.include_router(user_notify_router.router)
     app.include_router(stats.router)
     app.include_router(bot_router.router)
     app.include_router(system.router)

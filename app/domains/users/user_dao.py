@@ -284,6 +284,95 @@ def get_user_library_settings(user_id: str):
     )
 
 
+# ============================================================
+# 用户级通知设置（10308 用户端口「我的 → 通知设置」）
+# 与管理端系统级 Bark 互不干预：完全由用户自选渠道与接收内容。
+# ============================================================
+
+_DEFAULT_USER_NOTIFY_SETTINGS = {
+    "channel": "none",            # none | bark | webhook
+    "bark_url": "",
+    "webhook_url": "",
+    "notify_new_item": False,
+    "notify_admin_message": False,
+    "notify_announcement": False,
+    "notify_wishlist": False,
+}
+
+
+def get_user_notify_settings(user_id: str):
+    ensure_users_meta_column("user_notify_settings")
+    row = system_store.fetch_one(
+        "SELECT user_notify_settings FROM users_meta WHERE user_id = ?", (user_id,)
+    )
+    raw = row["user_notify_settings"] if row and row.get("user_notify_settings") else None
+    if not raw:
+        return dict(_DEFAULT_USER_NOTIFY_SETTINGS)
+    try:
+        import json
+        data = json.loads(raw)
+        merged = dict(_DEFAULT_USER_NOTIFY_SETTINGS)
+        merged.update(data or {})
+        return merged
+    except Exception:
+        return dict(_DEFAULT_USER_NOTIFY_SETTINGS)
+
+
+def save_user_notify_settings(user_id: str, settings: dict) -> None:
+    ensure_users_meta_column("user_notify_settings")
+    import json
+    allowed = set(_DEFAULT_USER_NOTIFY_SETTINGS.keys())
+    clean = {k: settings.get(k) for k in allowed if k in settings}
+    raw = json.dumps(clean, ensure_ascii=False)
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM users_meta WHERE user_id = ?", (user_id,))
+        if cursor.fetchone():
+            cursor.execute(
+                "UPDATE users_meta SET user_notify_settings = ? WHERE user_id = ?",
+                (raw, user_id),
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO users_meta (user_id, user_notify_settings) VALUES (?, ?)",
+                (user_id, raw),
+            )
+        conn.commit()
+
+
+def list_users_with_notify_flag(flag_key: str):
+    """返回所有开启某内容开关的用户 ID（用于广播类：新片入库 / 全站公告）。"""
+    ensure_users_meta_column("user_notify_settings")
+    rows = system_store.fetch_all(
+        "SELECT user_id, user_notify_settings FROM users_meta "
+        "WHERE user_notify_settings IS NOT NULL AND user_notify_settings != ''",
+    )
+    import json
+    result = []
+    for r in rows:
+        raw = r.get("user_notify_settings") if r else None
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        if data.get(flag_key):
+            uid = r.get("user_id")
+            if uid:
+                result.append(uid)
+    return result
+
+
+def list_request_users(tmdb_id, season):
+    """返回请求过该影视（tmdb_id + season）的用户 ID（心愿清单状态变动通知用）。"""
+    rows = system_store.fetch_all(
+        "SELECT DISTINCT user_id FROM request_users WHERE tmdb_id = ? AND season = ?",
+        (tmdb_id, season),
+    )
+    return [r["user_id"] for r in rows if r and r.get("user_id")]
+
+
 def get_user_admin_enabled_folders(user_id: str):
     ensure_users_meta_column("admin_enabled_folders")
     return system_store.fetch_one("SELECT admin_enabled_folders FROM users_meta WHERE user_id = ?", (user_id,))
