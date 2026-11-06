@@ -34,6 +34,9 @@ jobs:
       - name: 断言加固改动生效
         run: python tools/verify_patches.py .
 
+      - name: 校验 2.0 重构等价性 / 安全加固 / 公告推送乱码修复
+        run: python tests/test_refactor_2_0_equivalence.py
+
       - name: 校验 10307/10308 会话 Cookie 隔离
         run: python tools/check_session_cookie_isolation.py .
 

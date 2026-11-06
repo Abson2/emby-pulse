@@ -1,9 +1,23 @@
+import threading
+
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
 MESSAGE_TABLES = ("msg_conversations", "msg_items", "msg_notify_block")
 ANNOUNCEMENT_TABLES = ("announcements", "announcement_reads")
+
+# 2.0 性能：DDL 幂等，公告表 bootstrap 只需在每个数据库上执行一次。
+# 以 system_store.db_path 为缓存键 —— 换库（测试/迁移/多实例）时自动失效；
+# 锁保证并发请求不重复执行；显式 reset 钩子供测试与运维使用。
+_announcement_tables_lock = threading.Lock()
+_announcement_tables_ready: dict = {}
+
+
+def reset_announcement_tables_cache() -> None:
+    """清空公告表 bootstrap 缓存（测试 / 迁移 / 数据库被外部重建时调用）。"""
+    with _announcement_tables_lock:
+        _announcement_tables_ready.clear()
 
 
 def ensure_msg_tables() -> None:
@@ -282,11 +296,17 @@ def set_users_unmuted(user_ids) -> None:
 
 
 def ensure_announcement_tables() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        for table_name in ANNOUNCEMENT_TABLES:
-            ensure_registered_table(cursor, table_name)
-        conn.commit()
+    db_path = system_store.db_path
+    with _announcement_tables_lock:
+        if _announcement_tables_ready.get(db_path):
+            return
+        with system_store.connect() as conn:
+            cursor = conn.cursor()
+            for table_name in ANNOUNCEMENT_TABLES:
+                ensure_registered_table(cursor, table_name)
+            conn.commit()
+        # 仅在 DDL 全部成功后标记，失败时下次调用会重试
+        _announcement_tables_ready[db_path] = True
 
 
 def list_announcements(active_only: bool = False):

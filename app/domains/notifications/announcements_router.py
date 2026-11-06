@@ -6,6 +6,7 @@ from app.core.security_utils import (
     decode_announcement_content,
     sanitize_html,
     sanitize_rich_html,
+    to_plain_text,
 )
 from app.domains.notifications.message_dao import (
     create_announcement as create_announcement_record,
@@ -21,6 +22,16 @@ from app.domains.users import public_service as user_service
 
 
 router = APIRouter()
+
+
+def _decode_rows_content(announcements) -> None:
+    """2.0：统一兼容历史二次转义数据（早期缺少 bleach 导致内容被整体转义）。
+
+    抽公共 helper 消除两个 GET 接口的重复循环；仅原地改写 content 字段，
+    列表长度、顺序、其余字段与返回结构均不变。
+    """
+    for ann in announcements:
+        ann["content"] = decode_announcement_content(ann.get("content", ""))
 
 
 class AnnouncementModel(BaseModel):
@@ -50,9 +61,7 @@ def get_announcements(request: Request, active_only: bool = False):
 
     rows = list_announcements(active_only)
     announcements = [dict(row) for row in rows] if rows else []
-    # 🔥 兼容历史二次转义数据（早期缺少 bleach 导致内容被整体转义）
-    for ann in announcements:
-        ann["content"] = decode_announcement_content(ann.get("content", ""))
+    _decode_rows_content(announcements)  # 🔥 兼容历史二次转义数据
     return {"status": "success", "data": announcements}
 
 
@@ -84,8 +93,12 @@ def create_announcement(data: AnnouncementModel, request: Request):
         from app.domains.users import user_notify_service as _uns
         _uns.notify_users_by_flag(
             "notify_announcement",
-            sanitize_html(data.title),
-            sanitize_html(data.content, max_length=2000),
+            to_plain_text(data.title, max_length=500),
+            # 🔥 2.0 修复：Bark 是纯文本通道，不渲染标签也不解码实体。
+            # 此前用 sanitize_html 做 html.escape，把 <p>测试推送</p> 变成
+            # &lt;p&gt;测试推送&lt;/p&gt; 字面量推给用户；改用 to_plain_text
+            # 在内容源头剥离标签与实体，纯文本输入的输出保持完全一致。
+            to_plain_text(data.content, max_length=2000),
         )
     except Exception as _e:
         print(f"[公告] 用户级通知推送失败: {_e}", flush=True)
@@ -164,9 +177,7 @@ def user_get_announcements(request: Request):
     ensure_announcement_tables()
 
     announcements = list_active_announcements_with_reads(user_id)
-    # 🔥 兼容历史二次转义数据
-    for ann in announcements:
-        ann["content"] = decode_announcement_content(ann.get("content", ""))
+    _decode_rows_content(announcements)  # 🔥 兼容历史二次转义数据
 
     return {"status": "success", "data": announcements}
 

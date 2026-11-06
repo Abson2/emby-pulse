@@ -1,5 +1,51 @@
 # 更新日志
 
+## 2.0
+
+架构优化与安全性审查版。**硬约束：100% 保留全部现有功能、原有输入输出行为不变、不改动对外接口、不删除任何特性**。本版为「低风险清理」首批，完整梳理与后续批次方案见 [docs/REFACTOR_2.0.md](docs/REFACTOR_2.0.md)。
+
+### 1. 架构梳理与重构方案（文档交付）
+
+- 梳理出规模：Python 106,967 行 / 模板 41,137 行 / JS 5,691 行 / 75 张表 / 43 个 notification_bot service / 15 个插件。
+- 明确 8 类耦合点（`bot_service.py` 上帝装配器 40 次注入、116 处 `set_dependency_providers` 样板、全局配置单例、跨域反向依赖、DDL 与请求路径混跑、展示层无公共模块、插件同构、巨型函数）。
+- 明确 8 类冗余（10 处 `escapeHtml`、3 处不一致的 `parseMarkdown`、2 个同名 `ensure_request_admin_messages_table`、双胞胎 library service 等）。
+- 明确 7 类性能瓶颈（每条 SQL 新建连接、每请求 DDL、日志裁剪全表比对等）。
+- 给出【低风险清理 / 中风险抽离 / 大架构重构】三批方案与优化顺序；本版只落地第一批，后续批次按风险排队，不做无法证明等价的大改。
+
+### 2. 性能优化（逻辑等价）
+
+- `app/plugins/plugin_dao.py::add_plugin_log()`：INSERT + 行数裁剪 + 时间清理三条语句合并为**单连接单事务**（3 次 `sqlite3.connect`/commit → 1 次），行数裁剪 `NOT IN (子查询)` 改为**主键范围删除** `id < MIN(最近 N 条)`，不再对全表做比对。函数返回、三语义（单条 2000 字截断 / 500 行上限 / 30 天留存）完全不变。
+- `app/infra/db/schema_registry.py`：`plugin_logs` 增补 `idx_plugin_logs_created_at`（`CREATE INDEX IF NOT EXISTS` 纯加法），时间清理不再逐插件全表扫描。
+- `app/domains/notifications/message_dao.py::ensure_announcement_tables()`：DDL 幂等，改为**进程内一次性缓存**（键为 `system_store.db_path`，换库自动失效，带线程锁），并提供 `reset_announcement_tables_cache()` 供测试/迁移使用；DDL 异常时不写缓存，下次自动重试。公告 6 个端点不再每请求重复建表/建索引。
+- `app/domains/notifications/announcements_router.py`：两个 GET 接口的历史数据解码循环抽为 `_decode_rows_content()` 公共 helper（纯内部去重，返回结构与字段不变）。
+
+### 3. 安全性审查与加固
+
+- 全库审查认证/鉴权、CSRF、会话隔离、CSP nonce、SSRF 代理校验、路径穿越、SQL 注入、XSS、命令注入、敏感信息日志。确认既有防护（CSRF / AuthGate / Cookie 隔离 / CSP / SSRF / 路径穿越 / 敏感字段 env 中央注册）完好且未削弱；SQL f-string 拼接处均为内部常量或注册表白名单，用户输入全部走 `?` 绑定，非注入漏洞。
+- **用户端 `x-html` 富文本统一净化**：`templates/request.html` 引入 DOMPurify（带 CSP nonce），新增全局 `sanitizeRichText()`；欢迎消息与公告详情的 `x-html` 均经其净化。**DOMPurify 未加载或异常时降级返回原值**，合法内容渲染与旧版一致、功能不破。
+- **日志脱敏**：`app/core/security_check.py` 不再输出新生成 Token 的前 8 / 后 8 字符片段；`app/core/config.py` 启动日志不再打印 `emby_host` 内网地址明文（改为「已设置/未设置」）。
+- `sanitize_html` 与新增 `to_plain_text` 共用 `_DANGEROUS_PATTERNS`，消除危险模式清单重复。
+
+### 4. Bug 修复：用户级公告 Bark 推送 `&lt;p&gt;` 实体乱码
+
+- 现象：网页端公告显示正常，但用户收到的 Bark 推送为 `&lt;p&gt;测试推送&lt;/p&gt;` 字面量。
+- 根因：`create_announcement()` 的用户级通知正文走 `sanitize_html()` 做了 `html.escape`，把 Quill 富文本 `<p>测试推送</p>` 转成 HTML 实体；Bark 是纯文本通道，**既不渲染标签也不解码实体**，而 `bark_push._strip_html()` 只能剥离真实标签，无法处理实体。网页端是另一条链路（富文本 + `x-html` 渲染），故显示正常。
+- 修复：`app/core/security_utils.py` 新增 `to_plain_text()`（截断 → 实体反转义 → 剥离标签 → 危险模式清理），公告用户级通知的正文/标题改用它；网页端存储仍用 `sanitize_rich_html` 保留富文本，**显示链路完全未动**。纯文本输入输出与旧版逐字一致；含 `&`/`<`/`>` 的纯文本不再被错误实体化（同属乱码修复）。
+
+### 5. 回归与验证
+
+- 新增 `tests/test_refactor_2_0_equivalence.py`（纯标准库，70/0 全绿），用**内存 SQLite 双库并行**逐行比对新旧日志实现的最终表内容（边界 N=1/2/7/500、多插件隔离、留存清理、单条截断），并用 AST 抽取执行验证 helper / 日志脱敏 / 索引常量，静态契约锁定对外接口与前端净化接线。已接入 CI `verify` job。
+- `tools/verify_patches.py` 新增「问题 16」断言组（2.0 优化 / 安全 / 乱码修复 / 接口不变），全绿；其余既有回归全绿。
+- 版本号同步：`2.0`、`APP_VERSION=2.0-hardened`、compose 默认 `2.0`（保留 `IMAGE_TAG=1.9.10` 回退）、`request_app.js?v=2.0`。
+
+### 升级后验证清单
+
+1. 公告网页端（管理端列表 / 用户端详情弹窗）富文本显示与 1.9.10 一致；
+2. 发布一条公告，用户级 Bark 推送正文为「测试推送」，**不再出现 `&lt;p&gt;` / `&amp;` 等实体字面量**；
+3. 插件页「日志」仍能正常写入与查看，上限（500 行 / 30 天 / 2000 字）不变；
+4. 容器日志不再出现 Token 片段或 `emby_host` 明文；
+5. 所有既有功能与 API 行为不变；如需回退 `IMAGE_TAG=1.9.10`。
+
 ## 1.9.10
 
 围绕「推送体验」与「公告显示」四项落地修复，均为发布后反馈驱动，不改动入库推送主链路语义。

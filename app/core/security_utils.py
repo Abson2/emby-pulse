@@ -8,6 +8,15 @@ import re
 from html.parser import HTMLParser
 
 
+# 危险模式（供 sanitize_html 与 to_plain_text 共用，避免两处各写一份）
+_DANGEROUS_PATTERNS = [
+    r'javascript:',
+    r'on\w+\s*=',  # 事件处理器，例如 onclick=
+    r'data:text/html',
+    r'vbscript:',
+]
+
+
 def sanitize_html(text: str, max_length: int = 500) -> str:
     """
     Sanitize user input to prevent XSS attacks
@@ -33,16 +42,38 @@ def sanitize_html(text: str, max_length: int = 500) -> str:
     text = html.escape(text, quote=True)
     
     # Remove potentially dangerous patterns
-    dangerous_patterns = [
-        r'javascript:',
-        r'on\w+\s*=',  # Event handlers like onclick=
-        r'data:text/html',
-        r'vbscript:',
-    ]
-    
-    for pattern in dangerous_patterns:
+    for pattern in _DANGEROUS_PATTERNS:
         text = re.sub(pattern, '', text, flags=re.IGNORECASE)
     
+    return text
+
+
+def to_plain_text(text: str, max_length: int = 2000) -> str:
+    """把富文本 HTML 转为纯文本通道（用户级 Bark / Webhook 通知）可用的正文。
+
+    修复 2.0 bug：公告正文是 Quill 产出的 HTML（<p>测试推送</p>），此前用
+    sanitize_html() 做 html.escape，变成 &lt;p&gt;测试推送&lt;/p&gt;；Bark 是纯
+    文本通道，既不渲染标签也不解码实体，用户收到字面量 &lt;p&gt;。
+    bark_push._strip_html() 只能剥离真实标签，无法处理实体，故必须在内容源头转换。
+
+    与 sanitize_html 的关系：
+    - 纯文本输入：两者输出一致（不引入任何新转义），保证原有行为不变；
+    - 富文本输入：本函数剥离标签与实体（修正乱码），sanitize_html 仍用于需要转义的场景。
+
+    步骤：截断 → 实体反转义（兼容历史二次转义数据）→ 剥离标签 → 危险模式清理。
+    """
+    if not text:
+        return ""
+    text = str(text)
+    if len(text) > max_length:
+        text = text[:max_length]
+    # 先反转义：&lt;p&gt; → <p>（同时兼容历史被整体转义的公告数据）
+    text = html.unescape(text)
+    # 剥离所有 HTML 标签（Quill 富文本 / Telegram <b> 等），保留标签内文本
+    text = re.sub(r"<[^>]*>", "", text)
+    # 与 sanitize_html 相同的安全清理，防止反转义后残留危险模式
+    for pattern in _DANGEROUS_PATTERNS:
+        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
     return text
 
 

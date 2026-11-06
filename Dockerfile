@@ -28,7 +28,7 @@ RUN python -m compileall -b app/ && \
 FROM python:3.12-slim
 WORKDIR /workspace
 
-ENV APP_VERSION=1.9.10-hardened \
+ENV APP_VERSION=2.0-hardened \
     TZ=Asia/Shanghai \
     PATH="/workspace/.venv/bin:$PATH" \
     UV_COMPILE_BYTECODE=1 \

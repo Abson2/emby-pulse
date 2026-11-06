@@ -61,26 +61,37 @@ def add_plugin_log(plugin_id: str, level: str, message: str) -> None:
     # 单条消息截断，避免把整段渲染体等超长内容写进日志
     message = (message or "")[:PLUGIN_LOG_MESSAGE_MAX]
     created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    system_store.execute(
-        "INSERT INTO plugin_logs (plugin_id, level, message, created_at) VALUES (?, ?, ?, ?)",
-        (plugin_id, level, message, created_at),
-    )
-    # 大小上限：超出单插件行数上限时，删除最旧的（保留最近 N 条）
-    system_store.execute(
-        "DELETE FROM plugin_logs WHERE plugin_id = ?"
-        " AND id NOT IN ("
-        "   SELECT id FROM plugin_logs WHERE plugin_id = ?"
-        "   ORDER BY id DESC LIMIT ?)",
-        (plugin_id, plugin_id, PLUGIN_LOG_MAX_ROWS),
-    )
-    # 时间上限：删除超过留存天数的旧日志
     retention_before = (datetime.now() - timedelta(days=PLUGIN_LOG_RETENTION_DAYS)).strftime(
         "%Y-%m-%d %H:%M:%S"
     )
-    system_store.execute(
-        "DELETE FROM plugin_logs WHERE plugin_id = ? AND created_at < ?",
-        (plugin_id, retention_before),
-    )
+    # 2.0 性能：三条语句合并为「单次连接 + 单事务」，避免 3 次 sqlite3.connect/commit。
+    # 对外行为不变：函数仍返回 None，表最终状态与原先逐条 execute 完全一致。
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO plugin_logs (plugin_id, level, message, created_at) VALUES (?, ?, ?, ?)",
+            (plugin_id, level, message, created_at),
+        )
+        # 大小上限：保留最近 N 条，删除更旧的。
+        # 等价于原 `id NOT IN (SELECT id ... ORDER BY id DESC LIMIT ?)`：
+        # 由于 id 单调递增，被删集合恰为 id < 最近 N 条中最小的那个 id，
+        # 改为主键范围删除后不再对全表做 NOT IN 比对。
+        cursor.execute(
+            "DELETE FROM plugin_logs WHERE plugin_id = ?"
+            " AND id < ("
+            "   SELECT MIN(id) FROM ("
+            "     SELECT id FROM plugin_logs WHERE plugin_id = ?"
+            "     ORDER BY id DESC LIMIT ?"
+            "   )"
+            " )",
+            (plugin_id, plugin_id, PLUGIN_LOG_MAX_ROWS),
+        )
+        # 时间上限：删除超过留存天数的旧日志（SQL 与原实现逐字一致）
+        cursor.execute(
+            "DELETE FROM plugin_logs WHERE plugin_id = ? AND created_at < ?",
+            (plugin_id, retention_before),
+        )
+        conn.commit()
 
 
 def list_plugin_logs(plugin_id: str, limit: int = 50):

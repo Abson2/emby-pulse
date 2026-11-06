@@ -320,11 +320,12 @@ check("系统设置接口给出可复制的 URL 模板",
 check("系统设置接口不再要求 Emby 配置 Header",
       "请在 Emby 中配置 Header" not in system_router)
 
-check("应用版本升级到 1.9.10", 'APP_VERSION = "1.9.10"' in read("app/shared/version.py"))
-check("Dockerfile 版本为 1.9.10-hardened", "APP_VERSION=1.9.10-hardened" in dockerfile)
-check("compose 默认拉取 1.9.10", "IMAGE_TAG:-1.9.10" in compose)
-check("CHANGELOG 含 1.9.0 / 1.9.1 / 1.9.2 / 1.9.6 / 1.9.7 / 1.9.8 / 1.9.9 / 1.9.10 发版说明",
-      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7", "## 1.9.8", "## 1.9.9", "## 1.9.10")))
+check("应用版本升级到 2.0", 'APP_VERSION = "2.0"' in read("app/shared/version.py"))
+check("Dockerfile 版本为 2.0-hardened", "APP_VERSION=2.0-hardened" in dockerfile)
+check("compose 默认拉取 2.0", "IMAGE_TAG:-2.0" in compose)
+check("compose 保留 1.9.10 回退说明（不删除历史版本特性）", "IMAGE_TAG=1.9.10" in compose)
+check("CHANGELOG 含 1.9.x 全系列与 2.0 发版说明",
+      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7", "## 1.9.8", "## 1.9.9", "## 1.9.10", "## 2.0")))
 check("CI 增加 Bark / Webhook 回归步骤",
       "tests/test_bark_push.py" in read(".github/workflows/docker-publish.yml"))
 
@@ -395,8 +396,8 @@ models_py = read("app/schemas/models.py")
 sys_views = read("app/domains/system/views.py")
 modal_notify = read("templates/request/modal_notify.html")
 
-check("request_app.js 引用带版本号（浏览器缓存破坏，1.9.10）",
-      "request_app.js?v=1.9.10" in req_tpl)
+check("request_app.js 引用带版本号（浏览器缓存破坏，2.0）",
+      "request_app.js?v=2.0" in req_tpl)
 # 1.9.6 起通知设置不再由 Alpine 主组件承载（1.9.7 改为页面内原生弹窗）
 check("request_app.js 不再包含任何通知设置 state/方法（1.9.6 起移除）",
       all(x not in req_js for x in (
@@ -581,6 +582,59 @@ check("library.deleted 不会进入下游事件总线（否则被 'delete' in ev
 check("CI 已接入 Emby 事件映射回归（含 1.9.9 忽略断言）",
       "tests/test_webhook_events.py" in ci)
 check("CHANGELOG 含 1.9.9 发版说明", "## 1.9.9" in changelog)
+
+print("== 问题 16: v2.0 架构优化 / 安全加固 / 公告推送乱码修复 ==")
+pdao = read("app/plugins/plugin_dao.py")
+reg = read("app/infra/db/schema_registry.py")
+mdao = read("app/domains/notifications/message_dao.py")
+secu = read("app/core/security_utils.py")
+ann_router = read("app/domains/notifications/announcements_router.py")
+explore_tpl = read("templates/request/tab_explore.html")
+refactor_doc = "docs/REFACTOR_2.0.md"
+
+check("存在 2.0 架构/重构/安全方案文档", os.path.isfile(os.path.join(ROOT, refactor_doc)))
+check("插件日志改为单连接单事务（3 次连接 → 1 次）",
+      "with system_store.connect() as conn:" in pdao
+      and "def add_plugin_log(" in pdao)
+check("行数裁剪改为主键范围删除（等价高效）",
+      "SELECT MIN(id) FROM (" in pdao
+      and "AND id NOT IN (" not in pdao
+      and "ORDER BY id DESC LIMIT ?" in pdao)
+check("plugin_logs 增补 created_at 索引（纯加法）",
+      "idx_plugin_logs_created_at" in reg)
+check("公告表 bootstrap 加进程内缓存与 reset 钩子",
+      "_announcement_tables_ready" in mdao
+      and "def reset_announcement_tables_cache()" in mdao)
+check("公告解码循环抽公共 helper",
+      "def _decode_rows_content(" in ann_router
+      and len(re.findall(r"^\s+_decode_rows_content\(announcements\)", ann_router, re.M)) == 2
+      and ann_router.count("for ann in announcements:") == 1)
+check("新增 to_plain_text 纯文本通道工具",
+      "def to_plain_text(" in secu and "_DANGEROUS_PATTERNS" in secu)
+check("用户级公告通知正文/标题改用 to_plain_text（修复 &lt;p&gt; 乱码）",
+      "to_plain_text(data.content, max_length=2000)" in ann_router
+      and "to_plain_text(data.title, max_length=500)" in ann_router)
+check("网页端富文本存储链路未被改动",
+      "sanitize_rich_html(data.content, max_length=50000)" in ann_router
+      and "def sanitize_rich_html(" in secu)
+check("用户端 x-html 统一净化且 CDN 失败可降级",
+      "window.sanitizeRichText = function(" in req_js
+      and "sanitizeRichText(parseMarkdown(" in explore_tpl
+      and "sanitizeRichText(welcomeModal.message)" in req_tpl
+      and "dompurify@3" in req_tpl)
+check("日志不再输出 Token 片段 / emby_host 明文",
+      "new_token[:8]" not in read("app/core/security_check.py")
+      and "emby_host: {self.config.get('emby_host', '未设置')}" not in read("app/core/config.py"))
+check("CI 接入 2.0 等价性回归",
+      "tests/test_refactor_2_0_equivalence.py" in ci)
+check("2.0 等价性测试脚本存在且只用标准库",
+      os.path.isfile(os.path.join(ROOT, "tests/test_refactor_2_0_equivalence.py"))
+      and "import pytest" not in read("tests/test_refactor_2_0_equivalence.py"))
+check("对外 API 路由未删减（公告 7 条）",
+      all(p in ann_router for p in (
+          '"/api/announcements"', '"/api/announcements/{ann_id}"',
+          '"/api/announcements/{ann_id}/view"', '"/api/user/announcements"',
+          '"/api/user/announcements/{ann_id}/read"')))
 
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:

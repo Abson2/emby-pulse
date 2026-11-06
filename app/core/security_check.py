@@ -22,7 +22,9 @@ def check_webhook_token():
         new_token = secrets.token_urlsafe(24)
         set_webhook_token(new_token)
         logger.warning("🔒 [安全] 检测到默认/空 Webhook Token，已自动生成安全 Token")
-        logger.warning(f"   新 Token: {new_token[:8]}****{new_token[-8:]}")
+        # 2.0 安全：日志不再输出 Token 的任何片段（含前后各 8 字符），
+        # 避免凭证片段落入容器日志；Token 本身仍会生成并写入配置，功能不变。
+        logger.warning("   新 Token 已写入配置，请在管理端查看完整值（日志不输出凭证）")
         logger.warning("   请在 Emby Webhook 设置中更新此 Token")
         return False
     return True

@@ -985,6 +985,8 @@ TABLE_INDEXES = {
     ],
     "plugin_logs": [
         "CREATE INDEX IF NOT EXISTS idx_plugin_logs_plugin_id ON plugin_logs(plugin_id)",
+        # 2.0：时间留存清理按 created_at 过滤，补索引避免逐插件全表扫描（纯加法）
+        "CREATE INDEX IF NOT EXISTS idx_plugin_logs_created_at ON plugin_logs(created_at)",
     ],
     "sessions": [
         "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)",

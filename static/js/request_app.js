@@ -7,6 +7,19 @@ window.tmdbCache = {};
 window.fallbackPoster = async function(img, title) { if (img.getAttribute('data-fallback-done')) return; img.setAttribute('data-fallback-done', 'true'); img.src = '/static/img/logo-app-2.png'; img.classList.add('opacity-30', 'object-contain', 'p-4'); if (!title || title === 'undefined' || title === 'null') return; try { const res = await fetch(`/api/requests/search?query=${encodeURIComponent(title)}`); const data = await res.json(); if (data.status === 'success' && data.data.length > 0) { const match = data.data.find(d => d.poster_path) || data.data[0]; if (match.poster_path) { img.src = match.poster_path; img.classList.remove('opacity-30', 'object-contain', 'p-4'); img.classList.add('object-cover'); } } } catch(e) {} };
 window.fallbackReportPoster = async function(imgEl, title) { if(imgEl.getAttribute('data-fallback-done')) return; imgEl.setAttribute('data-fallback-done', 'true'); imgEl.src = '/static/img/logo-app-2.png'; imgEl.classList.add('poster-fallback'); try { const res = await fetch(`/api/requests/search?query=${encodeURIComponent(title)}`); const data = await res.json(); if (data.status === 'success' && data.data.length > 0) { const match = data.data.find(d => d.poster_path) || data.data[0]; if (match.poster_path) { const b64 = await toBase64(match.poster_path); if(b64) { imgEl.src = b64; imgEl.classList.remove('poster-fallback'); imgEl.style.objectFit = "cover"; } } } } catch(e) {} };
 
+// 🔒 2.0 安全：用户端 x-html 富文本渲染统一净化。
+// 使用 DOMPurify 默认白名单（只移除脚本/事件属性/危险协议，保留 Quill 的 class 与 style），
+// 因此合法内容的渲染结果与旧版一致；CDN 不可用或异常时降级返回原值，保证功能不破。
+window.sanitizeRichText = function(html) {
+    if (!html) return '';
+    if (typeof DOMPurify === 'undefined' || typeof DOMPurify.sanitize !== 'function') return html;
+    try {
+        return DOMPurify.sanitize(html);
+    } catch (e) {
+        return html;
+    }
+};
+
 // 🔥 处理封面 URL：优先 TMDB 公网 URL，内网地址转为代理 URL
 window.getSafePosterUrl = function(item) {
     if (!item || !item.Id) return '/static/img/logo-app-2.png';

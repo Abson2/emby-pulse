@@ -79,7 +79,7 @@
             </div>
             <!-- 内容 -->
             <div class="px-6 py-5 max-h-[60vh] overflow-y-auto select-text">
-                <div class="text-slate-700 dark:text-slate-300 text-[15px] leading-relaxed announcement-content" x-html="parseMarkdown(announcementDetail.data?.content)"></div>
+                <div class="text-slate-700 dark:text-slate-300 text-[15px] leading-relaxed announcement-content" x-html="sanitizeRichText(parseMarkdown(announcementDetail.data?.content))"></div>
             </div>
             <!-- 底部 -->
             <div class="px-6 py-3 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-xs text-slate-400">

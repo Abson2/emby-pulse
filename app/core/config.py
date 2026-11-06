@@ -219,8 +219,8 @@ class ConfigManager:
         if local_auth_enabled:
             self.config["enable_local_auth"] = True
 
-        # 🔍 调试:打印关键配置
-        print(f"[Config] ✅ 加载完成 - emby_api_key: {'已设置' if self.config.get('emby_api_key') else '未设置'}, emby_host: {self.config.get('emby_host', '未设置')}")
+        # 🔍 调试:打印关键配置（2.0 安全：只输出是否已设置，不打印 emby_host 等内网地址明文）
+        print(f"[Config] ✅ 加载完成 - emby_api_key: {'已设置' if self.config.get('emby_api_key') else '未设置'}, emby_host: {'已设置' if self.config.get('emby_host') else '未设置'}")
 
     def get_env_source(self, key):
         """检查字段是否来自环境变量"""

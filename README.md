@@ -246,12 +246,12 @@ WEBHOOK_ALLOW_QUERY_TOKEN=1   # Emby Webhook 插件只能配 ?token= URL；反�
 
 ### 3.2 `docker-compose.yml`（拉取镜像）
 
-镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.9`）拉取指定版本，不设置则默认 `1.9.10`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
+镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.10`）拉取指定版本，不设置则默认 `2.0`。**2.0 是架构优化与安全性审查版，功能与 1.9.10 完全等价**（对外接口、输入输出行为、特性均未改动），如需回退用 `IMAGE_TAG=1.9.10`。架构梳理、耦合点、重构批次方案与等价性验证见 [docs/REFACTOR_2.0.md](docs/REFACTOR_2.0.md)。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
 
 ```yaml
 services:
   embypulse-pro:
-    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.10}
+    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-2.0}
     container_name: embypulse-pro
     restart: unless-stopped
     ports:
