@@ -11,8 +11,6 @@
                  x-data="{
                     avatarUploading: false, avatarMsg: '',
                     pwModalOpen: false, oldPw: '', newPw: '', confirmPw: '', pwMsg: '', pwLoading: false,
-                    notifySettingsModalOpen: false, notifySettingsLoading: false, notifySettingsSaving: false, notifyMsg: '',
-                    notifySettings: { channel: 'none', bark_url: '', webhook_url: '', notify_new_item: false, notify_admin_message: false, notify_announcement: false, notify_wishlist: false },
                     async uploadAvatar(e) {
                         const file = e.target.files[0];
                         if (!file) return;
@@ -42,33 +40,7 @@
                             if (d.status === 'success') { this.oldPw=''; this.newPw=''; this.confirmPw=''; setTimeout(() => this.pwModalOpen = false, 1500); }
                         } catch(_) { this.pwMsg = '网络异常'; }
                         this.pwLoading = false;
-                    },
-                    async loadNotifySettings() {
-                        this.notifySettingsModalOpen = true; this.notifySettingsLoading = true; this.notifyMsg = '';
-                        try {
-                            const res = await fetch('/api/user/notify_settings');
-                            const d = await res.json();
-                            if (d.status === 'success' && d.data) {
-                                this.notifySettings = Object.assign({
-                                    channel: 'none', bark_url: '', webhook_url: '',
-                                    notify_new_item: false, notify_admin_message: false,
-                                    notify_announcement: false, notify_wishlist: false
-                                }, d.data);
-                            }
-                        } catch(_) { this.notifyMsg = '加载失败'; }
-                        this.notifySettingsLoading = false;
-                    },
-                    async saveNotifySettings() {
-                        this.notifySettingsSaving = true; this.notifyMsg = '';
-                        try {
-                            const res = await fetch('/api/user/notify_settings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(this.notifySettings) });
-                            const d = await res.json();
-                            this.notifyMsg = d.message || '操作完成';
-                            if (d.status === 'success') { setTimeout(() => this.notifySettingsModalOpen = false, 1200); }
-                        } catch(_e) { this.notifyMsg = '网络异常'; }
-                        this.notifySettingsSaving = false;
-                    },
-                    setNotifyChannel(c) { this.notifySettings.channel = c; }
+                    }
                  }">
                 <div class="absolute inset-0 bg-gradient-to-b from-brand-500/5 to-transparent z-0"></div>
                 <!-- 头像（点击上传）+ 修改密码小按钮 -->

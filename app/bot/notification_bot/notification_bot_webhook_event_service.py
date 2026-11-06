@@ -45,6 +45,10 @@ def handle_webhook_event(daemon, event: str, data: dict):
         item = data.get("Item", {})
         if item.get("Id"):
             daemon.add_library_task(item)
+            _logger_provider().info(
+                f"[Webhook] 入库任务已入队: {item.get('Name') or item.get('Id')} "
+                f"(Type={item.get('Type')}, event={event})"
+            )
             if item.get("Type") == "Episode":
                 _calendar_service_provider().mark_episode_ready(
                     item.get("SeriesId"),

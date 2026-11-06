@@ -226,13 +226,18 @@ def _bark_notify_new_episode(data):
             rating=info.get("CommunityRating", ""),
             overview=_format_overview(info),
         )
-        if res and not res.get("skipped"):
-            _logger_provider().info(f"[Bark] 新片入库通知: {res.get('detail')}")
+        if res:
+            if res.get("skipped"):
+                _logger_provider().info(f"[Bark] 新片入库未推送(跳过): {res.get('detail')}")
+            else:
+                _logger_provider().info(f"[Bark] 新片入库通知: {res.get('detail')}")
     except Exception as e:
-        _logger_provider().warning(f"[Bark] 新片入库通知跳过: {e}")
+        _logger_provider().warning(f"[Bark] 新片入库通知异常: {e}")
 
 
 def handle_library_new_episode(bot, data):
+    _info = data.get("series_info") or {}
+    _logger_provider().info(f"[入库通知] 收到新剧集入库事件: {_info.get('Name') or data.get('series_id')} ({len(data.get('episodes') or [])} 集)")
     # 系统级 Bark 通道独立于「入库通知总开关」，仅由自身开关控制
     _bark_notify_new_episode(data)
 

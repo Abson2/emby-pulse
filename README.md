@@ -143,7 +143,13 @@
 - 关于页 GitHub 跳转链接已替换为本项目仓库 `https://github.com/Abson2/emby-pulse`；
 - 官方 TG 频道 / TG 交流群组跳转链接置空（展示为「暂未开放」卡片），保留三列布局。
 
-### 2.7 配置隔离与独立仓库
+### 2.7 1.9.4 修复与可观测性
+
+- **修复用户端口「通知设置」入口点击无反应**：1.9.3 中通知设置的 state 与方法误定义在 `tab_profile.html` 头像卡的嵌套 `x-data` 作用域内，父级 `requestApp` 组件中的按钮与弹窗无法访问。1.9.4 已将全部 state / 方法迁移至 `request_app.js` 主组件，入口按钮与弹窗恢复正常交互；接口契约与 UI 结构未变。
+- **入库通知全链诊断日志**：Webhook 入队、入库事件接收、Bark 推送结果三个节点均输出日志，任一段断裂可从 `docker logs` 直接定位；服务启动增加 per-service 容错，单服务异常不再连锁中断事件订阅。
+- **Webhook 测试说明**：Emby Webhook 的「测试」事件返回成功仅代表端点与 token 正常，`test` 类事件不会产生通知（设计如此）；请添加真实影视触发 `item.added` 后观察日志链。
+
+### 2.8 配置隔离与独立仓库
 
 - 仓库不含任何运行期配置 / 数据库 / 密钥 / 域名 / 个人数据；`.env` / `config/` / `data/` / `*.db` 均被双重忽略。
 - 源码通过 GitHub Git Blob API 按 tree 逐 sha 拉取，不接触本机或 NAS 上任何运行期文件；CI 第一步扫描全部入库文件，命中凭证即构建失败。
@@ -206,12 +212,12 @@ WEBHOOK_ALLOW_QUERY_TOKEN=1   # Emby Webhook 插件只能配 ?token= URL；反�
 
 ### 3.2 `docker-compose.yml`（拉取镜像）
 
-镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.3`）拉取指定版本，不设置则默认 `1.9.3`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
+镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.3`）拉取指定版本，不设置则默认 `1.9.4`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
 
 ```yaml
 services:
   embypulse-pro:
-    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.3}
+    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.4}
     container_name: embypulse-pro
     restart: unless-stopped
     ports:

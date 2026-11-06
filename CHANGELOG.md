@@ -1,5 +1,27 @@
 # 更新日志
 
+## 1.9.4
+
+修复 1.9.3 用户反馈的两个问题：① 用户端口「我的 → 通知设置」入口点击无反应；② 新片入库通知未推送的可观测性缺失。同时加固服务启动流程。
+
+### 修复：通知设置入口点击无反应（Alpine 作用域缺陷）
+- **根因**：通知设置的 state（`notifySettings*`）与三个方法（`loadNotifySettings` / `saveNotifySettings` / `setNotifyChannel`）原先定义在 `tab_profile.html` 头像卡的**嵌套 `x-data`** 中，而入口按钮（`@click="loadNotifySettings()"`）与 `x-teleport` 弹窗都在父级 `requestApp` 作用域。嵌套作用域的方法对父作用域不可见，按钮点击时 `loadNotifySettings` 未定义，弹窗也读不到同一份 flag，表现为「点击无反应」。
+- **修复**：将全部通知设置 state 与方法迁移至 `static/js/request_app.js` 的 `Alpine.data('requestApp', ...)` 主组件（state 位于 `entertainmentModalOpen` 附近，方法位于 `loadLibrarySettings()` 之前）；`tab_profile.html` 仅保留按钮引用与弹窗结构，不再定义任何方法。
+- **未改动**：通知设置的接口契约（`GET/POST /api/user/notify_settings`）、弹窗 UI 结构、四类开关与双渠道逻辑。
+
+### 增强：入库通知全链诊断日志 + 启动加固（定位「新片入库未推送」）
+- **全链日志**：`webhook_event_service` 入队后记录 `[Webhook] 入库任务已入队`；两个入库 handler（`library_new_item` / `library_new_episode`）入口记录 `[入库通知] 收到新片入库事件`；Bark 发送结果**总是记录**（跳过时记录原因，成功时记录「推送成功」）。链路任一段断裂均可从 `docker logs` 直接定位。
+- **启动加固**：`service_registry.start_all` 增加 per-service try/except，单个服务启动异常仅记 `error` 并继续启动后续服务，避免「一个服务抛错静默杀死 notifications 事件订阅」这类连锁失败。
+- **排查提示**：Emby Webhook 的「测试」事件返回成功仅代表端点与 token 正常，`test` 类事件**不会**产生通知（设计如此）；请添加真实影视触发 `item.added`，再按 `docker logs` 全链日志定位，并核对系统级 Bark 的总开关 / 「新片入库通知」开关 / Device Key / 服务器地址。
+
+### 回归
+- `test_bark_push` 84/0、`test_user_notify` 12/0、`check_notification_bot_subscription` 29/0、`verify_patches` 129/0 全绿；`node --check static/js/request_app.js` 通过；`check-no-secrets.py` 0 findings。
+- `grep` 验证：notify state/method 仅在 `request_app.js` 定义，`tab_profile.html` 仅剩按钮与弹窗引用。
+
+### 发布与验证
+- 应用版本升级至 `1.9.4`；compose 默认锁定 `1.9.4`，`1.9.3` 仍保留，可用 `IMAGE_TAG=1.9.3` 回退。
+- 升级后进入用户端口「我的 → 通知设置」应正常打开弹窗；添加真实影视后按日志链确认入库通知。
+
 ## 1.9.3
 
 本版本聚焦「用户端口通知设置」「工单大厅交互优化」「Bark 入库文案统一」与文档重构，全部为增量能力，不改动既有接口与系统级推送逻辑。

@@ -333,7 +333,14 @@ document.addEventListener('alpine:init', () => {
         
         // 🔥 娱乐功能相关
         entertainmentModalOpen: false,
-        
+
+        // 🔥 用户级通知设置相关（与管理端 Bark 互不干预）
+        notifySettingsModalOpen: false,
+        notifySettingsLoading: false,
+        notifySettingsSaving: false,
+        notifyMsg: '',
+        notifySettings: { channel: 'none', bark_url: '', webhook_url: '', notify_new_item: false, notify_admin_message: false, notify_announcement: false, notify_wishlist: false },
+
         // 🎰 老虎机相关
         slotGameOpen: false,
         slotEnabled: false,
@@ -1419,6 +1426,34 @@ document.addEventListener('alpine:init', () => {
             return classMap[status] || 'bg-gray-100 text-gray-700';
         },
         
+        // 🔥 用户级通知设置方法（与管理端 Bark 互不干预）
+        async loadNotifySettings() {
+            this.notifySettingsModalOpen = true; this.notifySettingsLoading = true; this.notifyMsg = '';
+            try {
+                const res = await fetch('/api/user/notify_settings');
+                const d = await res.json();
+                if (d.status === 'success' && d.data) {
+                    this.notifySettings = Object.assign({
+                        channel: 'none', bark_url: '', webhook_url: '',
+                        notify_new_item: false, notify_admin_message: false,
+                        notify_announcement: false, notify_wishlist: false
+                    }, d.data);
+                }
+            } catch(_) { this.notifyMsg = '加载失败'; }
+            this.notifySettingsLoading = false;
+        },
+        async saveNotifySettings() {
+            this.notifySettingsSaving = true; this.notifyMsg = '';
+            try {
+                const res = await fetch('/api/user/notify_settings', { method: 'POST', headers: {'Content-Type':'application/json' }, body: JSON.stringify(this.notifySettings) });
+                const d = await res.json();
+                this.notifyMsg = d.message || '操作完成';
+                if (d.status === 'success') { setTimeout(() => this.notifySettingsModalOpen = false, 1200); }
+            } catch(_e) { this.notifyMsg = '网络异常'; }
+            this.notifySettingsSaving = false;
+        },
+        setNotifyChannel(c) { this.notifySettings.channel = c; },
+
         // 🔥 媒体库设置方法
         loadLibrarySettings() {
             this.libSettingsLoading = true;

@@ -307,9 +307,9 @@ check("系统设置接口给出可复制的 URL 模板",
 check("系统设置接口不再要求 Emby 配置 Header",
       "请在 Emby 中配置 Header" not in system_router)
 
-check("应用版本升级到 1.9.3", 'APP_VERSION = "1.9.3"' in read("app/shared/version.py"))
-check("Dockerfile 版本为 1.9.3-hardened", "APP_VERSION=1.9.3-hardened" in dockerfile)
-check("compose 默认拉取 1.9.3", "IMAGE_TAG:-1.9.3" in compose)
+check("应用版本升级到 1.9.4", 'APP_VERSION = "1.9.4"' in read("app/shared/version.py"))
+check("Dockerfile 版本为 1.9.4-hardened", "APP_VERSION=1.9.4-hardened" in dockerfile)
+check("compose 默认拉取 1.9.4", "IMAGE_TAG:-1.9.4" in compose)
 check("CHANGELOG 含 1.9.0 / 1.9.1 / 1.9.2 发版说明",
       all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2")))
 check("CI 增加 Bark / Webhook 回归步骤",
