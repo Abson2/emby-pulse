@@ -310,51 +310,51 @@ check("Webhook 复制入口已整合至机器人助手页（1.9.5）",
       "copyBotWebhookUrl()" in bot_tpl and "buildBotWebhookUrl()" in bot_tpl)
 check("机器人助手页 Webhook 地址带 ?token=（脱敏值不拼入）",
       "'?token=' + botWebhookTokenForUrl()" in bot_tpl and "你的Token" in bot_tpl)
-check("设置页 Webhook 区改为引导卡（去重，指向机器人助手）",
-      "前往 通知与机器人 配置" in settings_tpl
-      and 'id="webhook_token"' not in settings_tpl)
+check("设置页 Webhook 区已整体删除（1.9.6，不再保留引导卡）",
+      "前往 通知与机器人 配置" not in settings_tpl
+      and 'id="webhook_token"' not in settings_tpl
+      and "系统神经感知" not in settings_tpl)
 check("系统设置接口给出可复制的 URL 模板",
       "?token=<WEBHOOK_TOKEN>" in system_router
       and "webhook_query_token_enabled" in system_router)
 check("系统设置接口不再要求 Emby 配置 Header",
       "请在 Emby 中配置 Header" not in system_router)
 
-check("应用版本升级到 1.9.5", 'APP_VERSION = "1.9.5"' in read("app/shared/version.py"))
-check("Dockerfile 版本为 1.9.5-hardened", "APP_VERSION=1.9.5-hardened" in dockerfile)
-check("compose 默认拉取 1.9.5", "IMAGE_TAG:-1.9.5" in compose)
-check("CHANGELOG 含 1.9.0 / 1.9.1 / 1.9.2 发版说明",
-      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2")))
+check("应用版本升级到 1.9.6", 'APP_VERSION = "1.9.6"' in read("app/shared/version.py"))
+check("Dockerfile 版本为 1.9.6-hardened", "APP_VERSION=1.9.6-hardened" in dockerfile)
+check("compose 默认拉取 1.9.6", "IMAGE_TAG:-1.9.6" in compose)
+check("CHANGELOG 含 1.9.0 / 1.9.1 / 1.9.2 / 1.9.6 发版说明",
+      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6")))
 check("CI 增加 Bark / Webhook 回归步骤",
       "tests/test_bark_push.py" in read(".github/workflows/docker-publish.yml"))
 
-print("== 问题 10: Bark 配置内置到系统设置页（1.9.1，不新增独立板块） ==")
+print("== 问题 10: Bark/Webhook 模块已从系统设置页删除（1.9.6，入口收敛至机器人助手） ==")
 settings = tpl
 layout = read("templates/layout.html")
 changelog = read("CHANGELOG.md")
-check("系统设置页新增 Bark 卡片",
-      "系统级 Bark 推送" in settings and "settings-bark-enabled" in settings)
-check("卡片字段齐全",
-      all(x in settings for x in (
+check("系统设置页不再有「系统级 Bark 推送」卡片",
+      "系统级 Bark 推送" not in settings and "settings-bark-enabled" not in settings)
+check("Bark 配置字段与按钮已全部移除",
+      all(x not in settings for x in (
           "settings-bark-server", "settings-bark-device-key",
           "settings-bark-sound", "settings-bark-group",
-          "settings-bark-notify-library-new", "settings-bark-notify-request-new")))
-check("提供独立保存与测试按钮",
-      "saveBarkSettings()" in settings and "testBarkSettings()" in settings)
-check("保存走独立接口而非 /api/settings",
-      "async function saveBarkSettings()" in settings
-      and "fetch('/api/notify/channels_config'" in settings)
-_m = re.search(r"function collectBarkSettings\(\)\s*\{(.*?)\n\}", settings, re.S)
-_body = _m.group(1) if _m else ""
-check("只提交 bark 节点（绝不覆盖 TG/企微配置）",
-      "bark:" in _body and "tg_bot" not in _body and "wecom" not in _body)
-check("测试推送走 bark_test 接口", "fetch('/api/notify/bark_test'" in settings)
-check("页面初始化自动加载 Bark 配置",
-      "loadBarkConfig();" in settings and "fetch('/api/notify/channels_config')" in settings)
+          "settings-bark-notify-library-new", "settings-bark-notify-request-new",
+          "saveBarkSettings()", "testBarkSettings()")))
+check("Bark 读写 JS 函数已移除",
+      all(x not in settings for x in (
+          "function collectBarkSettings()", "async function loadBarkConfig()",
+          "async function saveBarkSettings()", "async function testBarkSettings()",
+          "loadBarkConfig();")))
+check("系统设置页不再有「系统神经感知 (Webhook)」卡片",
+      "系统神经感知" not in settings)
+check("Bark 与 Webhook 配置收敛至机器人助手页（bot.html）",
+      'id="bot-bark-enabled"' in bot_tpl
+      and 'id="webhook_token_bot"' in bot_tpl
+      and "'/api/notify/channels_config'" in bot_tpl)
 check("侧边栏未新增独立通知管理板块",
       'href="/notify_admin" class="nav-item' not in layout)
-check("设置页保留完整通知管理入口链接", 'href="/notify_admin"' in settings)
-check("CHANGELOG 含 1.9.1 入口修复说明",
-      "## 1.9.1" in changelog and "系统设置" in changelog)
+check("CHANGELOG 含 1.9.6 删除说明",
+      "## 1.9.6" in changelog and "删除" in changelog)
 
 print("== 问题 11: 入库事件订阅不再依赖 TG/企微（1.9.2） ==")
 bot_svc = read("app/bot/notification_bot/bot_service.py")
@@ -391,17 +391,38 @@ req_js = read("static/js/request_app.js")
 tab_profile = read("templates/request/tab_profile.html")
 req_admin = read("templates/requests_admin.html")
 bot_py = read("app/bot/bot.py")
+models_py = read("app/schemas/models.py")
+sys_views = read("app/domains/system/views.py")
+user_notify_tpl = read("templates/user_notify.html")
 
-check("request_app.js 引用带版本号（浏览器缓存破坏，1.9.5）",
-      "request_app.js?v=1.9.5" in req_tpl)
-check("通知设置 state/method 位于 requestApp 主作用域",
-      "notifySettingsModalOpen: false" in req_js
-      and "async loadNotifySettings()" in req_js
-      and "async saveNotifySettings()" in req_js
-      and "setNotifyChannel(c)" in req_js)
-check("tab_profile 仅保留按钮与弹窗引用（不再定义方法）",
-      '@click="loadNotifySettings()"' in tab_profile
-      and "async loadNotifySettings" not in tab_profile)
+check("request_app.js 引用带版本号（浏览器缓存破坏，1.9.6）",
+      "request_app.js?v=1.9.6" in req_tpl)
+# 1.9.6：通知设置彻底重构为独立页面，Alpine 侧代码全部移除
+check("request_app.js 不再包含任何通知设置 state/方法（重构为独立页）",
+      all(x not in req_js for x in (
+          "notifySettingsModalOpen", "loadNotifySettings",
+          "saveNotifySettings", "setNotifyChannel", "notifySettings")))
+check("tab_profile 通知设置按钮改为独立页链接",
+      'href="/user/notify_settings"' in tab_profile
+      and '@click="loadNotifySettings()"' not in tab_profile)
+check("tab_profile 不再有通知设置 teleport 弹窗",
+      "notifySettingsModalOpen" not in tab_profile
+      and "setNotifyChannel" not in tab_profile)
+check("用户端通知设置独立页面存在（纯原生 JS，零 Alpine）",
+      "nsSelectChannel" in user_notify_tpl
+      and "nsSave" in user_notify_tpl
+      and "/api/user/notify_settings" in user_notify_tpl
+      and "x-data" not in user_notify_tpl)
+check("独立页路由已注册且校验 req_user 会话",
+      '@router.get("/user/notify_settings"' in sys_views
+      and 'session.get("req_user")' in sys_views)
+check("BotSettingsModel 含 webhook_token 字段（修复保存 500）",
+      "webhook_token: Optional[str]" in models_py)
+check("系统设置页 Webhook/Bark 模块已删除（1.9.6）",
+      "系统神经感知" not in tpl and "系统级 Bark 推送" not in tpl)
+check(".env 控制 token 时输入框不禁用（粘贴原值仅生成地址，保存不覆盖）",
+      "envPasteMode" in bot_tpl
+      and "可粘贴 .env 原值" in bot_tpl)
 check("推送场景总控新增 Bark 推送渠道勾选",
       'id="notify_channel_bark"' in bot_tpl)
 check("推送场景总控新增 Bark 推送配置卡片",
@@ -426,7 +447,7 @@ check("bot settings 保存接口支持 webhook_token（脱敏/env 不覆盖）",
 check("工单大厅批量悬浮栏支持拖拽横滑 + iOS 惯性滚动",
       "startBatchDrag" in req_admin and "endBatchDrag" in req_admin
       and "-webkit-overflow-scrolling: touch" in req_admin)
-check("CHANGELOG 含 1.9.5 发版说明", "## 1.9.5" in changelog)
+check("CHANGELOG 含 1.9.6 发版说明", "## 1.9.6" in changelog)
 
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:

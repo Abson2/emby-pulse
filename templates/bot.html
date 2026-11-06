@@ -103,7 +103,7 @@
                         <div class="mt-3 pt-3 border-t border-gray-200/50 dark:border-white/5">
                             <label class="block text-[10px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">接口验证 Token（Emby 插件无法附带请求头，Token 以 ?token= 拼入地址）</label>
                             <input type="text" id="webhook_token_bot" class="w-full bg-white dark:bg-[#1C1C1E] border border-gray-100 dark:border-white/5 rounded-lg px-3 py-2 font-mono text-[11px] text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm" placeholder="未设置（留空不校验，不推荐）">
-                            <p class="text-[9px] text-gray-400 dark:text-gray-500 mt-1.5 pl-1 leading-relaxed">脱敏掩码表示已设置，保存时不会覆盖；输入新值并「保存配置」后更新，上方地址实时同步。原「系统设置 → 系统神经感知」已整合至此。</p>
+                            <p class="text-[9px] text-gray-400 dark:text-gray-500 mt-1.5 pl-1 leading-relaxed">脱敏掩码表示已设置，保存时不会覆盖；输入新值并「保存配置」后更新，上方地址实时同步。若由 .env 的 WEBHOOK_TOKEN 设置，可粘贴原值仅用于生成完整地址，保存不覆盖。Webhook 与 Bark 推送配置已统一收敛至本页「推送场景总控」。</p>
                         </div>
 
                         <!-- 入库通知渠道选择 -->
@@ -757,12 +757,32 @@
                 const d = json.data;
                 
                 // 🔒 敏感字段处理（环境变量 + 配置文件）
-                function setSensitiveInput(id, value, envKey, isReadonly, placeholder = '••••••••（已设置）') {
+                function setSensitiveInput(id, value, envKey, isReadonly, placeholder = '••••••••（已设置）', envPasteMode = false) {
                     const el = document.getElementById(id);
                     if (!el) return;
                     
-                    // 🔒 如果是环境变量控制，禁用输入框
+                    // 🔒 如果是环境变量控制
                     if (isReadonly) {
+                        // 🔥 1.9.6：webhook_token 采用「粘贴模式」——不禁用输入框，
+                        // 允许粘贴 .env 原值仅用于本地生成完整回调地址；保存时后端
+                        // should_update_sensitive_bot_setting 检测 env 源自动忽略，不会覆盖。
+                        if (envPasteMode) {
+                            el.value = '';  // 清空值，显示占位符
+                            el.placeholder = '••••••••（已由 .env 设置）';
+                            el.disabled = false;
+                            el.classList.remove('cursor-not-allowed', 'opacity-60', 'bg-gray-200', 'dark:bg-[#3A3A3C]');
+                            el.classList.add('bg-gray-100', 'hover:bg-gray-200', 'dark:bg-[#2C2C2E]', 'dark:hover:bg-[#3A3A3C]');
+                            
+                            // 添加提示文字（保留眼睛按钮可用）
+                            const parentDiv = el.closest('div');
+                            if (parentDiv && !parentDiv.querySelector('.env-readonly-tip')) {
+                                const tipEl = document.createElement('p');
+                                tipEl.className = 'env-readonly-tip text-[11px] text-amber-500 dark:text-amber-400 mt-1.5 flex items-center gap-1';
+                                tipEl.innerHTML = `<i class="fa-solid fa-lock text-[10px]"></i> 此字段由环境变量 <code class="px-1 py-0.5 bg-amber-100 dark:bg-amber-900/30 rounded text-amber-600 dark:text-amber-300 font-mono">${envKey}</code> 设置，界面保存不覆盖；可粘贴 .env 原值，仅用于在上方生成完整回调地址`;
+                                parentDiv.appendChild(tipEl);
+                            }
+                            return;
+                        }
                         el.value = '';  // 清空值，显示占位符
                         el.placeholder = placeholder;
                         el.disabled = true;
@@ -895,7 +915,7 @@
                 globalToken = d.webhook_token || '';
 
                 // 🔥 Webhook Token（1.9.5：从系统设置整合至此，脱敏回填 + 环境变量只读）
-                setSensitiveInput('webhook_token_bot', d.webhook_token, 'WEBHOOK_TOKEN', d.webhook_token_readonly, '••••••••（已设置）');
+                setSensitiveInput('webhook_token_bot', d.webhook_token, 'WEBHOOK_TOKEN', d.webhook_token_readonly, '••••••••（已设置）', true);
                 updateBotWebhookUrl();
                 // Token 输入实时同步回调地址
                 const _wtEl = document.getElementById('webhook_token_bot');

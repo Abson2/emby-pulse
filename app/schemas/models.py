@@ -86,6 +86,9 @@ class BotSettingsModel(BaseModel):
     # 🎯 入库通知渠道选择
     library_notify_channels: Optional[str] = ""  # JSON字符串，如 ['tg_bot', 'tg_channel', 'wecom']
 
+    # 🔥 1.9.6：Webhook Token（机器人助手页保存，脱敏/env 值由 should_update_sensitive_bot_setting 保护不覆盖）
+    webhook_token: Optional[str] = ""
+
 class PushRequestModel(BaseModel):
     user_id: str
     period: str

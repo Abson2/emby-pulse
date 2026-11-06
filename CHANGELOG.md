@@ -1,5 +1,33 @@
 # 更新日志
 
+## 1.9.6
+
+集中处理 1.9.5 用户反馈的 4 项问题：用户端通知设置彻底重构为独立页面、系统设置删除 Bark 与 Webhook 两个模块、机器人助手保存报 500 的根因修复、系统日志 500 堆栈清除。
+
+### 修复：机器人助手保存报 500（`BotSettingsModel` 缺 `webhook_token` 字段）
+- **根因**：1.9.5 机器人助手页保存时提交 `webhook_token` 字段，但 `app/schemas/models.py` 的 `BotSettingsModel` 未定义该字段，路由 `data.webhook_token` 取不到 → `AttributeError` 500，且前端每次保存循环触发，系统日志被堆栈刷屏。
+- **修复**：`BotSettingsModel` 新增 `webhook_token: Optional[str] = ""`；保存链路沿用 `should_update_sensitive_bot_setting`（环境变量控制 / 空值 / 脱敏值均不覆盖），与既有敏感字段同一套保护。
+
+### 重构：用户端「通知设置」独立页面（彻底解决点击无反应）
+- **背景**：1.9.4 修 Alpine 嵌套作用域、1.9.5 修 JS 缓存版本号，用户侧两次反馈仍无反应；连续两轮修复无效后按用户要求**彻底重构**，不再依赖 Alpine。
+- **方案**：新增独立页面 `GET /user/notify_settings`（`templates/user_notify.html`，纯 HTML + 原生 JS + Tailwind CDN，零 Alpine 零作用域零缓存问题），未登录跳 `/request_login`；`tab_profile.html` 的「通知设置」按钮由 `@click` 改为 `<a href>` 直达；删除 `tab_profile.html` 的 teleport 弹窗与 `request_app.js` 中的全部 notify state / 方法。
+- **不变**：接口契约（`GET/POST /api/user/notify_settings`）、双渠道（Bark / Webhook 二选一）、四类内容开关（新片入库 / 管理员消息 / 全站公告 / 心愿清单）。
+- `request.html` 的 `request_app.js?v=1.9.5` 递增为 `?v=1.9.6`。
+
+### 删除：系统设置的 Webhook 与 Bark 两个模块（按用户要求）
+- 「系统神经感知 (Webhook)」引导卡与「系统级 Bark 推送」卡片**整卡删除**（含 `collectBarkSettings` / `loadBarkConfig` / `saveBarkSettings` / `testBarkSettings` 四函数与 `loadBarkConfig()` 初始化调用），配置入口统一收敛至「通知与机器人 → 推送场景总控」。
+
+### 优化：.env 控制 Webhook Token 时的输入框体验
+- 环境变量控制时输入框**不再禁用**：可粘贴 .env 原值，仅用于本地生成「带 `?token=` 的完整回调地址」；保存时后端检测 env 源自动忽略，不会覆盖 .env 配置，界面保存边界不变。
+
+### 回归
+- `py_compile` / `node --check`（模板内联脚本全量语法校验）/ `verify_patches` / `check_bark_channel_contract` / `test_user_notify` / `check_notification_bot_subscription` 全绿。
+- `grep` 验证：`request_app.js` 与 `tab_profile.html` 无任何 notify 残留；`settings.html` 无 `settings-bark-*` 残留。
+
+### 发布与验证
+- 应用版本升级至 `1.9.6`；compose 默认锁定 `1.9.6`，`1.9.5` 仍保留，可用 `IMAGE_TAG=1.9.5` 回退。
+- 升级后验证清单：① 用户端「我的 → 通知设置」跳转独立页面并可保存；② 机器人助手页保存配置不再 500；③ 系统设置页不再有 Webhook / Bark 卡片；④ .env 配了 WEBHOOK_TOKEN 时可粘贴原值生成完整地址。
+
 ## 1.9.5
 
 集中处理 1.9.4 用户反馈的 5 项问题：用户端通知设置入口仍无反应、Bark 配置入口位置、Webhook 双入口重复且缺 Token、入库通知可达性验证、工单大厅移动端批量栏显示不完整。

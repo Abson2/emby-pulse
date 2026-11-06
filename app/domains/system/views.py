@@ -672,6 +672,19 @@ async def request_page(request: Request):
     response.headers['Vary'] = 'Cookie, Authorization'
     return response
 
+@router.get("/user/notify_settings", response_class=HTMLResponse)
+async def user_notify_settings_page(request: Request):
+    # 🔥 1.9.6：用户级通知设置独立页（纯 HTML+原生 JS，不用 Alpine）
+    req_user = request.session.get("req_user")
+    if not req_user:
+        return RedirectResponse("/request_login", status_code=303)
+    response = templates.TemplateResponse(request, "user_notify.html", {"request": request, "req_user": req_user, "version": APP_VERSION})
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0, private'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    response.headers['Vary'] = 'Cookie, Authorization'
+    return response
+
 @router.get("/request_login", response_class=HTMLResponse)
 async def request_login_page(request: Request):
     if request.session.get("req_user"): return RedirectResponse("/request")

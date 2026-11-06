@@ -156,7 +156,14 @@
 - **Webhook 入口整合**：系统设置页「系统神经感知」改为引导卡；Webhook 的 Token 管理与**带 `?token=` 的完整回调地址**（可直接复制）统一到「通知与机器人 → 推送场景总控 → 新资源入库通知」，保存走 `/api/bot/settings`（脱敏 / 环境变量值不覆盖）。
 - **工单大厅移动端批量栏横滑**：底部悬浮批量栏新增 iOS 惯性滚动与鼠标 / 触摸拖拽横滑，按钮多时左右拖动浏览，避免显示不完整。
 
-### 2.9 配置隔离与独立仓库
+### 2.9 v1.9.6 通知设置重构与模块收敛
+
+- **用户端「通知设置」彻底重构为独立页面**：1.9.4 / 1.9.5 两轮修复（Alpine 作用域、JS 缓存版本号）后仍有用户反馈点击无反应，1.9.6 按反馈**彻底重构**——新增独立页面 `GET /user/notify_settings`（`templates/user_notify.html`，纯 HTML + 原生 JS，零 Alpine 零缓存问题），「我的 → 通知设置」按钮改为链接直达；接口契约、双渠道（Bark / Webhook 二选一）、四类内容开关（新片入库 / 管理员消息 / 全站公告 / 心愿清单）均不变。未登录访问自动跳转登录页。
+- **修复机器人助手保存报 500**：`BotSettingsModel` 补上 `webhook_token` 字段（此前保存触发 `AttributeError`，系统日志被 500 堆栈刷屏）；保存仍复用 `should_update_sensitive_bot_setting`，环境变量控制 / 空值 / 脱敏值均不覆盖。
+- **系统设置删除 Webhook 与 Bark 两个模块**：按用户要求整卡移除（含保存 / 测试函数），配置入口统一收敛至「通知与机器人 → 推送场景总控」，避免多入口重复维护。
+- **.env 控制 Token 的输入体验**：环境变量控制 Webhook Token 时输入框不再禁用，可粘贴 `.env` 原值仅用于本地生成「带 `?token=` 的完整回调地址」，保存时后端自动忽略、不覆盖 `.env` 配置。
+
+### 2.10 配置隔离与独立仓库
 
 - 仓库不含任何运行期配置 / 数据库 / 密钥 / 域名 / 个人数据；`.env` / `config/` / `data/` / `*.db` 均被双重忽略。
 - 源码通过 GitHub Git Blob API 按 tree 逐 sha 拉取，不接触本机或 NAS 上任何运行期文件；CI 第一步扫描全部入库文件，命中凭证即构建失败。
@@ -219,12 +226,12 @@ WEBHOOK_ALLOW_QUERY_TOKEN=1   # Emby Webhook 插件只能配 ?token= URL；反�
 
 ### 3.2 `docker-compose.yml`（拉取镜像）
 
-镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.4`）拉取指定版本，不设置则默认 `1.9.5`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
+镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.4`）拉取指定版本，不设置则默认 `1.9.6`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
 
 ```yaml
 services:
   embypulse-pro:
-    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.5}
+    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.6}
     container_name: embypulse-pro
     restart: unless-stopped
     ports:
@@ -295,16 +302,16 @@ docker compose up -d
 
 ### 3.7 Emby Webhook 回调地址（1.9.0）
 
-在 Emby Webhook 插件里填 `http://<内网IP>:10307/api/v1/webhook?token=<WEBHOOK_TOKEN 的原值>`，设置页「系统神经感知 (Webhook) → 推送目标地址」可直接复制该格式；把占位符换成你自己的真实 Token 即可。后端默认已兼容 `?token=`。该回调走**内网直连**，不经过公网链路。
+在 Emby Webhook 插件里填 `http://<内网IP>:10307/api/v1/webhook?token=<WEBHOOK_TOKEN 的原值>`；带 Token 的完整地址可在「通知与机器人 → 推送场景总控 → 新资源入库通知」一键复制（1.9.6 起原系统设置页入口已移除，统一在此配置）。后端默认已兼容 `?token=`。该回调走**内网直连**，不经过公网链路。
 
-### 3.8 用户端口「通知设置」使用说明（1.9.3）
+### 3.8 用户端口「通知设置」使用说明（1.9.3 新增，1.9.6 重构为独立页面）
 
 1. 用户访问 `http://<宿主机>:10308`，登录后进入「**我的**」；
-2. 点击「**通知设置**」按钮，弹窗中：
+2. 点击「**通知设置**」跳转独立设置页面（1.9.6 起由弹窗改为独立页，规避浏览器缓存与前端框架兼容问题）：
    - 选择推送渠道：**Bark 链接**（填写 `https://<server>/<device-key>`）或 **Webhook**（填写自定义 POST 地址）；
    - 打开需要的推送内容开关：新片入库 / 管理员消息 / 全站公告 / 心愿清单状态变动；
    - 提示「推送内容不含网址」已内置，无需用户处理；
-3. 点「保存」即生效。此后对应事件发生时，系统按用户配置向其自选渠道推送（与管理端系统级 Bark 互不影响）。
+3. 点「保存」即生效，随后自动返回「我的」页面。此后对应事件发生时，系统按用户配置向其自选渠道推送（与管理端系统级 Bark 互不影响）。
 
 > 用户通知设置存储于 `users_meta.user_notify_settings`，由 `app/domains/users/user_notify_service.py` 负责推送，任意单条失败不影响业务主流程。
 
