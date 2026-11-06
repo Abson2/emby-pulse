@@ -1,0 +1,16 @@
+{
+ "note": "只存归一化比值，不存绝对耗时（跨机器不可比）。",
+ "ratio_tolerance": 3.0,
+ "ratios": {
+  "sanitize_html_rich": 2.0022,
+  "sanitize_html_short": 1.0,
+  "sanitize_rich_long": 444.5446,
+  "sanitize_rich_short": 5.8678,
+  "sqlite_batch_commit": 0.4012,
+  "sqlite_ddl_20": 0.357,
+  "sqlite_single_commit": 1.0262,
+  "to_plain_text_escaped": 1.8646,
+  "to_plain_text_rich": 1.774
+ },
+ "reference": "sanitize_html_short"
+}

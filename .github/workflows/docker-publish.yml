@@ -70,6 +70,18 @@ jobs:
       - name: 校验入库事件订阅（仅启用 Bark 时也触发）
         run: python tools/check_notification_bot_subscription.py .
 
+      - name: 校验三条净化通道 golden 与属性（梯队 0）
+        run: python tests/test_sanitizer_properties.py
+
+      - name: 架构指标报告与不恶化门槛
+        run: python tools/architecture_report.py .
+
+      - name: 热点基准与确定性性能契约
+        run: python tools/bench_hotpaths.py .
+
+      - name: 全量纯标准库校验网（自动发现，新增脚本默认纳入）
+        run: python tools/run_all_checks.py .
+
       - name: 编译全部应用源码
         run: python -m compileall -q app/
 

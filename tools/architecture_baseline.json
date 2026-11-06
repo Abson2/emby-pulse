@@ -1,0 +1,45 @@
+{
+ "ddl_helper_calls": 20,
+ "ensure_calls": 163,
+ "ensure_defs": 42,
+ "execute_many_calls": 0,
+ "inline_script_blocks": 44,
+ "inline_script_lines": 23734,
+ "js_files": 7,
+ "js_lines": 4855,
+ "longest_function_lines": 842,
+ "loop_db_calls": 147,
+ "provider_assembly_points": 78,
+ "runtime_py_files": 362,
+ "runtime_py_lines": 72676,
+ "template_files": 44,
+ "template_lines": 41176,
+ "templates_with_inline_script": 31,
+ "top5_longest": [
+  {
+   "file": "app/plugins/user_backup/plugin.py",
+   "lines": 842,
+   "name": "_setup_routes"
+  },
+  {
+   "file": "app/plugins/library_cover/plugin.py",
+   "lines": 687,
+   "name": "_setup_routes"
+  },
+  {
+   "file": "app/plugins/cover_generator/plugin.py",
+   "lines": 450,
+   "name": "_setup_routes"
+  },
+  {
+   "file": "app/plugins/temp_account/plugin.py",
+   "lines": 325,
+   "name": "_setup_routes"
+  },
+  {
+   "file": "app/domains/reports/report_film_strip_poster_layout_service.py",
+   "lines": 297,
+   "name": "draw_film_strip_layout"
+  }
+ ]
+}

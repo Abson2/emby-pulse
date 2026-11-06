@@ -815,6 +815,92 @@ check("B3-B 等价性回归第 5 节已落地（旧骨架 oracle 逐事件比对
       and "DDL 顺序 / 连接 / cursor / commit 逐事件一致"
       in read("tests/test_b_batch_equivalence.py"))
 
+print("== 问题 21: 梯队 0 治理能力（零运行时代码改动） ==")
+import json as _json21
+
+_t0_run_all = read("tools/run_all_checks.py")
+_t0_arch = read("tools/architecture_report.py")
+_t0_bench = read("tools/bench_hotpaths.py")
+_t0_prop = read("tests/test_sanitizer_properties.py")
+_t0_files = ("tools/run_all_checks.py", "tools/architecture_report.py",
+             "tools/bench_hotpaths.py", "tests/test_sanitizer_properties.py")
+
+
+def _t0_imports(src):
+    """AST 取顶层及函数内 import 的根模块名；避开裸子串自匹配误报。"""
+    out = set()
+    for n in ast.walk(ast.parse(src)):
+        if isinstance(n, ast.Import):
+            out.update(a.name.split(".")[0] for a in n.names)
+        elif isinstance(n, ast.ImportFrom) and n.module:
+            out.add(n.module.split(".")[0])
+    return out
+
+
+def _t0_literal(src, name):
+    """AST 读取模块级 ``name = (...const...)`` / ``frozenset({...})`` 字面量。"""
+    for n in ast.parse(src).body:
+        if isinstance(n, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == name for t in n.targets):
+            val = n.value
+            if isinstance(val, ast.Call) and val.args and isinstance(val.args[0], (ast.Set, ast.List, ast.Tuple)):
+                val = val.args[0]
+            if isinstance(val, (ast.Tuple, ast.List, ast.Set)):
+                return [e.value for e in val.elts if isinstance(e, ast.Constant)]
+    return []
+
+
+check("梯队 0 四个脚本/测试全部落地且只用标准库（AST import 白名单）",
+      all(os.path.isfile(os.path.join(ROOT, p)) for p in _t0_files)
+      and all(_t0_imports(read(p)) <= {
+          "__future__", "os", "sys", "json", "re", "ast", "glob", "time",
+          "subprocess", "sqlite3", "importlib",
+      } for p in _t0_files))
+_t0_excluded = _t0_literal(_t0_run_all, "EXCLUDED")
+check("全量校验网自动发现 + 排除自身 + 29 项显式排除 + 超时保护",
+      all(s in _t0_run_all for s in (
+          "def discover(", 'SELF = "tools/run_all_checks.py"',
+          "TIMEOUT = 90", "PYTHONDONTWRITEBYTECODE"))
+      and len(_t0_excluded) == 29
+      and all(isinstance(p, str) and p.startswith("tests/") for p in _t0_excluded),
+      "excluded=%d" % len(_t0_excluded))
+_t0_gmax = _t0_literal(_t0_arch, "GATES_MAX")
+_t0_gmin = _t0_literal(_t0_arch, "GATES_MIN")
+check("架构门槛只 gate 4 项坏味道 + 1 项防回退（规模类不 gate）",
+      set(_t0_gmax) == {"inline_script_lines", "inline_script_blocks",
+                        "loop_db_calls", "longest_function_lines"}
+      and _t0_gmin == ["ddl_helper_calls"],
+      "max=%s min=%s" % (_t0_gmax, _t0_gmin))
+check("架构 / 基准两份基线已入库且可用 --init 重建",
+      all(os.path.isfile(os.path.join(ROOT, p)) for p in (
+          "tools/architecture_baseline.json", "tools/bench_baseline.json"))
+      and "--init" in _t0_arch and "--init" in _t0_bench)
+check("基准脚本含 4 条确定性性能契约 + 归一化比值门槛",
+      all(s in _t0_bench for s in (
+          "deterministic_contracts", "RATIO_TOLERANCE", "REFERENCE",
+          "1 次连接 / 1 次提交", "ns/op")))
+_t0_golden = _json21.loads(read("tests/sanitizer_golden.json"))
+check("净化 golden 覆盖 25 组输入 × 3 条通道（改代码前采集）",
+      set(_t0_golden) == {"sanitize_html", "to_plain_text", "sanitize_rich_html"}
+      and all(len(v) == 25 for v in _t0_golden.values()))
+check("属性测试锁定三条反直觉事实与 B5 分层边界",
+      all(s in _t0_prop for s in (
+          "明确不幂等", "全部 25 组输入幂等", "保留纯文本节点里的危险字面量",
+          "三通道输出互不相同", "Bark 实体乱码根治")))
+check("梯队 0 四项能力全部接入 CI verify",
+      all(s in ci for s in (
+          "tests/test_sanitizer_properties.py",
+          "tools/architecture_report.py .",
+          "tools/bench_hotpaths.py .",
+          "tools/run_all_checks.py .")))
+check("梯队 0 不发版：版本点仍锁定 v2.0.2",
+      'APP_VERSION = "2.0.2"' in read("app/shared/version.py")
+      and "IMAGE_TAG:-2.0.2" in read("docker-compose.yml")
+      and "request_app.js?v=2.0.2" in read("templates/request.html"))
+check("重构文档新增 8.6 节记录梯队 0 与零运行时改动口径",
+      "### 8.6" in read("docs/REFACTOR_2.0.md")
+      and "零运行时代码改动" in read("docs/REFACTOR_2.0.md"))
+
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:
     for f in FAILS:
