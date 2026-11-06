@@ -320,11 +320,11 @@ check("系统设置接口给出可复制的 URL 模板",
 check("系统设置接口不再要求 Emby 配置 Header",
       "请在 Emby 中配置 Header" not in system_router)
 
-check("应用版本升级到 1.9.7", 'APP_VERSION = "1.9.7"' in read("app/shared/version.py"))
-check("Dockerfile 版本为 1.9.7-hardened", "APP_VERSION=1.9.7-hardened" in dockerfile)
-check("compose 默认拉取 1.9.7", "IMAGE_TAG:-1.9.7" in compose)
-check("CHANGELOG 含 1.9.0 / 1.9.1 / 1.9.2 / 1.9.6 / 1.9.7 发版说明",
-      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7")))
+check("应用版本升级到 1.9.8", 'APP_VERSION = "1.9.8"' in read("app/shared/version.py"))
+check("Dockerfile 版本为 1.9.8-hardened", "APP_VERSION=1.9.8-hardened" in dockerfile)
+check("compose 默认拉取 1.9.8", "IMAGE_TAG:-1.9.8" in compose)
+check("CHANGELOG 含 1.9.0 / 1.9.1 / 1.9.2 / 1.9.6 / 1.9.7 / 1.9.8 发版说明",
+      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7", "## 1.9.8")))
 check("CI 增加 Bark / Webhook 回归步骤",
       "tests/test_bark_push.py" in read(".github/workflows/docker-publish.yml"))
 
@@ -395,8 +395,8 @@ models_py = read("app/schemas/models.py")
 sys_views = read("app/domains/system/views.py")
 modal_notify = read("templates/request/modal_notify.html")
 
-check("request_app.js 引用带版本号（浏览器缓存破坏，1.9.7）",
-      "request_app.js?v=1.9.7" in req_tpl)
+check("request_app.js 引用带版本号（浏览器缓存破坏，1.9.8）",
+      "request_app.js?v=1.9.8" in req_tpl)
 # 1.9.6 起通知设置不再由 Alpine 主组件承载（1.9.7 改为页面内原生弹窗）
 check("request_app.js 不再包含任何通知设置 state/方法（1.9.6 起移除）",
       all(x not in req_js for x in (
@@ -511,6 +511,47 @@ check("push_rule_notification / safe_rule_push 已实现",
       "def push_rule_notification(" in bark_py
       and "def safe_rule_push(" in bark_py)
 check("CHANGELOG 含 1.9.7 发版说明", "## 1.9.7" in changelog)
+
+print("== 问题 14: v1.9.8 Emby Webhook 事件名映射与 LibraryChanged 拆条 ==")
+we_py = read("app/domains/system/webhook_events.py")
+wh_py = read("app/domains/system/webhook.py")
+we_test = read("tests/test_webhook_events.py")
+
+check("事件映射模块存在且含 Emby→内部映射表",
+      "EMBY_TO_INTERNAL" in we_py
+      and "itemadded" in we_py and "librarychanged" in we_py)
+check("映射覆盖入库 / 播放 / 登录 / 删除",
+      all(k in we_py for k in ("itemadded", "librarychanged", "playbackstart",
+                               "playbackstop", "authenticationsuccess", "itemremoved")))
+check("已是内部格式的事件名保持原样不被打散",
+      "KNOWN_INTERNAL_EVENTS" in we_py and '"library.new"' in we_py)
+check("LibraryChanged 按 ItemsAdded 数组拆成 item.added",
+      "def split_library_changed(" in we_py
+      and "ItemsAdded" in we_py and '"item.added"' in we_py)
+check("拆条保留对象元素的 Type/Name 等字段",
+      "dict(raw)" in we_py)
+check("Item Added + Library Changed 双事件短期去重",
+      "def mark_item_seen(" in we_py
+      and "def reset_dedupe_cache(" in we_py)
+check("未识别事件按名称限流告警（不刷屏）",
+      "def warn_unknown_event_once(" in we_py and "_unseen_events" in we_py)
+check("webhook.py 接入归一化 / 拆条 / 去重",
+      all(x in wh_py for x in (
+          "webhook_events.get_raw_event(data)",
+          "webhook_events.normalize_event(",
+          "webhook_events.split_library_changed(",
+          "webhook_events.mark_item_seen(")))
+check("webhook.py 拆条后逐条发布 item.added",
+      'bus.publish("webhook.received", "item.added", payload)' in wh_py)
+check("webhook.py 接入未识别事件告警",
+      "warn_unknown_event_once" in wh_py)
+check("行为回归覆盖端到端入队与旧缺陷复现",
+      "handle_webhook_event(" in we_test
+      and "EMBY WEBHOOK EVENT CHECKS PASSED" in we_test
+      and "itemadded 不入队" in we_test)
+check("CI 已接入 Emby 事件映射回归",
+      "tests/test_webhook_events.py" in ci)
+check("CHANGELOG 含 1.9.8 发版说明", "## 1.9.8" in changelog)
 
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:

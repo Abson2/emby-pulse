@@ -1,5 +1,35 @@
 # 更新日志
 
+## 1.9.8
+
+修复 1.9.7 升级后「用户端能收管理员通知、但收不到新片入库；管理端 Bark 也收不到新片入库」的问题。根因在上游 Webhook 事件入口，与 Bark 配置、渠道开关、用户级推送链路均无关；依据用户侧 NAS 排查结论与资料库 `embypulse_bark_fix.md` 第四节实施源码改造（方案 A，治本）。
+
+### 根因：Emby 事件名与载荷双重不匹配
+
+- 现象自洽性：用户端「管理员消息 / 全站公告 / 心愿变动」正常，唯独「新片入库」静默；系统级 Bark 也只缺入库。系统级 Bark 与用户级「新片入库」广播共用 `handle_library_new_item()`，上游断了两者同时不触发，而管理员消息走另一条链路所以正常。
+- Emby Webhooks 插件发出的是 `ItemAdded` / `LibraryChanged`（驼峰），且 `LibraryChanged` 用 **`ItemsAdded` 数组**承载新增条目，不是单个 `Item`；`webhook.py` 只做 `.lower()`，下游 `notification_bot_webhook_event_service.py` 只匹配 `item.added` / `library.new` 子串。`itemadded` 与 `librarychanged` 都匹配不上，入库事件被静默丢弃，日志里连 `🔔 触发事件: item.added` 都不会打印。
+- 已排除：Bark 配置 / 网络 / Device Key（实测推送 200）、事件总线订阅、`enable_library_notify` 总开关、白名单同步日志（审批工单触发，与入库无关）、「New Media Notification」（轮询计划任务的监控记录）。
+
+### 改造：`app/domains/system/webhook_events.py`（新增纯函数模块）
+
+1. **事件名归一化**：`EMBY_TO_INTERNAL` 把 `ItemAdded` / `LibraryItemAdded` → `item.added`、`LibraryChanged` → `library.new`、`PlaybackStart/Stop` → `playback.start/stop`、`AuthenticationSuccess` / `UserAuthenticated` → `login`、`ItemRemoved` / `ItemDeleted` → `remove`。查表前去掉空格 / 点 / 下划线 / 连字符，兼容 `Item Added` 等写法；`get_raw_event()` 兼容 `Event` / `event` / `EventType` 字段。已是内部格式的事件名（`library.new` 等）保持原样，避免归一化把点号打散后反而匹配不上。
+2. **LibraryChanged 拆条**：`ItemsAdded` 数组逐条发布 `item.added`。字符串元素补成 `{"Item": {"Id": ...}}`；对象元素原样保留 `Type` / `SeriesId` / `Name`，利于下游剧集分组与季海报插件识别。只带 `Id` 的载荷由 `push_single_item()` 调 Emby API `/Items/{Id}` 补全明细，不会推出「未知影片」。拆条成功后不再发布原始 `library.new`（其载荷无单个 `Item`，下游无事可做）。
+3. **双事件去重**：Emby 常同时勾选 `Item Added` 与 `Library Changed`，同一部片会来两次。除 `add_library_task()` 既有的队列内按 Id 去重外，新增 5 分钟进程内 `mark_item_seen()` 跨批次去重，避免收到两条 Bark / 两条用户端通知。
+4. **未识别事件限流告警**：`warn_unknown_event_once()` 按事件名只告警一次，日志明确「未识别 Event=xxx（归一化=yyy）」，方便核对 Emby 实际发了什么，又不会被 `SessionStarted` 等高频事件刷屏。
+
+`webhook.py::emby_webhook` 接入上述四步；`_get_webhook_token()` 与既有 Token 校验 / 违规客户端拦截 / 播放 IP 保存逻辑完全不变。
+
+### 回归
+
+- 新增 `tests/test_webhook_events.py`，47 项纯标准库断言全绿，已接入 CI 第一关：事件名映射（含旧格式不破坏、大小写与分隔符变体）、`ItemsAdded` 数组拆条（字符串 / 对象 / 脏数据 / 非数组 / 空）、双事件去重（含 TTL 到期与重置）、未识别事件限流，以及**端到端**：把 Emby 原生 `ItemAdded` / `LibraryChanged` 载荷送进 `handle_webhook_event()` 验证入库任务真实入队，并反向复现 1.9.7 缺陷（未归一化的 `itemadded` 不入队）。
+- `tools/verify_patches.py` 新增「问题 14」断言组（映射表 / 拆条 / 去重 / 限流 / webhook.py 接线 / CI 接入）。
+- 全量回归：`compileall`、`verify_patches`、`check_bark_channel_contract`、`test_bark_push`、`test_user_notify`、`test_tg_whitelist_sync`、`check_session_cookie_isolation`、`check_notification_bot_subscription`、`check-no-secrets`、模板内联 JS `node --check`、YAML 解析。
+
+### 发布与验证
+
+- 应用版本升级至 `1.9.8`；compose 默认锁定 `1.9.8`，`1.9.7` 仍保留，可用 `IMAGE_TAG=1.9.7` 回退；`request_app.js?v=1.9.8` 同步递增。
+- 升级后验证清单：① Emby Webhooks 插件确认勾选 `Item Added` 与 `Library Changed`，回调 URL / Token 指向本服务；② 触发一次入库（或手动「扫描媒体库」扫进一部新片），容器日志应出现 `🔔 触发事件: item.added` 或 `LibraryChanged 拆分 N 条`；③ Bark 收到「新片入库」、用户端开启「新片入库」开关的用户也收到；④ 同一部片不会推两条；⑤ 若日志出现 `[Webhook] 未识别 Event=`，把该事件名反馈回来补进映射表。
+
 ## 1.9.7
 
 集中处理 1.9.6 升级后反馈的第 3、4 项，并按新增要求给管理端两个通知设置浮窗补上真实 Bark 链路开关。系统设置页已删除的 Webhook / Bark 模块不再改动。

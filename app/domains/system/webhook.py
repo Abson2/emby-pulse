@@ -11,6 +11,9 @@ import os
 import secrets
 import ipaddress
 
+# 🔥 1.9.8：Emby 原生事件名归一化 / LibraryChanged 拆条（纯函数，便于标准库回归）
+from app.domains.system import webhook_events
+
 logger = logging.getLogger("uvicorn")
 router = APIRouter()
 
@@ -147,11 +150,17 @@ async def emby_webhook(request: Request):
         except Exception as e:
             logger.debug(f"[定时检查黑名单] 跳过: {e}")
 
-        event = data.get("Event", "").lower().strip()
+        # 🔥 1.9.8：Emby Webhooks 插件发的是 ItemAdded / LibraryChanged 这类驼峰事件名，
+        # 下游只认 item.added / library.new；不翻译会把入库事件静默丢弃。
+        raw_event = webhook_events.get_raw_event(data)
+        event = webhook_events.normalize_event(raw_event)
         # 只对重要事件输出日志，减少刷屏
         important_events = ["playback.start", "playback.stop", "item.added", "library.new", "auth", "login", "delete", "remove"]
         if event and any(e in event for e in important_events):
-            logger.info(f"🔔 触发事件: {event}")
+            logger.info(f"🔔 触发事件: {event} (原始: {raw_event or '-'})")
+        # 未识别事件按名称限流告警，方便日后核对 Emby 到底发了什么（不会刷屏）
+        if event and not webhook_events.is_known_event(event):
+            webhook_events.warn_unknown_event_once(raw_event, event, logger)
 
         # 3. 播放开始/停止事件立即保存 IP 信息（不依赖 enable_notify）
         if event in ["playback.start", "playback.stop"]:
@@ -180,6 +189,34 @@ async def emby_webhook(request: Request):
                     _save_playback_ip_data(data, user_id, user_name, item, ip)
             except Exception as e:
                 logger.error(f"[Webhook] 保存 IP 数据异常: {e}")
+
+        # 🔥 1.9.8：LibraryChanged 用 ItemsAdded 数组承载新增条目，需逐条拆成
+        # item.added 发布；只带 Id 也没关系，下游 push_single_item 会调 Emby API
+        # /Items/{Id} 补全片名等明细。拆条成功后不再发布原始 library.new
+        # （其载荷里没有单个 Item，下游匹配到了也无事可做）。
+        if webhook_events.is_library_changed(raw_event):
+            published = 0
+            for item_id, payload in webhook_events.split_library_changed(data):
+                if webhook_events.mark_item_seen(item_id):
+                    logger.info(f"[Webhook] 重复入库条目已去重: {item_id}")
+                    continue
+                bus.publish("webhook.received", "item.added", payload)
+                published += 1
+            if published:
+                logger.info(
+                    f"🔔 触发事件: item.added (LibraryChanged 拆分 {published} 条, "
+                    f"原始: {raw_event})"
+                )
+                return {"status": "success"}
+
+        # ItemAdded 与 LibraryChanged 常被同时勾选，这里用同一份短期缓存去重，
+        # 避免同一部片收到两条 Bark / 两条用户端入库通知。
+        if event == "item.added":
+            item = data.get("Item")
+            item_id = str(item.get("Id") or "").strip() if isinstance(item, dict) else ""
+            if item_id and webhook_events.mark_item_seen(item_id):
+                logger.info(f"[Webhook] 重复入库事件已去重: {item_id}")
+                return {"status": "success", "message": "duplicate"}
 
         # 2. 彻底解耦：不再调 bot，而是发布到事件总线
         bus.publish("webhook.received", event, data)

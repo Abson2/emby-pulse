@@ -173,7 +173,17 @@
 - **用户端通知设置回归页面内弹窗**：1.9.6 独立页打不开的物理层根因是 10308 用户端 wrapper 的路径白名单不含 `/user/notify_settings`，直接 403「非法越界」（与 Alpine 作用域、JS 缓存均无关）。按反馈改为与「媒体库设置」一致的页面内弹窗（纯原生 JS、随 HTML 下发、零 Alpine / teleport），「媒体库设置 / 通知设置 / 娱乐功能」三按钮一排并与上方「我的心愿 / 我的报错 / 追剧更新」对齐；独立页文件已删除，旧缓存 / 收藏链接由服务端 303 回 `/request?tab=profile&notify=1` 并自动打开弹窗，白名单保留放行以免 403。
 - **管理端通知设置增加真实 Bark 开关**：「工单大厅通知设置」（工单提交 / 新追新 / 状态变更 / 用户报错）与「用户管理通知设置」（用户注册 / 用户登录 / 用户删除）七类均新增 Bark 渠道勾选；`CHANNEL_OPTIONS` 纳入 `bark`，后端 6 个触发点接入 `safe_rule_push()` 真实推送（求片提交复用既有 `safe_push()` 门控，避免重复推送），不是只保存不消费的假开关。管理端 Telegram HTML 文案在 Bark 侧自动去标签。
 
-### 2.11 配置隔离与独立仓库
+### 2.11 v1.9.8 修复 Emby 入库 Webhook 事件名不匹配（Bark 新片入库不推的真正根因）
+
+- **症状**：1.9.7 升级后用户端通知设置已正常、能收到管理员消息，但**收不到新片入库**；管理端 Bark 同样收不到入库推送。这正好说明问题不在 Bark 配置 / 渠道开关 / 用户级推送链路，而在更上游——入库事件根本没进入事件总线（用户级「新片入库」广播与系统级 Bark 共用同一个 `handle_library_new_item`，上游断了两者都不触发，而管理员消息走的是另一条链路所以正常）。
+- **根因**：Emby Webhooks 插件发出的是 `ItemAdded` / `LibraryChanged` 这类驼峰事件名，且 `LibraryChanged` 用 `ItemsAdded` **数组**承载新增条目，不是单个 `Item`；而 `webhook.py` 只做 `.lower()`，下游 `notification_bot_webhook_event_service` 只认 `item.added` / `library.new`。事件名与载荷双重不匹配，入库事件被静默丢弃，日志里连 `🔔 触发事件: item.added` 都不会出现。
+- **改造（方案 A，治本）**：新增纯函数模块 `app/domains/system/webhook_events.py`，在 `emby_webhook` 入口做三件事：
+  1. **事件名归一化**：`EMBY_TO_INTERNAL` 映射表把 `ItemAdded` / `LibraryItemAdded` → `item.added`、`LibraryChanged` → `library.new`、`PlaybackStart/Stop` → `playback.start/stop`、`AuthenticationSuccess` → `login`、`ItemRemoved/Deleted` → `remove`；查表前去掉空格/点/下划线，兼容 `Item Added` 等写法；已是内部格式的事件名保持原样，避免把 `library.new` 打散成匹配不上的 `librarynew`。
+  2. **LibraryChanged 拆条**：把 `ItemsAdded` 数组逐条发布为 `item.added`。元素是字符串就补成 `{"Item": {"Id": ...}}`，是对象就保留 `Type` / `SeriesId` / `Name` 等字段（利于剧集分组与季海报插件）。只带 Id 也没关系，下游 `push_single_item` 会调 Emby API `/Items/{Id}` 补全明细，不会推出「未知影片」。
+  3. **双事件去重**：Emby 常同时勾选 `Item Added` 与 `Library Changed`，同一部片会来两次；除队列内按 Id 去重外，新增 5 分钟进程内短期去重，避免收到两条 Bark / 两条用户端通知。另外对未识别事件名按名称**限流告警**（每个名字只打一次），方便核对 Emby 实际发了什么，不会被 `SessionStarted` 等高频事件刷屏。
+- **回归**：新增 `tests/test_webhook_events.py`（47 项纯标准库断言），含端到端验证「Emby 原生 `ItemAdded` / `LibraryChanged` 载荷 → 入库任务真实入队」以及旧缺陷复现「未归一化的 `itemadded` 不入队」，已接入 CI 第一关。
+
+### 2.12 配置隔离与独立仓库
 
 - 仓库不含任何运行期配置 / 数据库 / 密钥 / 域名 / 个人数据；`.env` / `config/` / `data/` / `*.db` 均被双重忽略。
 - 源码通过 GitHub Git Blob API 按 tree 逐 sha 拉取，不接触本机或 NAS 上任何运行期文件；CI 第一步扫描全部入库文件，命中凭证即构建失败。
@@ -236,12 +246,12 @@ WEBHOOK_ALLOW_QUERY_TOKEN=1   # Emby Webhook 插件只能配 ?token= URL；反�
 
 ### 3.2 `docker-compose.yml`（拉取镜像）
 
-镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.6`）拉取指定版本，不设置则默认 `1.9.7`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
+镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.7`）拉取指定版本，不设置则默认 `1.9.8`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
 
 ```yaml
 services:
   embypulse-pro:
-    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.7}
+    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.8}
     container_name: embypulse-pro
     restart: unless-stopped
     ports:
@@ -313,6 +323,8 @@ docker compose up -d
 ### 3.7 Emby Webhook 回调地址（1.9.0）
 
 在 Emby Webhook 插件里填 `http://<内网IP>:10307/api/v1/webhook?token=<WEBHOOK_TOKEN 的原值>`；带 Token 的完整地址可在「通知与机器人 → 推送场景总控 → 新资源入库通知」一键复制（1.9.6 起原系统设置页入口已移除，统一在此配置）。后端默认已兼容 `?token=`。该回调走**内网直连**，不经过公网链路。
+
+> **1.9.8 起**：Emby Webhooks 插件请勾选 `Item Added` 与 `Library Changed` 两项入库事件，系统会自动把驼峰事件名翻译成内部 `item.added` 并把 `ItemsAdded` 数组拆条；两个都勾也不会重复推送（5 分钟内按 `Item.Id` 去重）。若入库仍收不到通知，先看容器日志有没有 `🔔 触发事件: item.added`；一条都没有说明 Webhook 根本没到达本服务，请核对插件里的回调 URL 与 Token；若出现 `[Webhook] 未识别 Event=`，把该事件名反馈回来补进映射表即可。
 
 ### 3.8 用户端口「通知设置」使用说明（1.9.3 新增，1.9.7 回归页面内弹窗）
 

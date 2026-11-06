@@ -46,6 +46,9 @@ jobs:
       - name: 校验推送场景总控 Bark 渠道前后端字段契约（1.9.5）
         run: python tools/check_bark_channel_contract.py .
 
+      - name: 校验 Emby Webhook 事件映射与入库拆条（1.9.8）
+        run: python tests/test_webhook_events.py
+
       - name: 校验用户端口「通知设置」（需求 5，用户级推送）
         run: python tests/test_user_notify.py
 
