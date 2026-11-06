@@ -432,7 +432,7 @@
     <div x-show="viewMode === 'request' && selectedKeys.length > 0" 
          x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-8" x-transition:enter-end="opacity-100 translate-y-0"
          x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0" x-transition:leave-end="opacity-0 translate-y-8"
-         class="fixed bottom-[92px] left-4 right-4 md:bottom-8 md:left-1/2 md:right-auto md:-translate-x-1/2 z-[90] bg-white/90 dark:bg-[#2C2C2E]/90 backdrop-blur-2xl border border-gray-200/60 dark:border-white/10 shadow-[0_16px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_16px_40px_rgba(0,0,0,0.6)] rounded-2xl px-3 py-3 md:px-5 flex items-center justify-start gap-2 md:gap-4 overflow-x-auto mac-scrollbar" x-cloak>
+         class="fixed bottom-[92px] left-4 right-4 md:bottom-8 md:left-1/2 md:right-auto md:-translate-x-1/2 z-[90] bg-white/90 dark:bg-[#2C2C2E]/90 backdrop-blur-2xl border border-gray-200/60 dark:border-white/10 shadow-[0_16px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_16px_40px_rgba(0,0,0,0.6)] rounded-2xl px-3 py-3 md:px-5 flex items-center justify-start gap-2 md:gap-4 overflow-x-auto overflow-y-hidden mac-scrollbar" style="-webkit-overflow-scrolling: touch" @mousedown="startBatchDrag($event)" @mousemove="moveBatchDrag($event)" @mouseup="endBatchDrag()" @mouseleave="endBatchDrag()" @touchstart="startBatchDrag($event)" @touchmove="moveBatchDrag($event)" @touchend="endBatchDrag()" x-cloak>
         <div class="flex items-center shrink-0 pl-1">
             <div class="bg-brand-100 dark:bg-brand-900/50 text-brand-600 dark:text-brand-400 font-black h-7 min-w-[1.75rem] px-2 rounded-lg flex items-center justify-center text-sm shadow-inner" x-text="selectedKeys.length"></div>
             <span class="text-sm font-bold text-gray-600 dark:text-gray-300 ml-2 hidden sm:inline whitespace-nowrap">项已选</span>
@@ -458,7 +458,7 @@
     <div x-show="viewMode === 'feedback' && selectedFeedbacks.length > 0" 
          x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-8" x-transition:enter-end="opacity-100 translate-y-0"
          x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0" x-transition:leave-end="opacity-0 translate-y-8"
-         class="fixed bottom-[92px] left-4 right-4 md:bottom-8 md:left-1/2 md:right-auto md:-translate-x-1/2 z-[90] bg-white/90 dark:bg-[#2C2C2E]/90 backdrop-blur-2xl border border-gray-200/60 dark:border-white/10 shadow-[0_16px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_16px_40px_rgba(0,0,0,0.6)] rounded-2xl px-3 py-3 md:px-5 flex items-center justify-start gap-2 md:gap-4 overflow-x-auto mac-scrollbar" x-cloak>
+         class="fixed bottom-[92px] left-4 right-4 md:bottom-8 md:left-1/2 md:right-auto md:-translate-x-1/2 z-[90] bg-white/90 dark:bg-[#2C2C2E]/90 backdrop-blur-2xl border border-gray-200/60 dark:border-white/10 shadow-[0_16px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_16px_40px_rgba(0,0,0,0.6)] rounded-2xl px-3 py-3 md:px-5 flex items-center justify-start gap-2 md:gap-4 overflow-x-auto overflow-y-hidden mac-scrollbar" style="-webkit-overflow-scrolling: touch" @mousedown="startBatchDrag($event)" @mousemove="moveBatchDrag($event)" @mouseup="endBatchDrag()" @mouseleave="endBatchDrag()" @touchstart="startBatchDrag($event)" @touchmove="moveBatchDrag($event)" @touchend="endBatchDrag()" x-cloak>
         <div class="flex items-center shrink-0 pl-1">
             <div class="bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 font-black h-7 min-w-[1.75rem] px-2 rounded-lg flex items-center justify-center text-sm shadow-inner" x-text="selectedFeedbacks.length"></div>
             <span class="text-sm font-bold text-gray-600 dark:text-gray-300 ml-2 hidden sm:inline whitespace-nowrap">项已选</span>
@@ -1029,7 +1029,10 @@ function showNotifyToast(message, type = 'success') {
             toast: { show: false, message: '', type: 'success' },
             selectedKeys: [], 
             selectedFeedbacks: [],
-            
+
+            // 🔥 批量操作栏拖拽横滑（1.9.5：移动端按钮多时按住拖动浏览，避免显示不完整）
+            batchBarDrag: { active: false, startX: 0, startScroll: 0, moved: false },
+
             // 🔥 分页相关变量
             pageSize: 21,
             currentPage: 1,
@@ -1059,8 +1062,7 @@ function showNotifyToast(message, type = 'success') {
                     this.viewMode = 'feedback';
                 }
                 this.loadData();
-                this.loadFeedback();
-                setInterval(() => {
+                this.loadFeedback();                setInterval(() => {
                     if(this.viewMode === 'request') this.loadData();
                     else this.loadFeedback();
                 }, 30000);
@@ -1383,6 +1385,39 @@ function showNotifyToast(message, type = 'success') {
                     const parts = k.split('_');
                     return { tmdb_id: parseInt(parts[0]), season: parseInt(parts[1]) };
                 });
+            },
+
+            // 🔥 批量操作栏拖拽横滑（1.9.5）
+            // 移动端原生 overflow 滚动之外，补鼠标拖拽 + 触摸拖拽，保证按钮多时一定能左右滑动浏览。
+            startBatchDrag(e) {
+                // 只响应主键 / 单指，且不在按钮上起拖
+                if (e.button !== undefined && e.button !== 0) return;
+                const bar = e.currentTarget;
+                if (!bar) return;
+                const x = e.touches ? e.touches[0].clientX : e.clientX;
+                this.batchBarDrag = { active: true, startX: x, startScroll: bar.scrollLeft, moved: false };
+            },
+            moveBatchDrag(e) {
+                const d = this.batchBarDrag;
+                if (!d.active) return;
+                const bar = e.currentTarget;
+                const x = e.touches ? e.touches[0].clientX : e.clientX;
+                const walk = x - d.startX;
+                if (Math.abs(walk) > 4) d.moved = true;
+                if (bar) bar.scrollLeft = d.startScroll - walk;
+                // 触摸时不阻止默认行为：与浏览器原生横滚互补（原生生效则同值不冲突，原生失效则 JS 兜底）
+                if (!e.touches && e.cancelable) e.preventDefault();
+            },
+            endBatchDrag() {
+                const d = this.batchBarDrag;
+                if (!d.active) return;
+                // 拖拽过则吞掉紧随其后的 click，避免误触按钮
+                if (d.moved) {
+                    const swallow = (ev) => { ev.preventDefault(); ev.stopPropagation(); };
+                    window.addEventListener('click', swallow, { capture: true, once: true });
+                    setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 350);
+                }
+                d.active = false; d.moved = false;
             },
 
             async batchAction(action) {

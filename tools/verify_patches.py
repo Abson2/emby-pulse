@@ -31,6 +31,10 @@ def read(rel: str) -> str:
         return f.read()
 
 
+# 1.9.5：机器人助手页模板（Webhook 整合 + Bark 卡片）在多个断言组中使用，提前读取
+bot_tpl = read("templates/bot.html")
+
+
 def nodes(src: str, names: set[str]):
     """挑出指定名称的顶层赋值/函数/导入节点，供独立 exec 使用。"""
     tree = ast.parse(src)
@@ -148,11 +152,14 @@ check("后端 Webhook Token 统一脱敏",
       'all_config["webhook_token"] = mask_sensitive(webhook_token)' in bot
       and 'all_config["webhook_token"] = "****（由环境变量设置）"' in bot)
 check("模板不硬编码完整带 token 的 URL", "webhook?token=" not in tpl)
-check("设置页拼出 Emby 可用的 ?token= 地址",
-      "'?token='" in tpl and "/api/v1/webhook" in tpl)
+# 1.9.5：?token= 地址拼装从设置页迁移至机器人助手页（bot.html）
+check("机器人助手页拼出 Emby 可用的 ?token= 地址",
+      "'?token='" in bot_tpl and "/api/v1/webhook" in bot_tpl)
 check("脱敏值不会被误拼进 URL（占位符兜底）",
-      "你的Token" in tpl and "raw.indexOf('****')" in tpl)
-check("模板 URL 预览基于当前 host", "${host}/api/v1/webhook`" in tpl)
+      "你的Token" in bot_tpl and "raw.indexOf('****')" in bot_tpl)
+check("URL 预览基于当前 host", "${host}/api/v1/webhook`" in bot_tpl)
+check("复制按钮含 execCommand 降级（内网 http 非安全上下文）",
+      "document.execCommand('copy')" in bot_tpl)
 
 print("== 交付与配置隔离 ==")
 check("compose 引用自己的镜像", "ghcr.io/abson2/emby-pulse-hardened" in compose)
@@ -297,19 +304,24 @@ check("通知管理页两类消息开关独立",
 
 check("设置页不再错误地只推荐 Header 方式",
       "推荐使用 Header 方式传递 Token，更安全" not in settings_tpl)
-check("设置页明确说明 Emby 无法附带请求头",
-      "Emby Webhook 插件无法附带自定义请求头" in settings_tpl)
-check("设置页提供复制 Emby 地址入口",
-      "copyWebhookUrl()" in settings_tpl)
+check("机器人助手页明确说明 Emby 无法附带请求头",
+      "Emby 插件无法附带请求头" in bot_tpl)
+check("Webhook 复制入口已整合至机器人助手页（1.9.5）",
+      "copyBotWebhookUrl()" in bot_tpl and "buildBotWebhookUrl()" in bot_tpl)
+check("机器人助手页 Webhook 地址带 ?token=（脱敏值不拼入）",
+      "'?token=' + botWebhookTokenForUrl()" in bot_tpl and "你的Token" in bot_tpl)
+check("设置页 Webhook 区改为引导卡（去重，指向机器人助手）",
+      "前往 通知与机器人 配置" in settings_tpl
+      and 'id="webhook_token"' not in settings_tpl)
 check("系统设置接口给出可复制的 URL 模板",
       "?token=<WEBHOOK_TOKEN>" in system_router
       and "webhook_query_token_enabled" in system_router)
 check("系统设置接口不再要求 Emby 配置 Header",
       "请在 Emby 中配置 Header" not in system_router)
 
-check("应用版本升级到 1.9.4", 'APP_VERSION = "1.9.4"' in read("app/shared/version.py"))
-check("Dockerfile 版本为 1.9.4-hardened", "APP_VERSION=1.9.4-hardened" in dockerfile)
-check("compose 默认拉取 1.9.4", "IMAGE_TAG:-1.9.4" in compose)
+check("应用版本升级到 1.9.5", 'APP_VERSION = "1.9.5"' in read("app/shared/version.py"))
+check("Dockerfile 版本为 1.9.5-hardened", "APP_VERSION=1.9.5-hardened" in dockerfile)
+check("compose 默认拉取 1.9.5", "IMAGE_TAG:-1.9.5" in compose)
 check("CHANGELOG 含 1.9.0 / 1.9.1 / 1.9.2 发版说明",
       all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2")))
 check("CI 增加 Bark / Webhook 回归步骤",
@@ -372,6 +384,49 @@ check("新增行为校验脚本存在且只依赖标准库",
       and "import requests" not in read("tools/check_notification_bot_subscription.py"))
 check("CHANGELOG 含 1.9.2 修复说明",
       "## 1.9.2" in changelog and "静默" in changelog)
+
+print("== 问题 12: v1.9.5 五项反馈（通知设置无反应 / Bark 入口 / Webhook 整合 / 批量栏横滑） ==")
+req_tpl = read("templates/request.html")
+req_js = read("static/js/request_app.js")
+tab_profile = read("templates/request/tab_profile.html")
+req_admin = read("templates/requests_admin.html")
+bot_py = read("app/bot/bot.py")
+
+check("request_app.js 引用带版本号（浏览器缓存破坏，1.9.5）",
+      "request_app.js?v=1.9.5" in req_tpl)
+check("通知设置 state/method 位于 requestApp 主作用域",
+      "notifySettingsModalOpen: false" in req_js
+      and "async loadNotifySettings()" in req_js
+      and "async saveNotifySettings()" in req_js
+      and "setNotifyChannel(c)" in req_js)
+check("tab_profile 仅保留按钮与弹窗引用（不再定义方法）",
+      '@click="loadNotifySettings()"' in tab_profile
+      and "async loadNotifySettings" not in tab_profile)
+check("推送场景总控新增 Bark 推送渠道勾选",
+      'id="notify_channel_bark"' in bot_tpl)
+check("推送场景总控新增 Bark 推送配置卡片",
+      'id="bot-bark-enabled"' in bot_tpl
+      and 'id="bot-bark-server"' in bot_tpl
+      and 'id="bot-bark-device-key"' in bot_tpl
+      and 'id="bot-bark-notify-library-new"' in bot_tpl
+      and 'id="bot-bark-notify-request-new"' in bot_tpl)
+check("Bark 卡片保存/测试走 /api/notify 专用接口",
+      "collectBotBarkSettings()" in bot_tpl
+      and "loadBotBarkConfig()" in bot_tpl
+      and "'/api/notify/channels_config'" in bot_tpl
+      and "'/api/notify/bark_test'" in bot_tpl)
+check("入库通知渠道保存包含 bark",
+      "?(['bark'] : [])" in bot_tpl or "['bark']" in bot_tpl)
+check("机器人助手页 Webhook Token 输入与保存",
+      'id="webhook_token_bot"' in bot_tpl
+      and "webhook_token: getSensitiveValue('webhook_token_bot')" in bot_tpl)
+check("bot settings 保存接口支持 webhook_token（脱敏/env 不覆盖）",
+      'should_update_sensitive_bot_setting("webhook_token", data.webhook_token)' in bot_py
+      and 'set_bot_setting("webhook_token"' in bot_py)
+check("工单大厅批量悬浮栏支持拖拽横滑 + iOS 惯性滚动",
+      "startBatchDrag" in req_admin and "endBatchDrag" in req_admin
+      and "-webkit-overflow-scrolling: touch" in req_admin)
+check("CHANGELOG 含 1.9.5 发版说明", "## 1.9.5" in changelog)
 
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:

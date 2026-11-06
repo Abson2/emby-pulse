@@ -535,41 +535,22 @@
 
         <div class="apple-card flex flex-col h-full p-5 md:p-6">
             <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-6 flex items-center shrink-0">
-                <div class="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-500/10 text-orange-500 flex items-center justify-center mr-3 shadow-sm"><i class="fa-solid fa-tower-broadcast text-sm"></i></div> 
+                <div class="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-500/10 text-orange-500 flex items-center justify-center mr-3 shadow-sm"><i class="fa-solid fa-tower-broadcast text-sm"></i></div>
                 系统神经感知 (Webhook)
             </h3>
             <div class="flex-1 flex flex-col justify-between space-y-5">
                 <div class="bg-orange-50/80 dark:bg-orange-500/10 p-3.5 rounded-xl border border-orange-100 dark:border-orange-500/20 shadow-sm">
                     <p class="text-[11px] text-orange-800 dark:text-orange-300 leading-relaxed font-medium">此接口用于接收播放和入库通知。<strong>必须配置到媒体服务器中！</strong></p>
                 </div>
-                <div>
-                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1 flex items-center gap-1.5">
-                        接口验证 Token
-                        <span class="setting-tip">
-                            <i class="fa-solid fa-circle-question setting-tip-icon text-[12px]"></i>
-                            <span class="setting-tooltip">用于验证 Webhook 请求来源，防止恶意请求。<br><br>Emby Webhook 插件无法附带自定义请求头，只能配置一个 URL，请把此 Token 填入下方回调地址的 <code class='text-emerald-600'>?token=</code> 参数。<br><br>🔒 界面出于安全只显示脱敏值，请填入你在配置 / 环境变量 WEBHOOK_TOKEN 里设置的原始值。<br><br>若反向代理能注入请求头，也可改用 <code class='text-emerald-600'>X-Webhook-Token</code>（服务端优先读取）。</span>
-                        </span>
-                    </label>
-                    <input type="text" id="webhook_token" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-orange-500/50 outline-none transition-all">
-                </div>
-                <div class="mt-auto">
-                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1 flex items-center gap-1.5">
-                        推送目标地址
-                        <span class="setting-tip">
-                            <i class="fa-solid fa-circle-question setting-tip-icon text-[12px]"></i>
-                            <span class="setting-tooltip">将此地址配置到媒体服务器 Webhook 设置中，用于接收播放和入库事件。<br><br>Emby Webhook 插件只能配置 URL，因此地址必须带 <code class='text-emerald-600'>?token=</code>；请把占位符替换为上方 Token 的原始值。<br><br>🔒 回调由 Emby 服务端在内网直连发起，不经浏览器与公网链路；仅当把 10307 暴露到公网或改走公网反代时，才需要考虑日志中的凭证。</span>
-                        </span>
-                    </label>
-                    <p class="text-[11px] font-mono text-orange-600 dark:text-orange-400 break-all select-all leading-relaxed bg-gray-100 dark:bg-[#2C2C2E] p-3 rounded-xl border border-transparent dark:border-white/5 shadow-inner" id="webhook-url-preview">...</p>
-                    <div class="flex items-center justify-between gap-2 mt-2">
-                        <p class="text-[10px] text-amber-500 dark:text-amber-400 flex items-center gap-1 leading-relaxed">
-                            <i class="fa-solid fa-circle-info text-[10px]"></i>
-                            <span>替换「你的Token」后填入 Emby；若从公网域名打开本页，请把 host 换成内网 IP</span>
-                        </p>
-                        <button type="button" onclick="copyWebhookUrl()" class="shrink-0 text-[10px] px-2.5 py-1 rounded-lg bg-orange-100 dark:bg-orange-500/15 text-orange-600 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-500/25 transition">
-                            <i class="fa-solid fa-copy mr-1"></i>复制
-                        </button>
-                    </div>
+                <div class="bg-gray-50 dark:bg-black/20 p-3.5 rounded-xl border border-gray-100 dark:border-white/5 shadow-sm flex-1 flex flex-col justify-center gap-3">
+                    <p class="text-[12px] text-gray-600 dark:text-gray-300 leading-relaxed font-medium">
+                        1.9.5 起，Webhook 的 <strong>接口验证 Token</strong> 与 <strong>带 Token 的完整回调地址</strong>（可直接复制）已统一整合至
+                        <span class="text-brand-500 font-bold">「通知与机器人 → 推送场景总控 → 新资源入库通知」</span>，
+                        与「Bark 推送」渠道配置同页管理，避免两个入口重复维护。
+                    </p>
+                    <a href="/bot" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-[12px] font-bold transition active:scale-95 shadow-md shadow-brand-500/20 self-start">
+                        <i class="fa-solid fa-robot"></i>前往 通知与机器人 配置
+                    </a>
                 </div>
             </div>
         </div>
@@ -1471,7 +1452,6 @@ async function loadSettings() {
 
         hiddenUsers = d.hidden_users || [];
         renderHiddenUsers();
-        updateWebhookPreview();
         updateWelcomePreview();
         
         if(typeof initRoutes === 'function') initRoutes();
@@ -1481,7 +1461,6 @@ async function loadSettings() {
             {key: 'emby_api_key', envKey: 'EMBY_API_KEY'},
             {key: 'tmdb_api_key', envKey: 'TMDB_API_KEY'},
             {key: 'moviepilot_token', envKey: 'MOVIEPILOT_TOKEN'},
-            {key: 'webhook_token', envKey: 'WEBHOOK_TOKEN'},
             {key: 'weather_qweather_key', envKey: 'WEATHER_QWEATHER_KEY'},
             {key: 'weather_amap_key', envKey: 'WEATHER_AMAP_KEY'}
         ];
@@ -1693,57 +1672,8 @@ function removeHiddenUser(uid) {
     renderHiddenUsers();
 }
 
-// 1.9.0：Emby Webhook 插件只能配置一个 URL，无法附带自定义请求头，
-// 因此回调地址必须带 ?token=。后端出于安全只回传脱敏 Token，
-// 这里绝不能把脱敏值拼进地址（否则用户复制到 Emby 会一直被 401/403 拒绝）：
-//   - 输入框是掩码/占位 → 展示「你的Token」，提示用户替换原始值；
-//   - 用户手动填入原始值 → 实时生成可直接复制的完整地址。
-function webhookTokenForUrl() {
-    const el = document.getElementById('webhook_token');
-    const raw = (el && el.value ? el.value : '').trim();
-    if (!raw || raw.indexOf('****') !== -1 || raw.indexOf('由环境变量') !== -1) {
-        return '你的Token';
-    }
-    return encodeURIComponent(raw);
-}
-
-function buildWebhookUrl() {
-    const host = window.location.origin;
-    return `${host}/api/v1/webhook` + '?token=' + webhookTokenForUrl();
-}
-
-function updateWebhookPreview() {
-    const el = document.getElementById('webhook-url-preview');
-    if (el) el.textContent = buildWebhookUrl();
-}
-
-function copyWebhookUrl() {
-    const url = buildWebhookUrl();
-    const tip = url.indexOf('你的Token') !== -1
-        ? '地址已复制，请把「你的Token」替换为原始 Token'
-        : 'Emby Webhook 地址已复制';
-    // 内网常用 http://IP:10307 访问，属非安全上下文，navigator.clipboard 可能不存在，
-    // 因此提供 execCommand 降级，避免复制按钮直接抛 TypeError。
-    const fallback = () => {
-        const ta = document.createElement('textarea');
-        ta.value = url;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        let ok = false;
-        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-        document.body.removeChild(ta);
-        showSettingsToast(ok ? tip : '请手动选中上方地址复制', ok ? 'success' : 'error');
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url).then(() => {
-            showSettingsToast(tip, 'success');
-        }).catch(fallback);
-    } else {
-        fallback();
-    }
-}
+// 1.9.5：Webhook Token 与带 Token 的完整回调地址已整合至「通知与机器人 → 推送场景总控」
+// （templates/bot.html 的 webhook-info 区域），此处不再重复提供输入与预览。
 
 // ==================== 系统级 Bark 推送（1.9.1：内置于系统设置页） ====================
 // 独立于顶部「保存配置」：Bark 走 /api/notify/channels_config，只提交 bark 节点，
@@ -1984,8 +1914,6 @@ function updateWelcomePreview() {
     previewDiv.innerHTML = content;
 }
 
-document.getElementById('webhook_token').addEventListener('input', updateWebhookPreview);
-
 // 🔥 重命名为 showSettingsToast，避免被 layout.html 的全局 showToast 覆盖
 function showSettingsToast(msg, type = 'success') {
     const toast = document.getElementById('settings-toast');
@@ -2024,7 +1952,6 @@ async function saveSettings() {
         emby_api_key: getSensitiveValue('emby_api_key'),
         tmdb_api_key: getSensitiveValue('tmdb_api_key'),
         proxy_url: document.getElementById('proxy_url').value,
-        webhook_token: getSensitiveValue('webhook_token'),
         hidden_users: hiddenUsers,
         emby_public_url: document.getElementById('emby_public_url').value,
         welcome_message: document.getElementById('welcome_message').value,

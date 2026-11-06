@@ -161,6 +161,10 @@ def api_save_bot_settings(data: BotSettingsModel, request: Request):
         set_bot_setting("wecom_token", (data.wecom_token or "").strip())
     if should_update_sensitive_bot_setting("wecom_aeskey", data.wecom_aeskey):
         set_bot_setting("wecom_aeskey", (data.wecom_aeskey or "").strip())
+    # 🔥 1.9.5：Webhook Token 从系统设置整合至机器人助手页，保存链路走 /api/bot/settings。
+    # 与系统设置页同一 should_update_sensitive_bot_setting 保护：环境变量控制 / 空值 / 脱敏值均不覆盖。
+    if should_update_sensitive_bot_setting("webhook_token", data.webhook_token):
+        set_bot_setting("webhook_token", (data.webhook_token or "").strip())
     
     # 非敏感字段直接保存
     set_bot_setting("tg_chat_id", data.tg_chat_id)
@@ -245,6 +249,9 @@ def api_save_bot_settings(data: BotSettingsModel, request: Request):
         changed_fields.append("wecom_token")
     if old_values["wecom_aeskey"] != data.wecom_aeskey:
         changed_fields.append("wecom_aeskey")
+    # 🔥 1.9.5：Webhook Token 变更记录（脱敏值不变时不重复记录）
+    if should_update_sensitive_bot_setting("webhook_token", data.webhook_token):
+        changed_fields.append("webhook_token")
     if old_values["enable_bot"] != data.enable_bot:
         changed_fields.append("enable_bot")
     if old_values["user_bot_open_reg"] != data.user_bot_open_reg:

@@ -149,7 +149,14 @@
 - **入库通知全链诊断日志**：Webhook 入队、入库事件接收、Bark 推送结果三个节点均输出日志，任一段断裂可从 `docker logs` 直接定位；服务启动增加 per-service 容错，单服务异常不再连锁中断事件订阅。
 - **Webhook 测试说明**：Emby Webhook 的「测试」事件返回成功仅代表端点与 token 正常，`test` 类事件不会产生通知（设计如此）；请添加真实影视触发 `item.added` 后观察日志链。
 
-### 2.8 配置隔离与独立仓库
+### 2.8 v1.9.5 修复与整合
+
+- **修复用户端「通知设置」点击无反应**：根因是 `request_app.js` 的 URL 查询版本号长期未变（`?v=1.3.53`），浏览器持续使用缓存旧 JS。已升级为 `?v=1.9.5`，**后续每次发版必须同步递增**；升级后如遇无反应，硬刷新（Ctrl/Cmd+Shift+R）即可。
+- **推送场景总控新增 Bark 推送**：「通知与机器人」页新增「Bark 推送」配置卡片（启用开关 / 服务器 / Device Key / 新片入库 / 新求片 / 提示音 / 分组 / 保存 / 测试），「通知渠道」勾选组同步新增 Bark 选项；与系统设置页的 Bark 卡片读写同一份配置。
+- **Webhook 入口整合**：系统设置页「系统神经感知」改为引导卡；Webhook 的 Token 管理与**带 `?token=` 的完整回调地址**（可直接复制）统一到「通知与机器人 → 推送场景总控 → 新资源入库通知」，保存走 `/api/bot/settings`（脱敏 / 环境变量值不覆盖）。
+- **工单大厅移动端批量栏横滑**：底部悬浮批量栏新增 iOS 惯性滚动与鼠标 / 触摸拖拽横滑，按钮多时左右拖动浏览，避免显示不完整。
+
+### 2.9 配置隔离与独立仓库
 
 - 仓库不含任何运行期配置 / 数据库 / 密钥 / 域名 / 个人数据；`.env` / `config/` / `data/` / `*.db` 均被双重忽略。
 - 源码通过 GitHub Git Blob API 按 tree 逐 sha 拉取，不接触本机或 NAS 上任何运行期文件；CI 第一步扫描全部入库文件，命中凭证即构建失败。
@@ -212,12 +219,12 @@ WEBHOOK_ALLOW_QUERY_TOKEN=1   # Emby Webhook 插件只能配 ?token= URL；反�
 
 ### 3.2 `docker-compose.yml`（拉取镜像）
 
-镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.3`）拉取指定版本，不设置则默认 `1.9.4`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
+镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.4`）拉取指定版本，不设置则默认 `1.9.5`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
 
 ```yaml
 services:
   embypulse-pro:
-    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.4}
+    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.5}
     container_name: embypulse-pro
     restart: unless-stopped
     ports:

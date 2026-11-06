@@ -95,8 +95,16 @@
                         </label>
                     </div>
                     <div id="webhook-info" class="hidden bg-gray-50 dark:bg-black/20 border border-gray-200/80 dark:border-white/5 rounded-xl p-3 mt-2 transition-all shadow-sm">
-                        <p class="text-[10px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">请在 Emby Webhook 填入:</p>
-                        <input type="text" id="webhook-url" readonly onclick="this.select()" class="w-full bg-white dark:bg-[#1C1C1E] border border-gray-100 dark:border-white/5 rounded-lg px-3 py-2 font-mono text-indigo-600 dark:text-indigo-400 text-[11px] focus:outline-none cursor-pointer shadow-sm">
+                        <p class="text-[10px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">请在 Emby Webhook 填入（地址已含 Token，可直接复制）:</p>
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="webhook-url" readonly onclick="this.select()" class="flex-1 min-w-0 bg-white dark:bg-[#1C1C1E] border border-gray-100 dark:border-white/5 rounded-lg px-3 py-2 font-mono text-indigo-600 dark:text-indigo-400 text-[11px] focus:outline-none cursor-pointer shadow-sm">
+                            <button type="button" onclick="copyBotWebhookUrl()" class="shrink-0 text-[10px] px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition font-bold border border-indigo-100 dark:border-indigo-500/20"><i class="fa-solid fa-copy mr-1"></i>复制</button>
+                        </div>
+                        <div class="mt-3 pt-3 border-t border-gray-200/50 dark:border-white/5">
+                            <label class="block text-[10px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">接口验证 Token（Emby 插件无法附带请求头，Token 以 ?token= 拼入地址）</label>
+                            <input type="text" id="webhook_token_bot" class="w-full bg-white dark:bg-[#1C1C1E] border border-gray-100 dark:border-white/5 rounded-lg px-3 py-2 font-mono text-[11px] text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-sm" placeholder="未设置（留空不校验，不推荐）">
+                            <p class="text-[9px] text-gray-400 dark:text-gray-500 mt-1.5 pl-1 leading-relaxed">脱敏掩码表示已设置，保存时不会覆盖；输入新值并「保存配置」后更新，上方地址实时同步。原「系统设置 → 系统神经感知」已整合至此。</p>
+                        </div>
 
                         <!-- 入库通知渠道选择 -->
                         <div class="mt-3 pt-3 border-t border-gray-200/50 dark:border-white/5">
@@ -117,8 +125,13 @@
                                     <i class="fa-brands fa-weixin text-green-500 text-[11px]"></i>
                                     <span class="text-[11px] text-gray-700 dark:text-gray-300">企业微信</span>
                                 </label>
+                                <label class="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-[#2C2C2E] rounded-lg border border-gray-200 dark:border-white/10 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-500/50 transition-colors">
+                                    <input type="checkbox" id="notify_channel_bark" class="w-3.5 h-3.5 accent-indigo-500 rounded">
+                                    <i class="fa-solid fa-mobile-screen-button text-orange-500 text-[11px]"></i>
+                                    <span class="text-[11px] text-gray-700 dark:text-gray-300">Bark 推送</span>
+                                </label>
                             </div>
-                            <p class="text-[9px] text-gray-400 dark:text-gray-500 mt-1.5 pl-1">未选择时默认发送到所有渠道</p>
+                            <p class="text-[9px] text-gray-400 dark:text-gray-500 mt-1.5 pl-1">TG / 企微未选择时默认发送到所有渠道；Bark 由下方「Bark 推送」卡片的总开关与「新片入库通知」开关独立控制，与此处勾选无关。</p>
                         </div>
                     </div>
                 </div>
@@ -188,6 +201,62 @@
                         <input type="text" id="wecom_touser" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-green-500/50 outline-none transition-all placeholder-gray-400" placeholder="@all">
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- 🔥 Bark 推送（1.9.5：从系统设置整合到推送场景总控） -->
+        <div class="apple-card flex flex-col h-full p-5 md:p-6">
+            <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-6 flex items-center justify-between shrink-0">
+                <span class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-500/10 text-orange-500 flex items-center justify-center shadow-sm"><i class="fa-solid fa-mobile-screen-button text-sm"></i></div>
+                    Bark 推送
+                </span>
+                <button onclick="testBotBarkSettings()" id="test-bark-btn" class="bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-500/20 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border border-orange-100 dark:border-orange-500/20 active:scale-95 shadow-sm">
+                    发送测试
+                </button>
+            </h3>
+            <div class="flex-1 flex flex-col justify-start space-y-3.5">
+                <div class="bg-orange-50/80 dark:bg-orange-500/10 p-3 rounded-xl border border-orange-100 dark:border-orange-500/20">
+                    <p class="text-[11px] text-orange-800 dark:text-orange-300 leading-relaxed font-medium">推送「新片入库」与「新的求片」两类消息。系统级独立通道，不受通知规则勾选与旧通知总开关约束；失败只记日志，不影响业务主流程。</p>
+                </div>
+
+                <label class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50 dark:bg-[#2C2C2E] cursor-pointer hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition">
+                    <span class="text-[12px] font-bold text-gray-700 dark:text-gray-200">启用 Bark 推送</span>
+                    <input type="checkbox" id="bot-bark-enabled" class="w-5 h-5 rounded text-orange-500">
+                </label>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">服务器地址</label>
+                    <input type="text" id="bot-bark-server" class="w-full px-3.5 py-2.5 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[12px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-orange-500/50 outline-none transition-all" placeholder="https://api.day.app（自建服填自己的地址）">
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">Device Key</label>
+                    <input type="password" id="bot-bark-device-key" class="w-full px-3.5 py-2.5 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[12px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-orange-500/50 outline-none transition-all" placeholder="Bark App 里的设备密钥">
+                </div>
+
+                <div class="flex flex-wrap gap-x-5 gap-y-2 pl-1">
+                    <label class="flex items-center gap-2 text-[12px] font-medium text-gray-600 dark:text-gray-300 cursor-pointer"><input type="checkbox" id="bot-bark-notify-library-new" class="w-4 h-4 rounded text-orange-500">新片入库通知</label>
+                    <label class="flex items-center gap-2 text-[12px] font-medium text-gray-600 dark:text-gray-300 cursor-pointer"><input type="checkbox" id="bot-bark-notify-request-new" class="w-4 h-4 rounded text-orange-500">新的求片通知</label>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">提示音</label>
+                        <input type="text" id="bot-bark-sound" class="w-full px-3 py-2.5 rounded-xl border border-transparent bg-gray-100 dark:bg-[#2C2C2E] text-[12px] text-gray-800 dark:text-gray-100 outline-none focus:ring-2 focus:ring-orange-500/50" placeholder="default">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">分组</label>
+                        <input type="text" id="bot-bark-group" class="w-full px-3 py-2.5 rounded-xl border border-transparent bg-gray-100 dark:bg-[#2C2C2E] text-[12px] text-gray-800 dark:text-gray-100 outline-none focus:ring-2 focus:ring-orange-500/50" placeholder="EMBYPULSE">
+                    </div>
+                </div>
+
+                <div class="flex gap-2 pt-1">
+                    <button type="button" onclick="saveBotBarkSettings()" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-[12px] font-bold transition active:scale-95">
+                        <i class="fa-solid fa-floppy-disk text-[11px]"></i>保存 Bark
+                    </button>
+                </div>
+                <p class="text-[10px] text-gray-400 dark:text-gray-500 leading-relaxed">Device Key 读取时掩码显示，保存时掩码值不会覆盖已存密钥；「发送测试」可验证当前表单里尚未保存的值。用户级 Bark 请在用户端口「我的 → 通知设置」单独配置，与此系统级配置互不干预。</p>
             </div>
         </div>
 
@@ -755,6 +824,8 @@
                     document.getElementById('notify_channel_tg_bot').checked = libChannels.includes('tg_bot');
                     document.getElementById('notify_channel_tg_channel').checked = libChannels.includes('tg_channel');
                     document.getElementById('notify_channel_wecom').checked = libChannels.includes('wecom');
+                    const barkCh = document.getElementById('notify_channel_bark');
+                    if (barkCh) barkCh.checked = libChannels.includes('bark');
                 } catch(e) {}
 
                 // 用户机器人
@@ -823,9 +894,22 @@
 
                 globalToken = d.webhook_token || '';
 
+                // 🔥 Webhook Token（1.9.5：从系统设置整合至此，脱敏回填 + 环境变量只读）
+                setSensitiveInput('webhook_token_bot', d.webhook_token, 'WEBHOOK_TOKEN', d.webhook_token_readonly, '••••••••（已设置）');
+                updateBotWebhookUrl();
+                // Token 输入实时同步回调地址
+                const _wtEl = document.getElementById('webhook_token_bot');
+                if (_wtEl && !_wtEl._botWhBound) {
+                    _wtEl._botWhBound = true;
+                    _wtEl.addEventListener('input', updateBotWebhookUrl);
+                }
+
                 // Webhook URLs
                 const host = window.location.protocol + "//" + window.location.host;
                 document.getElementById('wecom-webhook-url').value = `${host}/api/bot/wecom_webhook`;
+
+                // 🔥 Bark 推送配置（1.9.5）
+                loadBotBarkConfig();
 
                 toggleWebhookInfo(libNotify);
             }
@@ -837,10 +921,134 @@
         const urlInput = document.getElementById('webhook-url');
         if (el.checked) {
             infoBox.classList.remove('hidden');
-            const host = window.location.protocol + "//" + window.location.host;
-            urlInput.value = `${host}/api/v1/webhook`;
+            updateBotWebhookUrl();
         } else {
             infoBox.classList.add('hidden');
+        }
+    }
+
+    // 🔥 Webhook 回调地址（1.9.5：地址必须带 ?token=，Emby 插件无法附带请求头）
+    // 脱敏值/空值不能拼进地址（用户复制到 Emby 会被 401/403 拒绝），
+    // 因此显示「你的Token」占位，提示用户填入原始 Token 后地址实时同步。
+    function botWebhookTokenForUrl() {
+        const el = document.getElementById('webhook_token_bot');
+        const raw = (el && el.value ? el.value : '').trim();
+        if (!raw || raw.indexOf('****') !== -1 || raw.indexOf('由环境变量') !== -1) {
+            return '你的Token';
+        }
+        return encodeURIComponent(raw);
+    }
+
+    function buildBotWebhookUrl() {
+        const host = window.location.origin;
+        return `${host}/api/v1/webhook` + '?token=' + botWebhookTokenForUrl();
+    }
+
+    function updateBotWebhookUrl() {
+        const el = document.getElementById('webhook-url');
+        if (el) el.value = buildBotWebhookUrl();
+    }
+
+    function copyBotWebhookUrl() {
+        const url = buildBotWebhookUrl();
+        const tip = url.indexOf('你的Token') !== -1
+            ? '地址已复制，请把「你的Token」替换为原始 Token'
+            : 'Emby Webhook 地址已复制';
+        // 内网常用 http://IP:10307 访问，属非安全上下文，navigator.clipboard 可能不存在，
+        // 因此提供 execCommand 降级，避免复制按钮直接抛 TypeError。
+        const fallback = () => {
+            const ta = document.createElement('textarea');
+            ta.value = url;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            let ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+            document.body.removeChild(ta);
+            showToast(ok ? 'success' : 'error', ok ? '复制成功' : '复制失败', ok ? tip : '请手动选中地址复制');
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(() => {
+                showToast('success', '复制成功', tip);
+            }).catch(fallback);
+        } else {
+            fallback();
+        }
+    }
+
+    // ==================== 🔥 Bark 推送（1.9.5：整合到推送场景总控） ====================
+    // 独立于顶部「保存配置」：Bark 走 /api/notify/channels_config，只提交 bark 节点，
+    // 不会覆盖 TG / 企业微信配置。
+    function collectBotBarkSettings() {
+        return {
+            bark: {
+                enabled: document.getElementById('bot-bark-enabled').checked,
+                server: (document.getElementById('bot-bark-server').value || '').trim(),
+                device_key: (document.getElementById('bot-bark-device-key').value || '').trim(),
+                sound: (document.getElementById('bot-bark-sound').value || '').trim() || 'default',
+                group: (document.getElementById('bot-bark-group').value || '').trim() || 'EMBYPULSE',
+                notify_library_new: document.getElementById('bot-bark-notify-library-new').checked,
+                notify_request_new: document.getElementById('bot-bark-notify-request-new').checked
+            }
+        };
+    }
+
+    async function loadBotBarkConfig() {
+        try {
+            const res = await fetch('/api/notify/channels_config');
+            const json = await res.json();
+            if (json.status !== 'success') return;
+            const c = (json.data && json.data.bark) || {};
+            document.getElementById('bot-bark-enabled').checked = !!c.enabled;
+            document.getElementById('bot-bark-server').value = c.server || '';
+            document.getElementById('bot-bark-device-key').value = c.device_key || '';
+            document.getElementById('bot-bark-sound').value = c.sound || 'default';
+            document.getElementById('bot-bark-group').value = c.group || 'EMBYPULSE';
+            document.getElementById('bot-bark-notify-library-new').checked = c.notify_library_new !== false;
+            document.getElementById('bot-bark-notify-request-new').checked = c.notify_request_new !== false;
+        } catch (e) {
+            console.warn('[Bark] 读取配置失败', e);
+        }
+    }
+
+    async function saveBotBarkSettings() {
+        try {
+            const res = await fetch('/api/notify/channels_config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(collectBotBarkSettings())
+            });
+            const json = await res.json();
+            showToast(json.status === 'success' ? 'success' : 'error',
+                      json.status === 'success' ? '保存成功' : '保存失败',
+                      json.message || (json.status === 'success' ? 'Bark 配置已保存' : '请稍后重试'));
+            // 重新读取，让 Device Key 显示为后端下发的掩码值
+            if (json.status === 'success') await loadBotBarkConfig();
+        } catch (e) {
+            showToast('error', '保存失败', 'Bark 配置保存失败: ' + e.message);
+        }
+    }
+
+    async function testBotBarkSettings() {
+        const c = collectBotBarkSettings().bark;
+        const btn = document.getElementById('test-bark-btn');
+        const ogText = btn ? btn.innerHTML : '';
+        if (btn) { btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; btn.disabled = true; }
+        try {
+            const res = await fetch('/api/notify/bark_test', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({server: c.server, device_key: c.device_key})
+            });
+            const json = await res.json();
+            showToast(json.status === 'success' ? 'success' : 'error',
+                      json.status === 'success' ? '测试成功' : '测试失败',
+                      json.message || '测试完成');
+        } catch (e) {
+            showToast('error', '测试失败', '测试推送失败: ' + e.message);
+        } finally {
+            if (btn) { btn.innerHTML = ogText; btn.disabled = false; }
         }
     }
 
@@ -1079,11 +1287,14 @@
             user_bot_restriction_cache_ttl: parseInt(document.getElementById('user_bot_restriction_cache_ttl').value) || 120,
             // 🎯 频道通知
             notify_channels: getNotifyChannelsJson(),
+            // 🔥 接口验证 Token（1.9.5：与系统设置整合，保存链路走 /api/bot/settings）
+            webhook_token: getSensitiveValue('webhook_token_bot'),
             // 🎯 入库通知渠道选择
             library_notify_channels: JSON.stringify([
                 ...(document.getElementById('notify_channel_tg_bot').checked ? ['tg_bot'] : []),
                 ...(document.getElementById('notify_channel_tg_channel').checked ? ['tg_channel'] : []),
-                ...(document.getElementById('notify_channel_wecom').checked ? ['wecom'] : [])
+                ...(document.getElementById('notify_channel_wecom').checked ? ['wecom'] : []),
+                ...(document.getElementById('notify_channel_bark').checked ? ['bark'] : [])
             ])
         };
 

@@ -43,6 +43,9 @@ jobs:
       - name: 校验系统级 Bark 推送与 Webhook token 兼容
         run: python tests/test_bark_push.py
 
+      - name: 校验推送场景总控 Bark 渠道前后端字段契约（1.9.5）
+        run: python tools/check_bark_channel_contract.py .
+
       - name: 校验用户端口「通知设置」（需求 5，用户级推送）
         run: python tests/test_user_notify.py
 
