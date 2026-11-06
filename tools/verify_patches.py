@@ -636,6 +636,73 @@ check("对外 API 路由未删减（公告 7 条）",
           '"/api/announcements/{ann_id}/view"', '"/api/user/announcements"',
           '"/api/user/announcements/{ann_id}/read"')))
 
+print("== 问题 17: v2.0 第二批零风险加固（同类乱码收尾 / 安全契约固化） ==")
+msg17 = read("app/domains/notifications/messages.py")
+msg17_tree = ast.parse(msg17)
+push17 = next(
+    x for x in ast.walk(msg17_tree)
+    if isinstance(x, ast.Call) and isinstance(x.func, ast.Attribute)
+    and x.func.attr == "push_user_notify"
+)
+push17_src = ast.get_source_segment(msg17, push17) or ""
+
+check("管理员消息用户级通知正文改用 to_plain_text（纯文本通道不实体化）",
+      "to_plain_text(data.content, max_length=5000)" in push17_src)
+check("该调用内不再使用 sanitize_html 转义", "sanitize_html(" not in push17_src)
+check("对外参数 / 标题 / flag key 保持不变",
+      all(s in push17_src for s in (
+          "data.user_id", '"管理员消息"', 'flag_key="notify_admin_message"')))
+check("网页端消息存储仍用 sanitize_html（显示链路零改动）",
+      msg17.count("insert_admin_message(") >= 2
+      and msg17.count("sanitize_html(data.content, max_length=5000)") >= 3)
+check("安全工具导入为追加式（原有导入未删）",
+      "from app.core.security_utils import safe_error_message, sanitize_html, to_plain_text" in msg17)
+
+for rel17, expect17 in (
+    ("app/bot/notification_bot/notification_bot_library_new_item_service.py", "notify_users_by_flag"),
+    ("app/bot/notification_bot/notification_bot_library_new_episode_service.py", "notify_users_by_flag"),
+    ("app/domains/media_requests/management_router.py", "notify_request_users"),
+):
+    s17 = read(rel17)
+    check("未改动用户级通知入口：%s" % rel17.split("/")[-1],
+          expect17 in s17 and "to_plain_text(" not in s17 and "sanitize_html(" not in s17)
+
+sec17_path = "tools/check_security_contracts.py"
+sec17 = read(sec17_path)
+check("存在 2.0 安全契约脚本（纯静态、只读源码）",
+      os.path.isfile(os.path.join(ROOT, sec17_path))
+      and "SECURITY CONTRACT CHECKS PASSED" in sec17)
+# 只用 AST 检查真实 import：契约脚本自身含 "import bleach" 等字面量用于检查
+# security_utils.py，裸子串判断会自匹配误伤。
+sec17_tree = ast.parse(sec17)
+sec17_imports = set()
+for _n17 in ast.walk(sec17_tree):
+    if isinstance(_n17, ast.Import):
+        sec17_imports.update(_a.name.split(".")[0] for _a in _n17.names)
+    elif isinstance(_n17, ast.ImportFrom) and _n17.module:
+        sec17_imports.add(_n17.module.split(".")[0])
+check("安全契约脚本只依赖标准库",
+      sec17_imports <= {"__future__", "importlib", "os", "sys"},
+      repr(sorted(sec17_imports)))
+check("安全契约覆盖 10 类既有防护",
+      all(s in sec17 for s in (
+          "CSRF", "AuthGate", "SESSION_COOKIE_NAME", "script-src-elem",
+          "validate_proxy_url", '".." in filename', "SENSITIVE_ENV_FIELDS",
+          "sanitize_rich_html", "to_plain_text", "check-no-secrets")))
+check("CI 接入安全契约与富文本净化回归",
+      "tools/check_security_contracts.py" in ci
+      and "tests/test_sanitize_rich_html.py" in ci)
+check("等价性回归扩展第二批第 8 节",
+      "== 8. 第二批" in read("tests/test_refactor_2_0_equivalence.py"))
+check("本批不升版本号 / 不重推已发布 tag（稳定性）",
+      'APP_VERSION = "2.0"' in read("app/shared/version.py")
+      and "IMAGE_TAG:-2.0" in read("docker-compose.yml")
+      and "request_app.js?v=2.0" in read("templates/request.html"))
+check("CHANGELOG 记录第二批零风险收尾", "第二批" in changelog)
+check("重构文档记录第二批决策与 B0 收口建议撤销",
+      "## 7. 第二批零风险加固" in read("docs/REFACTOR_2.0.md")
+      and "不采纳" in read("docs/REFACTOR_2.0.md"))
+
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:
     for f in FAILS:

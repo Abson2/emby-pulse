@@ -1,5 +1,30 @@
 # 更新日志
 
+## 2.0 第二批（零风险收尾，v2.0 tag 之后 / 版本号不变）
+
+按「风险最小、稳定性、安全性、100% 功能保留」筛选，只做确凿同类 bug 修复、安全契约固化与测试补强，**不改对外接口、不改版本号、不做 DI 容器 / 前端公共 JS / DDL 通用化等运行时行为大改**。完整决策记录见 [docs/REFACTOR_2.0.md](docs/REFACTOR_2.0.md) 第 7 节。
+
+### 1. 同类乱码收尾（管理员消息用户级通知）
+
+- 现象与公告同源：`send_message()` 给用户的 Bark / Webhook 推送正文走 `sanitize_html()` 做 `html.escape`，纯文本通道不解码实体，`&` / `<` / `>` 会以 `&amp;` / `&lt;` / `&gt;` 字面量送达。
+- 修复：该处唯一的用户级通知调用改用 `to_plain_text(data.content, max_length=5000)`；**网页端 `insert_admin_message()` 存储与展示链路仍用 `sanitize_html()`，一行未动**；对外参数、`flag_key`、异常吞噬语义全部不变。
+- 刻意不动其它用户级通知入口：新片入库 / 剧集更新 / 心愿状态变动的正文是模板渲染的真实 HTML 标签，Bark 出口 `_strip_html()` 已能正常剥离，改动反而会引入行为差异。
+
+### 2. 安全契约固化为 CI 可执行断言
+
+- 新增 `tools/check_security_contracts.py`（纯标准库、只读源码、42/0）：把 CSRF / 反向代理头、AuthGate 默认拒绝与中间件顺序、10307/10308 Cookie 隔离、CSP nonce、SSRF 代理运行期校验、路径穿越、敏感字段 env 中央注册、日志脱敏、富文本净化 / 纯文本通道、CI 防护链固化为断言；第 9 节直接加载 `security_utils.py` 做行为级净化验证。
+- CI `verify` job 接入该脚本与 `tests/test_sanitize_rich_html.py`。
+
+### 3. 回归与边界
+
+- `tests/test_refactor_2_0_equivalence.py` 扩展第 8 节（88/0）：AST 精确抽取 `push_user_notify` 调用验证正文替换与参数不变、网页端存储未动、三个未改动入口仍在、用户级通知服务签名不变、安全契约脚本只用标准库（AST import 白名单，避免裸子串自匹配误伤）、CI 接线、2.0 版本号稳定。
+- `tools/verify_patches.py` 新增「问题 17」断言组，锁定第二批边界。
+- 全套既有回归、`compileall`、`node --check`、YAML 解析、凭证扫描保持全绿。
+
+### 4. 版本说明
+
+`v2.0` 已发布且 tag 已推送，本批**不升版本号、不重推已发布 tag**，仅作为 `main` 上的收尾提交；`APP_VERSION` / 镜像 tag / JS 缓存版本号均保持 `2.0`。如需独立补丁镜像，再单独发 `v2.0.1`。
+
 ## 2.0
 
 架构优化与安全性审查版。**硬约束：100% 保留全部现有功能、原有输入输出行为不变、不改动对外接口、不删除任何特性**。本版为「低风险清理」首批，完整梳理与后续批次方案见 [docs/REFACTOR_2.0.md](docs/REFACTOR_2.0.md)。

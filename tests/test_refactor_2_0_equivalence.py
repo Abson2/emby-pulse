@@ -511,6 +511,79 @@ check("SENSITIVE_ENV_FIELDS 未被削弱（BARK / WEBHOOK 仍在）",
       '"bark_device_key": "BARK_DEVICE_KEY"' in cfg_src
       and '"webhook_token": "WEBHOOK_TOKEN"' in cfg_src)
 
+print("== 8. 第二批：管理员消息同类乱码收尾 + 零风险边界 ==")
+msg_src = read("app/domains/notifications/messages.py")
+msg_tree = ast.parse(msg_src)
+push_call = next(
+    x for x in ast.walk(msg_tree)
+    if isinstance(x, ast.Call) and isinstance(x.func, ast.Attribute)
+    and x.func.attr == "push_user_notify"
+)
+push_src = ast.get_source_segment(msg_src, push_call) or ""
+check("管理员消息用户级通知正文改用 to_plain_text",
+      "to_plain_text(data.content, max_length=5000)" in push_src)
+check("该调用内不再使用 sanitize_html 转义", "sanitize_html(" not in push_src)
+check("对外参数与 flag key 不变",
+      'data.user_id' in push_src and '"管理员消息"' in push_src
+      and 'flag_key="notify_admin_message"' in push_src)
+check("网页端消息存储仍用 sanitize_html（显示链路零改动）",
+      msg_src.count("insert_admin_message(") >= 1
+      and msg_src.count("sanitize_html(data.content, max_length=5000)") >= 2)
+check("导入 to_plain_text 未删任何原有导入",
+      "from app.core.security_utils import safe_error_message, sanitize_html, to_plain_text" in msg_src)
+
+# 行为：管理员消息典型内容不再产生实体乱码
+for content in ("您的账号已开通", "欢迎 A & B 使用", "密码 < 8 位不允许", "<b>加粗通知</b>"):
+    out = to_plain_text(content, max_length=5000)
+    check("管理员消息纯文本通道无实体：%r" % content[:12],
+          "&lt;" not in out and "&gt;" not in out and "&amp;" not in out, repr(out))
+check("普通管理员消息逐字不变",
+      to_plain_text("您的账号已开通", max_length=5000)
+      == sanitize_html("您的账号已开通", max_length=5000))
+
+# 未受影响的其它用户级通知入口（本批刻意不动，保持行为）
+for rel, expect in (
+    ("app/bot/notification_bot/notification_bot_library_new_item_service.py", "notify_users_by_flag"),
+    ("app/bot/notification_bot/notification_bot_library_new_episode_service.py", "notify_users_by_flag"),
+    ("app/domains/media_requests/management_router.py", "notify_request_users"),
+):
+    s = read(rel)
+    check("未改动入口仍在：%s" % rel.split("/")[-1],
+          expect in s and "to_plain_text(" not in s and "sanitize_html(" not in s)
+
+check("用户级通知服务签名未变（对外接口）",
+      all(sig in read("app/domains/users/user_notify_service.py") for sig in (
+          "def push_user_notify(user_id: str, title: str, body: str, flag_key: str = None) -> dict:",
+          "def notify_users_by_flag(flag_key: str, title: str, body: str):",
+          "def notify_request_users(tmdb_id, season, flag_key: str, title: str, body: str):")))
+
+# 安全契约脚本：纯加法、只读源码、无第三方依赖
+# 注意：不能用裸子串判断「没有 import bleach / pytest」——契约脚本自身就包含
+# 这类字符串用于检查 security_utils.py，会被自己的文本误伤。改用 AST 只检查
+# 真实的 import 语句顶层模块名。
+sec_contract = read("tools/check_security_contracts.py")
+sec_tree = ast.parse(sec_contract)
+sec_imports = set()
+for _node in ast.walk(sec_tree):
+    if isinstance(_node, ast.Import):
+        sec_imports.update(_a.name.split(".")[0] for _a in _node.names)
+    elif isinstance(_node, ast.ImportFrom) and _node.module:
+        sec_imports.add(_node.module.split(".")[0])
+check("存在 2.0 安全契约脚本且只用标准库",
+      os.path.isfile(os.path.join(ROOT, "tools/check_security_contracts.py"))
+      and sec_imports <= {"__future__", "importlib", "os", "sys"},
+      repr(sorted(sec_imports)))
+check("安全契约脚本只读源码（不改运行时行为）",
+      "open(" in sec_contract and "os.remove" not in sec_contract and "shutil" not in sec_contract)
+ci_src = read(".github/workflows/docker-publish.yml")
+check("安全契约与富文本净化回归均接入 CI",
+      "tools/check_security_contracts.py" in ci_src
+      and "tests/test_sanitize_rich_html.py" in ci_src)
+check("2.0 版本号未被本批改动（稳定性）",
+      'APP_VERSION = "2.0"' in read("app/shared/version.py")
+      and "IMAGE_TAG:-2.0" in read("docker-compose.yml")
+      and "request_app.js?v=2.0" in read("templates/request.html"))
+
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:
     for f in FAILS:

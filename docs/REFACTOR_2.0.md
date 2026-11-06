@@ -257,5 +257,80 @@ DDL：app/infra/db/schema_registry.py <── schema_bootstrap.ensure_registered
 ## 6. 后续批次排队
 
 本轮交付 = 「完整分析 + 批次 A 代码 + B0 乱码修复 + 安全加固 + 等价性测试 + 2.0 版本号 + 全量回归」。
-下一轮建议按 `B0 收口（push_user_notify 层统一纯文本化）→ B1（library_common 抽离）→ B3（ensure_once）→ B2（前端公共 JS）` 推进，每轮单独提交。
+下一轮建议按 `B1（library_common 抽离）→ B3（ensure_once）→ B2（前端公共 JS）` 推进，每轮单独提交。
 C 批建议等 CI 具备 pytest + FastAPI 集成环境后再启动。
+
+> **修订（第二批）**：此处原建议的「B0 收口（push_user_notify 层统一纯文本化）」经复核**不采纳**。统一化会同时改变多个入口对模板真实 HTML 标签与 `&` / `<` / `>` 的输出，而 CI 只有纯标准库、无法证明全入口逐字节等价，与「100% 行为不变」硬约束冲突。实际改为逐入口只修确凿 bug，见第 7 节。
+
+---
+
+## 7. 第二批零风险加固（v2.0 tag 之后）
+
+### 7.1 筛选标准
+
+用户标准：「风险最小、稳定性、安全性、100% 功能保留」。据此**只纳入三类改动**：
+
+1. 与已确认 bug 完全同源、可单点修复且不触碰其它链路；
+2. 纯加法、零运行时行为变更的静态契约与回归测试；
+3. 修复测试自身的误报。
+
+凡涉及运行时行为、公共模块抽取、依赖注入、DDL 通用化、前端公共 JS 收敛，一律排除，仍留在 B/C 批排队。
+
+### 7.2 全入口复核结论（先排查再动手）
+
+以 `_uns.notify_users_by_flag` / `_uns.push_user_notify` / `_uns.notify_request_users` 为索引，逐条判断用户级通知正文来源：
+
+| 入口 | 正文来源 | 是否存在同类实体乱码 | 本批动作 |
+| --- | --- | --- | --- |
+| `announcements_router.py::create_announcement` | Quill 富文本 | 有（首批 B0 已修） | 保持 `to_plain_text` |
+| `messages.py::send_message` | 管理员输入纯文本，经 `sanitize_html()` 实体化 | **确凿同类**：`&` / `<` / `>` 变 `&amp;` / `&lt;` / `&gt;` | 改为 `to_plain_text` |
+| `notification_bot_library_new_item_service.py` | 模板渲染的真实 `<b>` 标签 | 无，Bark 出口 `_strip_html()` 可剥离真实标签 | 不动 |
+| `notification_bot_library_new_episode_service.py` | 同上 | 同上 | 不动 |
+| `management_router.py` 心愿状态变动 | 状态文案 | 未见实体化链路 | 不动 |
+
+判断依据：Bark 是纯文本通道，既不渲染标签也不解码实体。`_strip_html()` 只能剥离 `<...>` 真实标签；实体乱码只能由内容源头的 `html.escape()` 产生。因此修复点必须落在「实体化发生处」，而不是出口层或统一中间层。
+
+### 7.3 落地清单
+
+| 文件 | 改动 | 运行时行为影响 |
+| --- | --- | --- |
+| `app/domains/notifications/messages.py` | `push_user_notify()` 正文 `sanitize_html` → `to_plain_text`，导入追加一个符号 | 仅管理员消息的用户级 Bark / Webhook 正文；网页端 `insert_admin_message()` 存储与显示链路一行未动，参数 / `flag_key` / 异常吞噬不变 |
+| `tools/check_security_contracts.py`（新增） | 10 组静态 + 行为级安全契约断言，纯标准库只读源码 | 无（CI 脚本，不进镜像运行路径） |
+| `.github/workflows/docker-publish.yml` | `verify` job 增加安全契约 + 富文本净化回归两步 | 仅 CI |
+| `tests/test_refactor_2_0_equivalence.py` | 扩展第 8 节锁定第二批边界；把「只用标准库」断言改为 AST import 白名单 | 仅测试 |
+| `tools/verify_patches.py` | 新增「问题 17」断言组 | 仅 CI |
+| `CHANGELOG.md` / 本文档 | 记录第二批决策与版本策略 | 无 |
+
+**测试断言误报修复**：等价性测试原用裸子串 `"import bleach" not in sec_contract`，而安全契约脚本自身第 129 行就含该字符串（用于检查 `security_utils.py` 未被污染），造成自匹配误伤（87/1）。改为 AST 解析真实 import 语句、只检查顶层模块名白名单，既排除误报又比子串更严谨（88/0）。教训与 2.0 首批一致：**静态断言不得用裸子串判断「不存在」**。
+
+### 7.4 刻意不做（及理由）
+
+| 候选项 | 不做的理由 |
+| --- | --- |
+| `push_user_notify` 层统一纯文本化（第 6 节原建议，已撤销） | 会同时改变 4 个入口对模板 HTML 与特殊字符的输出；CI 无 pytest / FastAPI 集成环境，无法证明全入口逐字节等价，违反「行为不变」 |
+| DI 容器 / `service_registry` 改造（116 处 `set_dependency_providers`） | 启动顺序与依赖注入时序属运行时行为，是 C 批范畴 |
+| 前端公共 JS 收敛（10 处 `escapeHtml` / 3 处 `parseMarkdown`） | 三份 `parseMarkdown` 行为不一致，收敛必然改变部分页面输出，需 Node 快照测试先行（B2） |
+| `ensure_once` 通用 DDL 缓存 | 当前仅公告表做进程内缓存；通用化需逐个验证 40 个 `ensure_*` 的幂等性与异常重试语义（B3） |
+| B1 / B2 / B3 / C 批 | 维持排队，等对应特征测试补齐后再动 |
+
+### 7.5 回归矩阵
+
+| 脚本 | 覆盖 | 实测结果 |
+| --- | --- | --- |
+| `tests/test_refactor_2_0_equivalence.py` | A 批等价性 + B0 + 第二批边界 | 88/0 |
+| `tools/check_security_contracts.py` | 10 类安全契约（含行为级净化） | 42/0 |
+| `tools/verify_patches.py` | 全量静态断言（204 → 220，新增问题 17 组 16 条） | 220/0 |
+| `tests/test_sanitize_rich_html.py` | 富文本净化 / 历史二次转义兼容 | 14/0 |
+| `tools/check_bark_channel_contract.py` | Bark 前后端字段契约 | 51/0 |
+| `tests/test_bark_push.py` | Bark 出口 HTML 剥离 / Webhook token / env 掩码 | 103/0 |
+| `tests/test_webhook_events.py` | Emby 事件映射 / 拆条 / 忽略门控 | 58/0 |
+| `tests/test_tg_whitelist_sync.py` | 求片同步插件推送与删单联动 | 102/0 |
+| `tests/test_user_notify.py` | 用户端口通知设置与用户级推送 | 12/0 |
+| `tools/check_session_cookie_isolation.py` | 10307/10308 Cookie 隔离 | 15/0 |
+| `tools/check_notification_bot_subscription.py` | 仅启用 Bark 时的入库事件订阅 | 29/0 |
+| `tools/check-no-secrets.py` | 凭证 / 个人配置扫描 | 606 文件 / 0 findings |
+| `compileall -q app/` / `node --check static/js/request_app.js` / YAML 解析 / `git diff --check` | 语法 / 前端 / compose+workflow / 空白 | 全绿（verify job 16 步） |
+
+### 7.6 版本策略
+
+`v2.0` 已发布、tag 与 GHCR 镜像均已推送。本批**不升版本号、不 force-push 已发布 tag**：重推 tag 会让已部署实例、Release 与镜像摘要产生漂移，风险高于收益。本批仅作为 `main` 上的收尾提交，`APP_VERSION` / `IMAGE_TAG` / `request_app.js?v=` 全部保持 `2.0`。若确需独立补丁镜像，另发 `v2.0.1` 并同步第 5 节全部 6 个版本点。

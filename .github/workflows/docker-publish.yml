@@ -37,6 +37,12 @@ jobs:
       - name: 校验 2.0 重构等价性 / 安全加固 / 公告推送乱码修复
         run: python tests/test_refactor_2_0_equivalence.py
 
+      - name: 校验 2.0 系统安全契约（CSRF / 鉴权 / CSP / SSRF / 路径穿越 / 净化）
+        run: python tools/check_security_contracts.py .
+
+      - name: 校验富文本净化（公告内容不二次转义 / 危险内容剥离）
+        run: python tests/test_sanitize_rich_html.py
+
       - name: 校验 10307/10308 会话 Cookie 隔离
         run: python tools/check_session_cookie_isolation.py .
 

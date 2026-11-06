@@ -59,7 +59,7 @@ from app.infra.config.notification_settings import (
 )
 from app.core.security import require_admin
 from app.domains.users import public_service as user_service
-from app.core.security_utils import safe_error_message, sanitize_html
+from app.core.security_utils import safe_error_message, sanitize_html, to_plain_text
 
 router = APIRouter()
 router.include_router(announcements_router)
@@ -392,7 +392,11 @@ def send_message(data: SendMessageModel, request: Request):
         from app.domains.users import user_notify_service as _uns
         _uns.push_user_notify(
             data.user_id, "管理员消息",
-            sanitize_html(data.content, max_length=5000),
+            # 🔥 2.0：与公告同一类问题的收尾修复。Bark 是纯文本通道，
+            # sanitize_html 会把 & / < 实体化后原样推给用户（乱码）；
+            # 改用 to_plain_text 在纯文本通道源头归一，纯文本输入输出不变。
+            # 上方 insert_admin_message 的网页端存储仍用 sanitize_html，完全不动。
+            to_plain_text(data.content, max_length=5000),
             flag_key="notify_admin_message",
         )
     except Exception as _e:

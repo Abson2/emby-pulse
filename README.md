@@ -246,7 +246,7 @@ WEBHOOK_ALLOW_QUERY_TOKEN=1   # Emby Webhook 插件只能配 ?token= URL；反�
 
 ### 3.2 `docker-compose.yml`（拉取镜像）
 
-镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.10`）拉取指定版本，不设置则默认 `2.0`。**2.0 是架构优化与安全性审查版，功能与 1.9.10 完全等价**（对外接口、输入输出行为、特性均未改动），如需回退用 `IMAGE_TAG=1.9.10`。架构梳理、耦合点、重构批次方案与等价性验证见 [docs/REFACTOR_2.0.md](docs/REFACTOR_2.0.md)。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
+镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.10`）拉取指定版本，不设置则默认 `2.0`。**2.0 是架构优化与安全性审查版，功能与 1.9.10 完全等价**（对外接口、输入输出行为、特性均未改动），如需回退用 `IMAGE_TAG=1.9.10`。架构梳理、耦合点、重构批次方案与等价性验证见 [docs/REFACTOR_2.0.md](docs/REFACTOR_2.0.md)。`v2.0` 之后 `main` 上的第二批零风险收尾（管理员消息纯文本通道乱码修复、安全契约固化为 CI 断言）**不升版本号、不重推已发布 tag**，详见 [CHANGELOG](CHANGELOG.md) 顶部与文档第 7 节。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
 
 ```yaml
 services:
