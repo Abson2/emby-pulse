@@ -9,6 +9,13 @@ BARK_SERVER_DEFAULT = "https://api.day.app"
 BARK_GROUP_DEFAULT = "EMBYPULSE"
 BARK_SOUND_DEFAULT = "default"
 
+# 🔥 1.9.7 配置边界说明（避免概念混淆）：
+# .env 里的 WEBHOOK_TOKEN 是 Emby Webhook 回调地址 ?token= 的**接口校验凭证**，
+# 属于「入库事件入口」链路；Bark 的服务器 / Device Key / 开关属于「推送出口」
+# 链路，只从 config.json 读写。两条链路没有任何配置耦合，不能用 WEBHOOK_TOKEN
+# 推断 Bark 是否已配置，也不能把 Bark 不推送归因于 .env。
+# 本模块不读取任何 BARK_* 环境变量，行为与 1.9.6 一致。
+
 
 def _mask_secret(value):
     if not value or not isinstance(value, str):
@@ -27,7 +34,11 @@ def _bark_bool(value, default):
 
 
 def get_bark_config(*, masked: bool = True) -> dict:
-    """系统级 Bark 配置。管理端读取时 Device Key 做掩码，运行期读取原文。"""
+    """系统级 Bark 配置。管理端读取时 Device Key 做掩码，运行期读取原文。
+
+    配置源恒为 config.json（见文件头「配置边界说明」），不引入环境变量优先级，
+    保证既有管理端读写行为与 1.9.6 完全一致。
+    """
     try:
         key = str(cfg.get("bark_device_key", "") or "")
     except Exception:
@@ -46,6 +57,50 @@ def get_bark_config(*, masked: bool = True) -> dict:
 
 def get_bark_runtime_config() -> dict:
     return get_bark_config(masked=False)
+
+
+def _parse_channels(raw):
+    """把 channels 字段（JSON 字符串 / list）统一解析为 list[str]。"""
+    if isinstance(raw, list):
+        return [str(x) for x in raw]
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return [str(x) for x in parsed]
+        except (ValueError, TypeError):
+            pass
+    return []
+
+
+def is_bark_channel_selected(notify_type: str = "library_new") -> bool:
+    """🔥 1.9.7：判断指定通知类型的渠道勾选里是否包含 Bark。
+
+    借鉴企业微信「channels 列表驱动」模型：1.9.5 起前端在「推送场景总控」
+    与「工单大厅 / 用户管理通知设置」里都能勾选 bark，但后端完全不消费，
+    勾了等于没勾。本函数让该勾选成为 Bark 的合法启用来源。
+
+    - ``library_new``：与企微 / TG 同源，优先读「推送场景总控」
+      ``library_notify_channels``；总控未配置时才回退 notify_rules 表。
+    - 其他类型：读 notify_rules 对应行，且要求该规则处于启用状态。
+
+    只做只读判断、异常一律返回 False，绝不因渠道配置异常影响业务主流程。
+    """
+    if notify_type == "library_new":
+        channels = _parse_channels(cfg.get("library_notify_channels", "") or "")
+        if channels:
+            return "bark" in channels
+    try:
+        from app.domains.notifications.notify_admin_dao import get_notify_rule_row
+        row = get_notify_rule_row(notify_type)
+        if row is None:
+            return False
+        row = dict(row)
+        if str(row.get("enabled", 1)) in ("0", "False", "false", "None"):
+            return False
+        return "bark" in _parse_channels(row.get("channels") or "[]")
+    except Exception:
+        return False
 
 
 def set_bark_config(data: dict) -> None:

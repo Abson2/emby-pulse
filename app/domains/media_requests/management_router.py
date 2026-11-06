@@ -418,6 +418,15 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
             rule = notify_rules.get_notify_rule('request_status')
             logger.info(f"[状态变更通知] action={data.action}, rule={rule}")
 
+            # 🔥 1.9.7：工单大厅「状态变更通知」勾选 Bark 时，走系统级 Bark 通道
+            # 独立于下方「仅 TG 勾选才通知用户」的循环，Bark 是管理员侧提醒。
+            try:
+                from app.domains.notifications.bark_push import safe_rule_push
+                safe_rule_push("request_status", "工单状态变更",
+                               f"操作类型：{data.action}")
+            except Exception:
+                pass
+
             if rule and rule.get('enabled') and 'tg_bot' in rule.get('channels', []):
                 # 🔥 批量查询所有工单信息和用户绑定关系
                 notify_items, user_ids = list_notify_items(data.items)

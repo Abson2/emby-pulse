@@ -392,6 +392,77 @@ check("显式 1 仍兼容 URL",
       _get_token(FakeRequest({}, {"token": "MY_TOKEN"})) == "MY_TOKEN")
 os.environ.pop("WEBHOOK_ALLOW_QUERY_TOKEN", None)
 
+print("== 7. 1.9.7：channels 门控 / 管理端通知设置真开关 ==")
+# 让 bark_push 内的局部 import 命中本文件的配置层桩，不拉起真实应用依赖
+for _name in ("app.domains", "app.domains.notifications"):
+    if _name not in sys.modules:
+        _m = types.ModuleType(_name)
+        _m.__path__ = []
+        sys.modules[_name] = _m
+sys.modules["app.infra.config.notification_settings"] = ncfg
+_dao_stub = types.ModuleType("app.domains.notifications.notify_admin_dao")
+_dao_stub.get_notify_rule_row = lambda t: None
+sys.modules["app.domains.notifications.notify_admin_dao"] = _dao_stub
+
+FAKE_CFG.config.clear()
+FAKE_CFG.config.update({
+    "bark_enabled": False,
+    "bark_server": "https://push.example.com",
+    "bark_device_key": "REAL_DEVICE_KEY_123456",
+})
+
+# 7.1 总控未勾 Bark 且卡片未启用 -> 不推
+FAKE_CFG.config["library_notify_channels"] = '["tg_bot","wecom"]'
+t = FakeTransport()
+r = bark.safe_push("library_new", name="沙丘", transport=t)
+check("总控未勾 Bark 且卡片未启用时入库不推",
+      r["skipped"] is True and not t.calls, str(r))
+
+# 7.2 借鉴企微：勾选渠道即合法启用来源，即使卡片 enabled=False 也推
+FAKE_CFG.config["library_notify_channels"] = '["tg_bot","bark"]'
+t = FakeTransport()
+r = bark.safe_push("library_new", name="沙丘", transport=t)
+check("总控勾 Bark 后入库真实发出请求",
+      len(t.calls) == 1 and r["ok"] is True, str(r))
+check("渠道驱动时请求体仍携带正确 Device Key",
+      t.last_payload.get("device_key") == "REAL_DEVICE_KEY_123456")
+
+# 7.3 入库总控的勾选不得串扰求片事件
+t = FakeTransport()
+r = bark.safe_push("request_new", title="星际穿越", transport=t)
+check("入库总控勾 Bark 不串扰求片通知",
+      r["skipped"] is True and not t.calls, str(r))
+
+# 7.4 管理端浮窗：未勾跳过；勾了真推；规则禁用时不推
+_dao_stub.get_notify_rule_row = lambda t: {"enabled": 1, "channels": '["tg_bot","wecom"]'}
+t = FakeTransport()
+r = bark.push_rule_notification("feedback_new", "用户报错", "测试", transport=t)
+check("浮窗未勾 Bark 时通知规则跳过",
+      r["skipped"] is True and not t.calls, str(r))
+
+_dao_stub.get_notify_rule_row = lambda t: {"enabled": 1, "channels": '["tg_bot","bark"]'}
+t = FakeTransport()
+r = bark.safe_rule_push("feedback_new", "用户报错",
+                        "<b>资源报错</b>：测试", transport=t)
+check("浮窗勾 Bark 后真实发出请求",
+      len(t.calls) == 1 and r["ok"] is True, str(r))
+check("Bark 正文剥离 Telegram HTML 标签",
+      "<b>" not in t.last_payload.get("body", "")
+      and "资源报错" in t.last_payload.get("body", ""))
+
+_dao_stub.get_notify_rule_row = lambda t: {"enabled": 0, "channels": '["bark"]'}
+t = FakeTransport()
+r = bark.push_rule_notification("user_login", "账号登录", "测试", transport=t)
+check("规则被禁用时即使勾了 Bark 也不推",
+      r["skipped"] is True and not t.calls, str(r))
+
+# 7.5 显式注入 config 的调用（测试 / 用户级推送）不受门控影响
+FAKE_CFG.config["library_notify_channels"] = '["bark"]'
+t = FakeTransport()
+r = bark.safe_push("library_new", name="X", config=conf(enabled=False), transport=t)
+check("注入 config 时沿用调用方开关，不受 channels 门控影响",
+      r["skipped"] is True and not t.calls, str(r))
+
 print("\n通过 %d / 失败 %d" % (PASSED, len(FAILED)))
 if FAILED:
     for f in FAILED:

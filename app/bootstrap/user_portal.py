@@ -15,6 +15,9 @@ def build_user_portal_app(app, request_port: int):
     allowed = (
         "/request",
         "/request_login",
+        # 🔥 1.9.7：旧版缓存/收藏的独立页链接，服务端已 303 重定向回
+        # /request?tab=profile&notify=1 并自动打开页面内弹窗；放行以免 403。
+        "/user/notify_settings",
         "/static",
         "/favicon.ico",
         "/manifest.json",

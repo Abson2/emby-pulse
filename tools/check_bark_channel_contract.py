@@ -98,6 +98,42 @@ check("渠道勾选含 notify_channel_bark", 'id="notify_channel_bark"' in bot_t
 check("保存渠道含 bark", "['bark']" in bot_tpl)
 check("回填渠道含 bark", "libChannels.includes('bark')" in bot_tpl)
 
+# ---- 7. 1.9.7：入库 Bark 真实断点修复 + 管理端真开关 ----
+check("顶部保存配置一并提交 Bark 卡片",
+      "await saveBotBarkSettings({silent: true})" in bot_tpl)
+check("Bark 保存函数返回成败供顶部保存判定",
+      "return ok;" in bot_tpl and "const silent" in bot_tpl)
+check("bark_push 按事件类型应用 channels 门控",
+      "_RULE_TYPE_BY_KIND" in bark and "def _apply_channel_gate(" in bark)
+check("bark_push 实现通知规则推送入口",
+      "def push_rule_notification(" in bark and "def safe_rule_push(" in bark)
+check("未推送原因写进日志（可自证缺 Key / 未启用 / 地址非法）",
+      "未推送原因" in bark)
+check("配置层不引入 BARK_* env，不混淆 WEBHOOK_TOKEN",
+      "BARK_ENV_FIELDS" not in ncfg and "os.getenv" not in ncfg
+      and "WEBHOOK_TOKEN" in ncfg)
+check("is_bark_channel_selected 按 notify_type 精确判断",
+      "def is_bark_channel_selected(notify_type" in ncfg)
+check("CHANNEL_OPTIONS 含 Bark 渠道", '{"id": "bark"' in nadmin)
+
+req_admin_tpl = read("templates/requests_admin.html")
+users_tpl = read("templates/users.html")
+for _t in ("request_new", "request_update", "request_status", "feedback_new"):
+    check("工单大厅 %s 有 Bark 勾选" % _t,
+          'data-type="%s" data-channel="bark"' % _t in req_admin_tpl)
+for _t in ("user_register", "user_login", "user_delete"):
+    check("用户管理 %s 有 Bark 勾选" % _t,
+          'data-type="%s" data-channel="bark"' % _t in users_tpl)
+
+for _p in ("app/domains/media_requests/feedback_router.py",
+           "app/domains/media_requests/registration_router.py",
+           "app/domains/users/delete_router.py",
+           "app/bot/notification_bot/notification_bot_user_login_service.py",
+           "app/domains/media_requests/update_router.py",
+           "app/domains/media_requests/management_router.py"):
+    check("触发点 %s 真实消费 Bark 渠道" % _p.split("/")[-1],
+          "safe_rule_push(" in read(_p))
+
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:
     for f in FAILS:

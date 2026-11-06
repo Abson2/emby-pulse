@@ -156,6 +156,13 @@ def api_manage_user_delete(user_id: str, request: Request):
                     # Web通知中心
                     if 'web' in channels:
                         add_system_notification("user", f"用户删除: {user_name}", f"操作人: {admin_name}", "/users_manage")
+
+                    # 🔥 1.9.7：用户管理通知设置勾选 Bark 时，走系统级 Bark 通道
+                    try:
+                        from app.domains.notifications.bark_push import safe_rule_push
+                        safe_rule_push("user_delete", "用户删除", msg)
+                    except Exception:
+                        pass
             except Exception as e:
                 pass
 

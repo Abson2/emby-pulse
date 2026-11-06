@@ -163,7 +163,17 @@
 - **系统设置删除 Webhook 与 Bark 两个模块**：按用户要求整卡移除（含保存 / 测试函数），配置入口统一收敛至「通知与机器人 → 推送场景总控」，避免多入口重复维护。
 - **.env 控制 Token 的输入体验**：环境变量控制 Webhook Token 时输入框不再禁用，可粘贴 `.env` 原值仅用于本地生成「带 `?token=` 的完整回调地址」，保存时后端自动忽略、不覆盖 `.env` 配置。
 
-### 2.10 配置隔离与独立仓库
+### 2.10 v1.9.7 入库推送修复 / 通知设置回归页面内弹窗
+
+- **新片入库 Bark 推送真正打通（对标企业微信链路）**：全链勘察确认 Emby Webhook → 队列 → 事件总线 → handler 的上游与企业微信完全共用，差异只在 handler 内部分叉；企微由 `channels` 列表驱动，而 Bark 走自身独立开关，前端 1.9.5 写入的 `'bark'` 是后端完全不消费的死值。修复三个真实断点：
+  1. 机器人助手页「Bark 推送」卡片有独立「保存 Bark」按钮，**顶部「保存配置」不提交该卡片字段**，且保存成功后 `init()` 会重读并清空表单——用户填完 Device Key 只点顶部保存，配置根本没有落盘。1.9.7 起顶部保存会一并提交 Bark 卡片并等待结果。
+  2. `library_notify_channels` 里的 `'bark'` 由 `bark_push.safe_push()` 按事件类型精确折算为启用信号（借鉴企微 channels 驱动），勾了即生效；按 `library_new` / `request_new` 分别判断，避免入库勾选串扰求片、或求片被重复推送。
+  3. 未推送原因（未启用 / 缺 Device Key / 服务器地址非法）明确写入系统日志，可自证，不再只有一句静默 INFO。
+- **配置边界澄清**：`.env` 中的 `WEBHOOK_TOKEN` 只是 Emby Webhook 回调地址 `?token=` 的**接口校验凭证**，属于「入库事件入口」；Bark 的服务器 / Device Key / 开关属于「推送出口」，只从 `config.json` 读写。两条链路没有配置耦合，Bark 不推送与 `.env` 无关；本版也未引入任何 `BARK_*` 环境变量。
+- **用户端通知设置回归页面内弹窗**：1.9.6 独立页打不开的物理层根因是 10308 用户端 wrapper 的路径白名单不含 `/user/notify_settings`，直接 403「非法越界」（与 Alpine 作用域、JS 缓存均无关）。按反馈改为与「媒体库设置」一致的页面内弹窗（纯原生 JS、随 HTML 下发、零 Alpine / teleport），「媒体库设置 / 通知设置 / 娱乐功能」三按钮一排并与上方「我的心愿 / 我的报错 / 追剧更新」对齐；独立页文件已删除，旧缓存 / 收藏链接由服务端 303 回 `/request?tab=profile&notify=1` 并自动打开弹窗，白名单保留放行以免 403。
+- **管理端通知设置增加真实 Bark 开关**：「工单大厅通知设置」（工单提交 / 新追新 / 状态变更 / 用户报错）与「用户管理通知设置」（用户注册 / 用户登录 / 用户删除）七类均新增 Bark 渠道勾选；`CHANNEL_OPTIONS` 纳入 `bark`，后端 6 个触发点接入 `safe_rule_push()` 真实推送（求片提交复用既有 `safe_push()` 门控，避免重复推送），不是只保存不消费的假开关。管理端 Telegram HTML 文案在 Bark 侧自动去标签。
+
+### 2.11 配置隔离与独立仓库
 
 - 仓库不含任何运行期配置 / 数据库 / 密钥 / 域名 / 个人数据；`.env` / `config/` / `data/` / `*.db` 均被双重忽略。
 - 源码通过 GitHub Git Blob API 按 tree 逐 sha 拉取，不接触本机或 NAS 上任何运行期文件；CI 第一步扫描全部入库文件，命中凭证即构建失败。
@@ -226,12 +236,12 @@ WEBHOOK_ALLOW_QUERY_TOKEN=1   # Emby Webhook 插件只能配 ?token= URL；反�
 
 ### 3.2 `docker-compose.yml`（拉取镜像）
 
-镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.4`）拉取指定版本，不设置则默认 `1.9.6`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
+镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.6`）拉取指定版本，不设置则默认 `1.9.7`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
 
 ```yaml
 services:
   embypulse-pro:
-    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.6}
+    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.7}
     container_name: embypulse-pro
     restart: unless-stopped
     ports:
@@ -304,14 +314,16 @@ docker compose up -d
 
 在 Emby Webhook 插件里填 `http://<内网IP>:10307/api/v1/webhook?token=<WEBHOOK_TOKEN 的原值>`；带 Token 的完整地址可在「通知与机器人 → 推送场景总控 → 新资源入库通知」一键复制（1.9.6 起原系统设置页入口已移除，统一在此配置）。后端默认已兼容 `?token=`。该回调走**内网直连**，不经过公网链路。
 
-### 3.8 用户端口「通知设置」使用说明（1.9.3 新增，1.9.6 重构为独立页面）
+### 3.8 用户端口「通知设置」使用说明（1.9.3 新增，1.9.7 回归页面内弹窗）
 
 1. 用户访问 `http://<宿主机>:10308`，登录后进入「**我的**」；
-2. 点击「**通知设置**」跳转独立设置页面（1.9.6 起由弹窗改为独立页，规避浏览器缓存与前端框架兼容问题）：
+2. 在「媒体库设置 / **通知设置** / 娱乐功能」这一排中点击「**通知设置**」，页面内弹出设置窗口（1.9.7 起不再跳转独立页面，与「媒体库设置」交互一致）：
    - 选择推送渠道：**Bark 链接**（填写 `https://<server>/<device-key>`）或 **Webhook**（填写自定义 POST 地址）；
    - 打开需要的推送内容开关：新片入库 / 管理员消息 / 全站公告 / 心愿清单状态变动；
    - 提示「推送内容不含网址」已内置，无需用户处理；
-3. 点「保存」即生效，随后自动返回「我的」页面。此后对应事件发生时，系统按用户配置向其自选渠道推送（与管理端系统级 Bark 互不影响）。
+3. 点「保存设置」即生效，弹窗自动关闭。此后对应事件发生时，系统按用户配置向其自选渠道推送（与管理端系统级 Bark 互不影响）。
+
+> 旧版本收藏 / 缓存的 `/user/notify_settings` 链接会 303 回「我的」页并自动打开该弹窗，不会出现 403。升级后若无反应，请硬刷新（Ctrl/Cmd+Shift+R）清理旧缓存。
 
 > 用户通知设置存储于 `users_meta.user_notify_settings`，由 `app/domains/users/user_notify_service.py` 负责推送，任意单条失败不影响业务主流程。
 

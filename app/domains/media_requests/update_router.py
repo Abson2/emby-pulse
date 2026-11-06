@@ -236,6 +236,13 @@ async def submit_update_request(request: Request):
                 poster_url = poster_path
 
             _notification_service_provider().send_photo("sys_notify", poster_url, msg, reply_markup=keyboard, platform="all")
+
+            # 🔥 1.9.7：工单大厅「新追新通知」勾选 Bark 时，走系统级 Bark 通道
+            try:
+                from app.domains.notifications.bark_push import safe_rule_push
+                safe_rule_push("request_update", "收到追新请求", msg)
+            except Exception:
+                pass
         except Exception as e:
             print(f"[追新] 发送通知失败: {e}")
 

@@ -70,6 +70,9 @@ CHANNEL_OPTIONS = [
     {"id": "tg_channel", "name": "TG 频道", "icon": "fa-bullhorn"},
     {"id": "wecom", "name": "企业微信", "icon": "fa-weixin"},
     {"id": "web", "name": "Web 通知中心", "icon": "fa-bell"},
+    # 🔥 1.9.7：Bark 作为合法渠道写入 notify_rules.channels；后端由
+    # bark_push.safe_rule_push() 真实消费，不是只保存不生效的假开关。
+    {"id": "bark", "name": "Bark 推送", "icon": "fa-mobile-screen-button"},
 ]
 
 

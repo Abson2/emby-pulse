@@ -674,16 +674,13 @@ async def request_page(request: Request):
 
 @router.get("/user/notify_settings", response_class=HTMLResponse)
 async def user_notify_settings_page(request: Request):
-    # 🔥 1.9.6：用户级通知设置独立页（纯 HTML+原生 JS，不用 Alpine）
-    req_user = request.session.get("req_user")
-    if not req_user:
-        return RedirectResponse("/request_login", status_code=303)
-    response = templates.TemplateResponse(request, "user_notify.html", {"request": request, "req_user": req_user, "version": APP_VERSION})
-    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0, private'
-    response.headers['Pragma'] = 'no-cache'
-    response.headers['Expires'] = '0'
-    response.headers['Vary'] = 'Cookie, Authorization'
-    return response
+    """🔥 1.9.7：独立页已废弃，重定向回「我的」页面并自动打开页面内弹窗。
+
+    1.9.6 的独立页在 10308 端口被 user_portal 白名单物理阻断（403），
+    用户点击表现为「打不开」。按用户要求改为与「媒体库设置」一致的页面内
+    弹窗交互；此路径仅作为旧缓存 / 收藏链接的兼容入口保留（不再渲染独立页）。
+    """
+    return RedirectResponse("/request?tab=profile&notify=1", status_code=303)
 
 @router.get("/request_login", response_class=HTMLResponse)
 async def request_login_page(request: Request):

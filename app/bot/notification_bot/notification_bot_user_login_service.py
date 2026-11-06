@@ -119,6 +119,13 @@ def handle_user_login(bot, data):
                     f"{ip} ({loc}) - {client}",
                     "/users_manage",
                 )
+
+            # 🔥 1.9.7：用户管理通知设置勾选 Bark 时，走系统级 Bark 通道
+            try:
+                from app.domains.notifications.bark_push import safe_rule_push
+                safe_rule_push("user_login", "账号登录", msg)
+            except Exception:
+                pass
         except Exception as e:
             _logger_provider().error(f"[用户登录通知] 发送失败: {e}")
             avatar_io = bot._download_user_image(user_id) if user_id else None

@@ -320,11 +320,11 @@ check("系统设置接口给出可复制的 URL 模板",
 check("系统设置接口不再要求 Emby 配置 Header",
       "请在 Emby 中配置 Header" not in system_router)
 
-check("应用版本升级到 1.9.6", 'APP_VERSION = "1.9.6"' in read("app/shared/version.py"))
-check("Dockerfile 版本为 1.9.6-hardened", "APP_VERSION=1.9.6-hardened" in dockerfile)
-check("compose 默认拉取 1.9.6", "IMAGE_TAG:-1.9.6" in compose)
-check("CHANGELOG 含 1.9.0 / 1.9.1 / 1.9.2 / 1.9.6 发版说明",
-      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6")))
+check("应用版本升级到 1.9.7", 'APP_VERSION = "1.9.7"' in read("app/shared/version.py"))
+check("Dockerfile 版本为 1.9.7-hardened", "APP_VERSION=1.9.7-hardened" in dockerfile)
+check("compose 默认拉取 1.9.7", "IMAGE_TAG:-1.9.7" in compose)
+check("CHANGELOG 含 1.9.0 / 1.9.1 / 1.9.2 / 1.9.6 / 1.9.7 发版说明",
+      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7")))
 check("CI 增加 Bark / Webhook 回归步骤",
       "tests/test_bark_push.py" in read(".github/workflows/docker-publish.yml"))
 
@@ -385,7 +385,7 @@ check("新增行为校验脚本存在且只依赖标准库",
 check("CHANGELOG 含 1.9.2 修复说明",
       "## 1.9.2" in changelog and "静默" in changelog)
 
-print("== 问题 12: v1.9.5 五项反馈（通知设置无反应 / Bark 入口 / Webhook 整合 / 批量栏横滑） ==")
+print("== 问题 12: v1.9.5~1.9.7 反馈（通知设置 / Bark 入口 / Webhook 整合 / 批量栏横滑） ==")
 req_tpl = read("templates/request.html")
 req_js = read("static/js/request_app.js")
 tab_profile = read("templates/request/tab_profile.html")
@@ -393,29 +393,42 @@ req_admin = read("templates/requests_admin.html")
 bot_py = read("app/bot/bot.py")
 models_py = read("app/schemas/models.py")
 sys_views = read("app/domains/system/views.py")
-user_notify_tpl = read("templates/user_notify.html")
+modal_notify = read("templates/request/modal_notify.html")
 
-check("request_app.js 引用带版本号（浏览器缓存破坏，1.9.6）",
-      "request_app.js?v=1.9.6" in req_tpl)
-# 1.9.6：通知设置彻底重构为独立页面，Alpine 侧代码全部移除
-check("request_app.js 不再包含任何通知设置 state/方法（重构为独立页）",
+check("request_app.js 引用带版本号（浏览器缓存破坏，1.9.7）",
+      "request_app.js?v=1.9.7" in req_tpl)
+# 1.9.6 起通知设置不再由 Alpine 主组件承载（1.9.7 改为页面内原生弹窗）
+check("request_app.js 不再包含任何通知设置 state/方法（1.9.6 起移除）",
       all(x not in req_js for x in (
           "notifySettingsModalOpen", "loadNotifySettings",
           "saveNotifySettings", "setNotifyChannel", "notifySettings")))
-check("tab_profile 通知设置按钮改为独立页链接",
-      'href="/user/notify_settings"' in tab_profile
-      and '@click="loadNotifySettings()"' not in tab_profile)
+# 🔥 1.9.7：按用户要求回归页面内弹窗，不再打开独立页面
+check("tab_profile 通知设置按钮改为页面内弹窗",
+      'onclick="epNotifyOpen()"' in tab_profile
+      and 'href="/user/notify_settings"' not in tab_profile)
+check("三按钮一排且通知设置位于媒体库设置与娱乐功能中间",
+      "grid grid-cols-3" in tab_profile
+      and tab_profile.index("libSettingsModalOpen = true")
+          < tab_profile.index('onclick="epNotifyOpen()"')
+          < tab_profile.index("entertainmentModalOpen = true"))
 check("tab_profile 不再有通知设置 teleport 弹窗",
       "notifySettingsModalOpen" not in tab_profile
       and "setNotifyChannel" not in tab_profile)
-check("用户端通知设置独立页面存在（纯原生 JS，零 Alpine）",
-      "nsSelectChannel" in user_notify_tpl
-      and "nsSave" in user_notify_tpl
-      and "/api/user/notify_settings" in user_notify_tpl
-      and "x-data" not in user_notify_tpl)
-check("独立页路由已注册且校验 req_user 会话",
-      '@router.get("/user/notify_settings"' in sys_views
-      and 'session.get("req_user")' in sys_views)
+check("页面内弹窗随 HTML 下发（纯原生 JS，无 Alpine / teleport 属性）",
+      "epNotifyOpen" in modal_notify
+      and "epNotifySave" in modal_notify
+      and "/api/user/notify_settings" in modal_notify
+      and 'x-data="' not in modal_notify
+      and 'x-teleport="' not in modal_notify)
+check("request.html include 通知设置弹窗",
+      "{% include 'request/modal_notify.html' %}" in req_tpl)
+check("废弃的独立通知设置页已删除（不再单独打开页面）",
+      not os.path.exists(os.path.join(ROOT, "templates/user_notify.html")))
+check("旧独立页链接 303 回「我的」并自动打开弹窗",
+      'RedirectResponse("/request?tab=profile&notify=1", status_code=303)' in sys_views
+      and "notify=1" in modal_notify)
+check("10308 白名单放行旧链接避免 403",
+      '"/user/notify_settings"' in read("app/bootstrap/user_portal.py"))
 check("BotSettingsModel 含 webhook_token 字段（修复保存 500）",
       "webhook_token: Optional[str]" in models_py)
 check("系统设置页 Webhook/Bark 模块已删除（1.9.6）",
@@ -448,6 +461,56 @@ check("工单大厅批量悬浮栏支持拖拽横滑 + iOS 惯性滚动",
       "startBatchDrag" in req_admin and "endBatchDrag" in req_admin
       and "-webkit-overflow-scrolling: touch" in req_admin)
 check("CHANGELOG 含 1.9.6 发版说明", "## 1.9.6" in changelog)
+
+print("== 问题 13: v1.9.7 入库 Bark 修复 + 管理端 Bark 真开关 ==")
+bark_py = read("app/domains/notifications/bark_push.py")
+ncfg_py = read("app/infra/config/notification_settings.py")
+nadmin_py = read("app/domains/notifications/notify_admin.py")
+users_tpl = read("templates/users.html")
+
+# 配置边界：WEBHOOK_TOKEN 属于 Webhook 回调校验链路，绝不能被当成 Bark 配置
+check("Bark 配置不引入 BARK_* 环境变量（不与 WEBHOOK_TOKEN 混淆）",
+      "BARK_ENV_FIELDS" not in ncfg_py
+      and "os.getenv" not in ncfg_py
+      and "WEBHOOK_TOKEN" in ncfg_py)
+check("Bark 配置仍只从 config.json 读写",
+      'cfg.get("bark_device_key"' in ncfg_py
+      and "def set_bark_config(data: dict) -> None:" in ncfg_py)
+check("is_bark_channel_selected 按通知类型精确判断",
+      "def is_bark_channel_selected(notify_type" in ncfg_py
+      and "get_notify_rule_row" in ncfg_py)
+check("safe_push 借鉴企微 channels 驱动，按事件类型应用门控",
+      "_RULE_TYPE_BY_KIND" in bark_py
+      and "def _apply_channel_gate(" in bark_py)
+check("channels 门控仅作用于未注入 config 的真实运行路径",
+      'if not isinstance(kwargs.get("config"), dict):' in bark_py)
+check("未推送原因写入日志便于用户自证",
+      "未推送原因" in bark_py)
+check("顶部「保存配置」一并提交 Bark 卡片（修复 Key 未落盘/被重载清空）",
+      "await saveBotBarkSettings({silent: true})" in bot_tpl
+      and "return ok;" in bot_tpl)
+check("管理端通知设置渠道定义含 Bark",
+      '{"id": "bark"' in nadmin_py)
+check("工单大厅四类通知各含 Bark 勾选",
+      all('data-type="%s" data-channel="bark"' % t in req_admin
+          for t in ("request_new", "request_update",
+                    "request_status", "feedback_new")))
+check("用户管理三类通知各含 Bark 勾选",
+      all('data-type="%s" data-channel="bark"' % t in users_tpl
+          for t in ("user_register", "user_login", "user_delete")))
+check("管理端 6 个通知触发点全部接入 safe_rule_push（真开关）",
+      sum(1 for p in (
+          "app/domains/media_requests/feedback_router.py",
+          "app/domains/media_requests/registration_router.py",
+          "app/domains/users/delete_router.py",
+          "app/bot/notification_bot/notification_bot_user_login_service.py",
+          "app/domains/media_requests/update_router.py",
+          "app/domains/media_requests/management_router.py",
+      ) if "safe_rule_push(" in read(p)) == 6)
+check("push_rule_notification / safe_rule_push 已实现",
+      "def push_rule_notification(" in bark_py
+      and "def safe_rule_push(" in bark_py)
+check("CHANGELOG 含 1.9.7 发版说明", "## 1.9.7" in changelog)
 
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:

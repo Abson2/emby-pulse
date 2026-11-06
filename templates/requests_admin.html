@@ -765,6 +765,11 @@
                             <input type="checkbox" class="notify-channel w-4 h-4 rounded text-blue-500" data-type="request_new" data-channel="web">
                             <i class="fa-solid fa-bell text-amber-500"></i> Web通知
                         </label>
+                        <!-- 🔥 1.9.7：Bark 链路开关（后端 safe_rule_push 真实消费） -->
+                        <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-500 transition-colors">
+                            <input type="checkbox" class="notify-channel w-4 h-4 rounded text-blue-500" data-type="request_new" data-channel="bark">
+                            <i class="fa-solid fa-mobile-screen-button text-orange-500"></i> Bark推送
+                        </label>
                     </div>
                 </div>
 
@@ -792,6 +797,11 @@
                             <input type="checkbox" class="notify-channel w-4 h-4 rounded text-orange-500" data-type="request_update" data-channel="web">
                             <i class="fa-solid fa-bell text-amber-500"></i> Web通知
                         </label>
+                        <!-- 🔥 1.9.7：Bark 链路开关（后端 safe_rule_push 真实消费） -->
+                        <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-500 transition-colors">
+                            <input type="checkbox" class="notify-channel w-4 h-4 rounded text-orange-500" data-type="request_update" data-channel="bark">
+                            <i class="fa-solid fa-mobile-screen-button text-orange-500"></i> Bark推送
+                        </label>
                     </div>
                 </div>
 
@@ -800,7 +810,7 @@
                     <div class="flex items-center gap-2 mb-3">
                         <i class="fa-solid fa-check-circle text-emerald-500"></i>
                         <span class="font-bold text-gray-800 dark:text-gray-200 text-[14px]">状态变更通知</span>
-                        <span class="text-[11px] text-gray-500 dark:text-gray-400">工单审批通过、入库、拒绝时通知用户（仅TG）</span>
+                        <span class="text-[11px] text-gray-500 dark:text-gray-400">工单审批通过、入库、拒绝时通知；Bark 为管理员侧提醒</span>
                     </div>
                     <div class="flex items-center gap-3 mb-3">
                         <input type="checkbox" id="notify-request-status-enabled" class="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500">
@@ -810,6 +820,11 @@
                         <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500 transition-colors">
                             <input type="checkbox" class="notify-channel w-4 h-4 rounded text-emerald-500" data-type="request_status" data-channel="tg_bot">
                             <i class="fa-brands fa-telegram text-blue-500"></i> TG机器人
+                        </label>
+                        <!-- 🔥 1.9.7：Bark 链路开关（后端 safe_rule_push 真实消费） -->
+                        <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-500 transition-colors">
+                            <input type="checkbox" class="notify-channel w-4 h-4 rounded text-emerald-500" data-type="request_status" data-channel="bark">
+                            <i class="fa-solid fa-mobile-screen-button text-orange-500"></i> Bark推送
                         </label>
                     </div>
                 </div>
@@ -837,6 +852,11 @@
                         <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-amber-300 dark:hover:border-amber-500 transition-colors">
                             <input type="checkbox" class="notify-channel w-4 h-4 rounded text-red-500" data-type="feedback_new" data-channel="web">
                             <i class="fa-solid fa-bell text-amber-500"></i> Web通知
+                        </label>
+                        <!-- 🔥 1.9.7：Bark 链路开关（后端 safe_rule_push 真实消费） -->
+                        <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-500 transition-colors">
+                            <input type="checkbox" class="notify-channel w-4 h-4 rounded text-red-500" data-type="feedback_new" data-channel="bark">
+                            <i class="fa-solid fa-mobile-screen-button text-orange-500"></i> Bark推送
                         </label>
                     </div>
                 </div>

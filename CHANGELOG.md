@@ -1,5 +1,49 @@
 # 更新日志
 
+## 1.9.7
+
+集中处理 1.9.6 升级后反馈的第 3、4 项，并按新增要求给管理端两个通知设置浮窗补上真实 Bark 链路开关。系统设置页已删除的 Webhook / Bark 模块不再改动。
+
+### 修复：新片入库 Bark 推送仍不可用（反馈第 3 项，对标企业微信链路）
+
+**全链勘察结论**：Emby Webhook → 事件解析 → 入库队列 / 批处理 → `bus.publish("notify.library.new_item" / "new_episode")` → `NotificationBot` handler 这一段，企业微信与 Bark **完全共用**；两者只在 handler 内部分叉。企微由 `get_notify_channels("library_new")` → `_get_platform(channels)` → `send_photo(platform="wecom")` 驱动，Bark 则是 `_bark_notify_new_item()` → `bark_push.safe_push("library_new")` 的独立分支，由 `enabled` / `notify_library_new` 两个自身开关控制。既然企微能收到，上游链路基本存活，断点落在 Bark 分支的配置与开关上。
+
+定位到三个真实断点：
+
+1. **配置根本没落盘（主因）**：`templates/bot.html` 的 Bark 卡片字段不在顶部「保存配置」的 `/api/bot/settings` payload 里，只有卡片底部独立的「保存 Bark」按钮会提交 `/api/notify/channels_config`；而顶部保存成功后会调用 `init()` 重读并覆盖整个表单。用户「填好 Device Key → 只点顶部保存」的结果是配置被静默丢弃，运行期读到空 Key。
+   - 修复：`saveBotBarkSettings()` 改为返回成败并支持静默模式，`saveConfig()` 在 `/api/bot/settings` 成功后 `await saveBotBarkSettings({silent: true})` 再 `init()`；失败时明确提示，不再伪装成全部保存成功。
+2. **总控里的 `'bark'` 是后端不消费的死值**：1.9.5「推送场景总控」允许勾选 Bark 并写入 `library_notify_channels`，但 `_get_platform()` 只识别 `tg_bot` / `wecom`，Bark 分支也不读 `channels`，用户「勾了却不推」。
+   - 修复：借鉴企微的 channels 驱动模型，`notification_settings.is_bark_channel_selected(notify_type)` 按通知类型精确判断；`bark_push.safe_push()` 通过 `_apply_channel_gate()` 把勾选折算为启用信号。按 `library_new` / `request_new` 分别映射，避免入库勾选串扰求片、或求片通知被重复触发。显式注入 `config` 的调用（回归测试 / 用户级推送）行为完全不变。
+3. **跳过原因不可自证**：原先未启用 / 缺 Key / 地址非法只产生静默 INFO 或被上层吞掉。
+   - 修复：`send()` 的三个跳过分支将具体原因写入日志，缺 Key 时直接提示「请在机器人助手 → Bark 推送保存，再点顶部保存配置」。
+
+**配置边界澄清（按用户纠正）**：`.env` 里的 `WEBHOOK_TOKEN` 只是 Emby Webhook 回调 `?token=` 的**接口校验凭证**，属于「入库事件入口」；Bark 配置属于「推送出口」，只从 `config.json` 读写。二者没有任何配置耦合，不能把 Bark 不推送归因于 `.env`；本版同时**撤回**了上一轮误加的 `BARK_ENV_FIELDS` / `BARK_*` 读取逻辑，`get_bark_config()` 恢复为 1.9.6 行为，并在文件头写死该边界说明。
+
+### 修复：用户端通知设置仍打不开（反馈第 4 项，回归页面内弹窗）
+
+- **真根因**：不是 Alpine 作用域、也不是 JS 缓存版本号。`app/bootstrap/user_portal.py` 的 10308 用户端 wrapper 有路径白名单，1.9.6 新增的页面路径 `/user/notify_settings` 不在其中，被直接 403「非法越界，后台管理界面已被物理阻断」。
+- **方案（按用户要求「不要单独打开一个页面」）**：新增 `templates/request/modal_notify.html`，纯原生 JS、零 Alpine / `x-teleport` / 外部 JS 依赖，随 HTML 一起下发，由 `request.html` include；「我的」页按钮改为 `onclick="epNotifyOpen()"` 页面内弹窗，与「媒体库设置 / 娱乐功能」同款交互。
+- **布局（按用户要求）**：「媒体库设置 / 通知设置 / 娱乐功能」三按钮一排 `grid grid-cols-3`，与上方「我的心愿 / 我的报错 / 追剧更新」对齐。
+- **兼容**：`templates/user_notify.html` 独立页删除；`GET /user/notify_settings` 改为 303 重定向到 `/request?tab=profile&notify=1`，弹窗脚本检测参数自动打开；白名单保留该路径放行，旧缓存 / 收藏链接不再 403。`request_app.js` 版本号递增至 `?v=1.9.7`。
+
+### 新增：管理端两个通知设置浮窗的 Bark 链路开关（真开关）
+
+- `notify_admin.CHANNEL_OPTIONS` 纳入 `bark`；`templates/requests_admin.html` 四类（工单提交 / 新追新 / 状态变更 / 用户报错）与 `templates/users.html` 三类（用户注册 / 用户登录 / 用户删除）各新增 `data-channel="bark"` 勾选，加载 / 保存沿用既有 `querySelectorAll` 通用收集，无需改 JS。
+- `bark_push.py` 新增 `push_rule_notification()` / `safe_rule_push()`：按 `notify_rules` 对应行的 `enabled` 与 `channels` 精确判断是否推送，勾选即视为启用意图，Telegram HTML 文案自动去标签；异常全量吞掉，不影响业务主流程。
+- 后端 6 个触发点接入：`feedback_router.py`、`registration_router.py`、`delete_router.py`、`notification_bot_user_login_service.py`、`update_router.py`、`management_router.py`。求片提交（`submit_router.py`）复用既有 `safe_push("request_new")` 的 channels 门控，**不重复接入以免双推**。
+
+### 回归
+
+- `tests/test_bark_push.py` 新增第 7 节行为回归：总控未勾不推 / 勾了真发请求且携带正确 Key / 入库勾选不串扰求片 / 浮窗未勾跳过、勾了真推、规则禁用不推 / HTML 去标签 / 注入 config 时不受门控影响。93 项全绿。
+- `tools/check_bark_channel_contract.py` 扩到 48 项：保存链路、channels 门控、诊断日志、配置边界、7 个勾选、6 个触发点真实消费，全绿。
+- `tools/verify_patches.py` 断言升级到 1.9.7 语义（弹窗 / 三按钮对齐 / 独立页删除 / 303 兼容 / 白名单 / Bark 真开关 / 版本）。
+- `compileall`、模板内联 JS `node --check`、`test_user_notify.py`、`test_tg_whitelist_sync.py`、`check_notification_bot_subscription.py`、`check_session_cookie_isolation.py`、`check-no-secrets.py` 全绿。
+
+### 发布与验证
+
+- 应用版本升级至 `1.9.7`；compose 默认锁定 `1.9.7`，`1.9.6` 仍保留，可用 `IMAGE_TAG=1.9.6` 回退。
+- 升级后验证清单：① 机器人助手页填 Device Key 后**只点顶部「保存配置」**，重进页面应显示掩码值（说明已落盘）；② 在「推送场景总控」勾选 Bark 渠道或卡片「启用 Bark 推送」，触发 Emby 新片入库，Bark 应收到通知；③ 未收到时查系统日志「[Bark] 未推送原因」定位；④ 用户端「我的 → 通知设置」应页面内弹窗可保存，PC / 手机一致；⑤ 工单大厅与用户管理通知设置勾选 Bark 后，对应事件应收到管理员侧 Bark 提醒。
+
 ## 1.9.6
 
 集中处理 1.9.5 用户反馈的 4 项问题：用户端通知设置彻底重构为独立页面、系统设置删除 Bark 与 Webhook 两个模块、机器人助手保存报 500 的根因修复、系统日志 500 堆栈清除。

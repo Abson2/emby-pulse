@@ -260,6 +260,13 @@ async def user_community_register(data: UserRegisterModel, request: Request):
                     # Web通知中心
                     if 'web' in channels:
                         add_notification("user", f"新用户注册: {safe_name}", f"用户社区注册，有效期 {days_display}", "/users_manage")
+
+                    # 🔥 1.9.7：用户管理通知设置勾选 Bark 时，走系统级 Bark 通道
+                    try:
+                        from app.domains.notifications.bark_push import safe_rule_push
+                        safe_rule_push("user_register", "新用户注册", msg)
+                    except Exception:
+                        pass
                 else:
                     # 兜底：使用旧方式发送通知
                     notifications.send_message("sys_notify", msg, platform="all")

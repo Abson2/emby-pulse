@@ -35,7 +35,7 @@
     </style>
     
     <!-- 🔥 只加载 request_app.js，Alpine.js 由 JS 文件内部动态加载 -->
-    <script nonce="{{ request.state.csp_nonce }}" src="/static/js/request_app.js?v=1.9.6"></script>
+    <script nonce="{{ request.state.csp_nonce }}" src="/static/js/request_app.js?v=1.9.7"></script>
 </head>
 
 <body class="antialiased min-h-screen relative overflow-x-hidden transition-colors duration-500 bg-slate-50 text-slate-800 dark:bg-black dark:text-zinc-100" 
@@ -176,6 +176,7 @@
     {% include 'request/modal_request_confirm.html' %}
     {% include 'request/modal_my_series.html' %}
     {% include 'request/modal_msg.html' %}
+    {% include 'request/modal_notify.html' %}
 
     <div x-show="toast.show" x-transition x-cloak class="fixed top-20 left-1/2 -translate-x-1/2 z-[350] px-6 py-3 rounded-full shadow-xl border backdrop-blur-xl flex items-center gap-2 font-bold bg-white/95 dark:bg-[#111]/95 dark:border-white/10"
          :class="toast.type === 'success' ? 'border-green-300 text-green-600 dark:text-green-400' : 'border-red-300 text-red-600 dark:text-red-400'">

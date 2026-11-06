@@ -1,0 +1,233 @@
+<!-- 🔥 1.9.7 用户级通知设置弹窗（10308「我的 → 通知设置」）
+     与「媒体库设置 / 娱乐功能 / 修改密码」完全一致的页面内弹窗交互样式。
+     实现上刻意不依赖 Alpine / x-teleport / request_app.js：
+       - 按钮使用原生 onclick（CSP script-src-attr 'unsafe-inline' 已允许）；
+       - 弹窗 DOM 与逻辑同文件内联，不存在「新 HTML + 旧 JS」错配（1.9.4/1.9.5 误诊的死因）；
+       - 不打开独立页面，规避 10308 端口白名单与反代缓存（1.9.6 独立页 403 的死因）。
+     接口契约不变：GET/POST /api/user/notify_settings。
+-->
+<div id="ep-notify-modal" class="hidden fixed inset-0 z-[300] flex items-center justify-center p-4 text-left">
+    <div onclick="epNotifyClose()" class="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"></div>
+    <div class="relative w-full max-w-[450px] bg-white dark:bg-[#111] border border-slate-200 dark:border-white/5 rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+
+        <!-- 标题栏（与积分补给站 / 媒体库设置弹窗一致） -->
+        <div class="p-5 border-b border-slate-100 dark:border-white/5 flex justify-between items-center shrink-0 bg-slate-50/50 dark:bg-white/5">
+            <h3 class="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-bell text-emerald-500"></i> 通知设置
+            </h3>
+            <button type="button" onclick="epNotifyClose()" class="w-8 h-8 rounded-full bg-slate-200/50 dark:bg-white/10 text-slate-500 hover:text-rose-500 flex justify-center items-center transition-colors">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+
+        <div class="p-4 sm:p-5 overflow-y-auto flex-1 bg-slate-50 dark:bg-[#0a0a0a]">
+
+            <p class="text-[11px] text-slate-500 dark:text-zinc-400 mb-4 leading-relaxed">选择推送渠道与接收内容（仅影响你本人）。与管理端系统级 Bark 互不干预。</p>
+
+            <!-- 加载态 -->
+            <div id="ep-notify-loading" class="hidden flex-col items-center justify-center py-10 gap-3">
+                <i class="fa-solid fa-circle-notch fa-spin text-2xl text-emerald-500"></i>
+                <div class="text-sm text-slate-500">加载中...</div>
+            </div>
+
+            <div id="ep-notify-body" class="space-y-3">
+
+                <!-- 推送渠道 -->
+                <section class="bg-white dark:bg-white/5 p-4 rounded-2xl border border-slate-200 dark:border-white/5">
+                    <div class="text-[11px] font-black tracking-widest uppercase text-slate-400 mb-3">推送渠道（二选一）</div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" id="ep-notify-ch-bark" onclick="epNotifyChannel('bark')" class="py-3 rounded-2xl text-xs font-bold transition flex flex-col items-center justify-center gap-1 border">
+                            <i class="fa-solid fa-bell text-lg"></i> Bark 链接
+                        </button>
+                        <button type="button" id="ep-notify-ch-webhook" onclick="epNotifyChannel('webhook')" class="py-3 rounded-2xl text-xs font-bold transition flex flex-col items-center justify-center gap-1 border">
+                            <i class="fa-solid fa-link text-lg"></i> 自定义 Webhook
+                        </button>
+                    </div>
+                    <div id="ep-notify-bark-box" class="mt-3 hidden">
+                        <label class="text-[11px] font-black tracking-widest uppercase text-slate-400 mb-1.5 block">Bark 推送链接</label>
+                        <input type="text" id="ep-notify-bark-url" placeholder="https://你的Bark服务/DeviceKey" class="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-[13px] outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div id="ep-notify-webhook-box" class="mt-3 hidden">
+                        <label class="text-[11px] font-black tracking-widest uppercase text-slate-400 mb-1.5 block">Webhook 地址</label>
+                        <input type="text" id="ep-notify-webhook-url" placeholder="https://你的Webhook接收地址" class="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-[13px] outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                </section>
+
+                <!-- 接收内容 -->
+                <section class="bg-white dark:bg-white/5 p-4 rounded-2xl border border-slate-200 dark:border-white/5">
+                    <div class="text-[11px] font-black tracking-widest uppercase text-slate-400 mb-3">接收内容</div>
+                    <div class="space-y-2" id="ep-notify-switches">
+                        <div class="flex items-center justify-between p-3 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
+                            <div><div class="text-sm font-bold text-slate-800 dark:text-white">新片入库通知</div><div class="text-[10px] text-slate-400">新影视入库时提醒</div></div>
+                            <button type="button" onclick="epNotifyToggle('notify_new_item')" class="ep-notify-toggle w-11 h-6 rounded-full relative shrink-0 bg-slate-300 dark:bg-slate-600 transition-colors"><span class="ep-notify-dot absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform"></span></button>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
+                            <div><div class="text-sm font-bold text-slate-800 dark:text-white">管理员消息</div><div class="text-[10px] text-slate-400">管理员在消息界面发给你的消息</div></div>
+                            <button type="button" onclick="epNotifyToggle('notify_admin_message')" class="ep-notify-toggle w-11 h-6 rounded-full relative shrink-0 bg-slate-300 dark:bg-slate-600 transition-colors"><span class="ep-notify-dot absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform"></span></button>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
+                            <div><div class="text-sm font-bold text-slate-800 dark:text-white">全站公告</div><div class="text-[10px] text-slate-400">管理员发布的全站公告</div></div>
+                            <button type="button" onclick="epNotifyToggle('notify_announcement')" class="ep-notify-toggle w-11 h-6 rounded-full relative shrink-0 bg-slate-300 dark:bg-slate-600 transition-colors"><span class="ep-notify-dot absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform"></span></button>
+                        </div>
+                        <div class="flex items-center justify-between p-3 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5">
+                            <div><div class="text-sm font-bold text-slate-800 dark:text-white">心愿清单状态变动</div><div class="text-[10px] text-slate-400">我的心愿状态变化时提醒（有变动才推）</div></div>
+                            <button type="button" onclick="epNotifyToggle('notify_wishlist')" class="ep-notify-toggle w-11 h-6 rounded-full relative shrink-0 bg-slate-300 dark:bg-slate-600 transition-colors"><span class="ep-notify-dot absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform"></span></button>
+                        </div>
+                    </div>
+                </section>
+
+                <p class="text-[10px] text-slate-400 flex items-center gap-1.5 px-1">
+                    <i class="fa-solid fa-info-circle"></i> 推送内容不含网址：反代后无法推送最新网址，且可能暴露真实端口。
+                </p>
+            </div>
+        </div>
+
+        <!-- 底部保存栏 -->
+        <div class="p-4 border-t border-slate-100 dark:border-white/5 shrink-0 bg-white dark:bg-[#1C1C1E]">
+            <div id="ep-notify-msg" class="text-[11px] mb-2 text-center hidden"></div>
+            <button type="button" id="ep-notify-save" onclick="epNotifySave()" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-xl text-sm font-bold transition flex items-center justify-center gap-2">
+                <i id="ep-notify-save-icon" class="fa-solid fa-check"></i><span id="ep-notify-save-text">保存设置</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script nonce="{{ request.state.csp_nonce }}">
+/* 🔥 1.9.7：用户级通知设置 —— 纯原生 JS，零 Alpine 依赖。
+   所有状态与 DOM 均在本文件内，随 HTML 一起下发，不受外部 JS 缓存影响。 */
+(function () {
+    var state = {
+        channel: 'none', bark_url: '', webhook_url: '',
+        notify_new_item: false, notify_admin_message: false,
+        notify_announcement: false, notify_wishlist: false
+    };
+    var saving = false;
+    var KEYS = ['notify_new_item', 'notify_admin_message', 'notify_announcement', 'notify_wishlist'];
+
+    function $(id) { return document.getElementById(id); }
+
+    function showMsg(text, ok) {
+        var el = $('ep-notify-msg');
+        if (!el) return;
+        el.textContent = text || '';
+        el.className = 'text-[11px] mb-2 text-center ' + (ok ? 'text-emerald-500' : 'text-rose-500');
+    }
+
+    function renderChannel() {
+        var on = 'bg-emerald-500 text-white border-emerald-500';
+        var off = 'bg-white dark:bg-white/5 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10';
+        var base = 'py-3 rounded-2xl text-xs font-bold transition flex flex-col items-center justify-center gap-1 border ';
+        var b = $('ep-notify-ch-bark'), w = $('ep-notify-ch-webhook');
+        if (b) b.className = base + (state.channel === 'bark' ? on : off);
+        if (w) w.className = base + (state.channel === 'webhook' ? on : off);
+        var bb = $('ep-notify-bark-box'), wb = $('ep-notify-webhook-box');
+        if (bb) bb.classList.toggle('hidden', state.channel !== 'bark');
+        if (wb) wb.classList.toggle('hidden', state.channel !== 'webhook');
+    }
+
+    function renderSwitches() {
+        var btns = document.querySelectorAll('#ep-notify-switches .ep-notify-toggle');
+        for (var i = 0; i < btns.length; i++) {
+            var on = !!state[KEYS[i]];
+            btns[i].classList.toggle('bg-emerald-500', on);
+            btns[i].classList.toggle('bg-slate-300', !on);
+            btns[i].classList.toggle('dark:bg-slate-600', !on);
+            var dot = btns[i].querySelector('.ep-notify-dot');
+            if (dot) dot.style.transform = on ? 'translateX(20px)' : 'translateX(0)';
+        }
+    }
+
+    function collect() {
+        var b = $('ep-notify-bark-url'), w = $('ep-notify-webhook-url');
+        state.bark_url = b ? (b.value || '').trim() : '';
+        state.webhook_url = w ? (w.value || '').trim() : '';
+        return state;
+    }
+
+    window.epNotifyChannel = function (c) { state.channel = c; renderChannel(); };
+
+    window.epNotifyToggle = function (key) {
+        if (KEYS.indexOf(key) === -1) return;
+        state[key] = !state[key];
+        renderSwitches();
+    };
+
+    window.epNotifyClose = function () {
+        var m = $('ep-notify-modal');
+        if (m) m.classList.add('hidden');
+    };
+
+    window.epNotifyOpen = function () {
+        var m = $('ep-notify-modal');
+        if (!m) return;
+        m.classList.remove('hidden');
+        var loading = $('ep-notify-loading'), body = $('ep-notify-body');
+        if (loading) { loading.classList.remove('hidden'); loading.classList.add('flex'); }
+        if (body) body.classList.add('hidden');
+        showMsg('', true);
+        fetch('/api/user/notify_settings', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.status === 'success' && d.data) {
+                    state = Object.assign(state, d.data);
+                    var b = $('ep-notify-bark-url'), w = $('ep-notify-webhook-url');
+                    if (b) b.value = state.bark_url || '';
+                    if (w) w.value = state.webhook_url || '';
+                    renderChannel();
+                    renderSwitches();
+                } else {
+                    showMsg((d && d.message) || '请先登录后再设置', false);
+                }
+            })
+            .catch(function () { showMsg('加载失败，请稍后重试', false); })
+            .finally(function () {
+                if (loading) { loading.classList.add('hidden'); loading.classList.remove('flex'); }
+                if (body) body.classList.remove('hidden');
+            });
+    };
+
+    window.epNotifySave = function () {
+        if (saving) return;
+        saving = true;
+        var btn = $('ep-notify-save'), icon = $('ep-notify-save-icon'), text = $('ep-notify-save-text');
+        if (btn) btn.disabled = true;
+        if (icon) icon.className = 'fa-solid fa-spinner fa-spin';
+        if (text) text.textContent = '保存中...';
+        showMsg('', true);
+        fetch('/api/user/notify_settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(collect())
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                var ok = d && d.status === 'success';
+                showMsg((d && d.message) || (ok ? '已保存' : '保存失败'), ok);
+                if (ok) setTimeout(window.epNotifyClose, 1000);
+            })
+            .catch(function () { showMsg('网络异常，请稍后重试', false); })
+            .finally(function () {
+                saving = false;
+                if (btn) btn.disabled = false;
+                if (icon) icon.className = 'fa-solid fa-check';
+                if (text) text.textContent = '保存设置';
+            });
+    };
+
+    // 兼容旧缓存链接：/user/notify_settings 已改为 303 -> /request?notify=1，
+    // 这里自动打开弹窗，保证「不单独打开一个页面」。
+    function autoOpen() {
+        try {
+            if (new URLSearchParams(window.location.search).get('notify') === '1') {
+                setTimeout(window.epNotifyOpen, 300);
+            }
+        } catch (e) {}
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', autoOpen);
+    } else {
+        autoOpen();
+    }
+})();
+</script>

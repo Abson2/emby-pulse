@@ -217,7 +217,7 @@
             </h3>
             <div class="flex-1 flex flex-col justify-start space-y-3.5">
                 <div class="bg-orange-50/80 dark:bg-orange-500/10 p-3 rounded-xl border border-orange-100 dark:border-orange-500/20">
-                    <p class="text-[11px] text-orange-800 dark:text-orange-300 leading-relaxed font-medium">推送「新片入库」与「新的求片」两类消息。系统级独立通道，不受通知规则勾选与旧通知总开关约束；失败只记日志，不影响业务主流程。</p>
+                    <p class="text-[11px] text-orange-800 dark:text-orange-300 leading-relaxed font-medium">推送「新片入库」与「新的求片」两类消息。启用方式任一即可：本卡「启用 Bark 推送」、或在「推送场景总控」的入库渠道里勾选 Bark；工单大厅 / 用户管理通知设置也能按场景单独开启。失败只记日志，不影响业务主流程；未推送的具体原因会写进系统日志便于排查。</p>
                 </div>
 
                 <label class="flex items-center justify-between p-3 rounded-xl bg-gray-50/50 dark:bg-[#2C2C2E] cursor-pointer hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition">
@@ -256,7 +256,7 @@
                         <i class="fa-solid fa-floppy-disk text-[11px]"></i>保存 Bark
                     </button>
                 </div>
-                <p class="text-[10px] text-gray-400 dark:text-gray-500 leading-relaxed">Device Key 读取时掩码显示，保存时掩码值不会覆盖已存密钥；「发送测试」可验证当前表单里尚未保存的值。用户级 Bark 请在用户端口「我的 → 通知设置」单独配置，与此系统级配置互不干预。</p>
+                <p class="text-[10px] text-gray-400 dark:text-gray-500 leading-relaxed">Device Key 读取时掩码显示，保存时掩码值不会覆盖已存密钥；顶部「保存配置」与本卡「保存 Bark」都会保存本卡片，任意一处点击即可；「发送测试」可验证当前表单里尚未保存的值。用户级 Bark 请在用户端口「我的 → 通知设置」单独配置，与此系统级配置互不干预。</p>
             </div>
         </div>
 
@@ -997,9 +997,10 @@
         }
     }
 
-    // ==================== 🔥 Bark 推送（1.9.5：整合到推送场景总控） ====================
-    // 独立于顶部「保存配置」：Bark 走 /api/notify/channels_config，只提交 bark 节点，
-    // 不会覆盖 TG / 企业微信配置。
+    // ==================== 🔥 Bark 推送（1.9.5 卡片 / 1.9.7 并入顶部统一保存） ====================
+    // 保存走 /api/notify/channels_config，只提交 bark 节点，不会覆盖 TG / 企业微信配置。
+    // 1.9.7：顶部「保存配置」会 await 本函数，避免「填了 Device Key 只点顶部保存
+    // → 配置未落盘 + init() 重载清空表单」这一静默失败（入库 Bark 一直不推的根因）。
     function collectBotBarkSettings() {
         return {
             bark: {
@@ -1032,7 +1033,9 @@
         }
     }
 
-    async function saveBotBarkSettings() {
+    async function saveBotBarkSettings(options) {
+        const opts = (options && typeof options === 'object') ? options : {};
+        const silent = !!opts.silent;
         try {
             const res = await fetch('/api/notify/channels_config', {
                 method: 'POST',
@@ -1040,13 +1043,18 @@
                 body: JSON.stringify(collectBotBarkSettings())
             });
             const json = await res.json();
-            showToast(json.status === 'success' ? 'success' : 'error',
-                      json.status === 'success' ? '保存成功' : '保存失败',
-                      json.message || (json.status === 'success' ? 'Bark 配置已保存' : '请稍后重试'));
+            const ok = json.status === 'success';
+            if (!silent) {
+                showToast(ok ? 'success' : 'error',
+                          ok ? '保存成功' : '保存失败',
+                          json.message || (ok ? 'Bark 配置已保存' : '请稍后重试'));
+            }
             // 重新读取，让 Device Key 显示为后端下发的掩码值
-            if (json.status === 'success') await loadBotBarkConfig();
+            if (ok) await loadBotBarkConfig();
+            return ok;
         } catch (e) {
-            showToast('error', '保存失败', 'Bark 配置保存失败: ' + e.message);
+            if (!silent) showToast('error', '保存失败', 'Bark 配置保存失败: ' + e.message);
+            return false;
         }
     }
 
@@ -1326,6 +1334,15 @@
             });
             const json = await res.json();
             if (json.status === 'success') {
+                // 🔥 1.9.7：Bark 卡片字段不在 /api/bot/settings 的 payload 里，
+                // 且本函数末尾 init() 会重读并覆盖表单。若不在此处先落盘，
+                // 用户「填了 Device Key → 只点顶部保存」会静默丢失配置，
+                // 表现为入库 Bark 永远不推送（1.9.6 反馈第 3 项的真实根因）。
+                const barkOk = await saveBotBarkSettings({silent: true});
+                if (!barkOk) {
+                    showToast('error', 'Bark 配置未保存',
+                              '其余配置已保存；请检查 Bark 卡片后单独点「保存 Bark」重试');
+                }
                 icon.className = "fa-solid fa-check";
                 textSpan.textContent = "保存成功并重载";
                 btnBtn.classList.replace('bg-brand-500', 'bg-emerald-500');

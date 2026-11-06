@@ -9,11 +9,18 @@
 
 与现有「通知规则渠道」的关系
 ----------------------------
-Bark 是**系统级独立通道**，不走 notify_rules 的 channels 勾选列表：
-- 系统级配置（服务器 / Device Key / 总开关 / 两类消息各自开关）由
-  `app/infra/config/notification_settings.py` 读写；
-- 两类事件在各自的触发点直接调用本模块的 `safe_push()`；
-- 现有 TG / 企业微信 / Web 通知中心的逻辑完全不受影响，不引入双重开关。
+Bark 的基础配置（服务器 / Device Key / 总开关 / 两类消息各自开关）由
+`app/infra/config/notification_settings.py` 读写 config.json；
+- 系统级两类事件（新片入库 / 新的求片）在各自触发点调用 `safe_push()`，
+  由 Bark 自身开关控制；
+- 🔥 1.9.7 起对齐企业微信「channels 列表驱动」：在「推送场景总控」或
+  「工单大厅 / 用户管理通知设置」里勾选 bark，同样是合法启用来源
+  （`is_bark_channel_selected()` 按通知类型精确判断，不再是不消费的死值）；
+- 管理端 7 类通知规则事件通过 `safe_rule_push()` 走系统级 Bark 通道；
+- TG / 企业微信 / Web 通知中心的逻辑完全不受影响。
+
+配置边界：`WEBHOOK_TOKEN`（.env）只用于 Emby Webhook 回调地址 `?token=` 的
+接口校验，属于「入库事件入口」，与本模块的推送出口配置没有任何耦合。
 
 安全与可靠性约束
 ----------------
@@ -70,6 +77,39 @@ def _runtime_config(config=None):
         return {}
 
 
+# 系统级两类事件 -> notify_rules 通知类型（用于按类型精确判断渠道勾选）
+_RULE_TYPE_BY_KIND = {
+    "library_new": "library_new",
+    "request_new": "request_new",
+}
+
+
+def _apply_channel_gate(kind, conf):
+    """🔥 1.9.7：把「推送场景总控 / 通知设置浮窗」里的 Bark 勾选折算为启用信号。
+
+    借鉴企微由 channels 列表驱动的做法；按事件类型精确匹配，避免「工单大厅
+    勾了 Bark」意外把「新片入库」也打开，也避免求片通知被重复触发。
+    """
+    notify_type = _RULE_TYPE_BY_KIND.get(kind)
+    if not notify_type:
+        return conf
+    try:
+        from app.infra.config.notification_settings import is_bark_channel_selected
+        if is_bark_channel_selected(notify_type):
+            conf["enabled"] = True
+    except Exception:
+        pass
+    return conf
+
+
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _strip_html(text):
+    """管理端通知文案多为 Telegram HTML，Bark 是纯文本，去掉标签避免乱码。"""
+    return _HTML_TAG_RE.sub("", str(text or ""))
+
+
 def _event_allowed(conf, switch_key):
     return (_as_bool(conf.get("enabled"), False)
             and _as_bool(conf.get(switch_key, True), True))
@@ -86,13 +126,19 @@ def send(title, body, *, url=None, group=None, sound=None, level=None,
     key = str(conf.get("device_key") or "").strip()
     server = str(conf.get("server") or "").strip().rstrip("/")
 
+    # 🔥 1.9.7：跳过原因写进日志，用户可在系统日志里自证「为什么没推」
     if not force and not _as_bool(conf.get("enabled"), False):
-        return {"ok": True, "skipped": True, "detail": "Bark 系统级推送未启用"}
+        detail = "Bark 系统级推送未启用（卡片总开关与渠道勾选均未开启）"
+        logger.info(f"[Bark] 未推送原因: {detail}")
+        return {"ok": True, "skipped": True, "detail": detail}
     if not key:
-        return {"ok": False, "skipped": True, "detail": "未配置 Bark Device Key"}
+        detail = "未配置 Bark Device Key（请在「机器人助手 → Bark 推送」保存，再点顶部保存配置）"
+        logger.warning(f"[Bark] 未推送原因: {detail}")
+        return {"ok": False, "skipped": True, "detail": detail}
     if not _SERVER_RE.match(server):
-        return {"ok": False, "skipped": True,
-                "detail": "Bark 服务器地址非法或未配置（需 http(s):// 开头）"}
+        detail = "Bark 服务器地址非法或未配置（需 http(s):// 开头）"
+        logger.warning(f"[Bark] 未推送原因: {detail}")
+        return {"ok": False, "skipped": True, "detail": detail}
 
     payload = {
         "device_key": key,
@@ -212,6 +258,10 @@ def send_test(*, config=None, transport=None):
 def safe_push(kind, **kwargs):
     """事件侧统一入口：任何异常都吞掉，绝不影响求片提交 / 入库通知主流程。"""
     try:
+        # 🔥 1.9.7：真实运行路径（未显式注入 config）才读系统配置并把 channels
+        # 勾选折算进启用判断；测试与用户级推送显式注入 config 时行为完全不变。
+        if not isinstance(kwargs.get("config"), dict):
+            kwargs["config"] = _apply_channel_gate(kind, _runtime_config())
         if kind == "library_new":
             return push_new_library_item(**kwargs)
         if kind == "request_new":
@@ -221,3 +271,41 @@ def safe_push(kind, **kwargs):
         logger.warning(f"[Bark] {kind} 推送异常（已忽略）: {e}")
         return {"ok": False, "skipped": True,
                 "detail": f"{type(e).__name__}: {e}"}
+
+
+def push_rule_notification(notify_type, title, body, *, url=None,
+                           config=None, transport=None):
+    """🔥 1.9.7：管理端通知规则渠道的 Bark 推送入口。
+
+    用于「工单大厅通知设置」（request_new / request_update / request_status /
+    feedback_new）与「用户管理通知设置」（user_register / user_login /
+    user_delete）里勾选的 Bark 渠道。按 notify_type 精确判断，勾了才推，
+    不是只保存不消费的假开关。
+
+    渠道勾选本身即代表启用意图，因此不再额外要求 Bark 卡片总开关；但仍必须
+    已配置 Device Key 与合法服务器地址，缺什么由 send() 明确写进日志。
+    """
+    try:
+        if isinstance(config, dict):
+            conf = dict(config)
+        else:
+            from app.infra.config.notification_settings import is_bark_channel_selected
+            if not is_bark_channel_selected(notify_type):
+                return {"ok": True, "skipped": True,
+                        "detail": f"{notify_type} 未勾选 Bark 渠道"}
+            conf = _runtime_config()
+        conf["enabled"] = True
+        return send(title, _strip_html(body), url=url,
+                    config=conf, transport=transport)
+    except Exception as e:
+        logger.warning(f"[Bark] 通知规则 {notify_type} 推送异常（已忽略）: {e}")
+        return {"ok": False, "skipped": True,
+                "detail": f"{type(e).__name__}: {e}"}
+
+
+def safe_rule_push(notify_type, title, body, **kwargs):
+    """业务侧统一入口：内部已全量吞异常，调用方无需再包一层。"""
+    res = push_rule_notification(notify_type, title, body, **kwargs)
+    if isinstance(res, dict) and res.get("skipped"):
+        logger.info(f"[Bark] 通知规则 {notify_type} 未推送: {res.get('detail')}")
+    return res

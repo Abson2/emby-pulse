@@ -217,6 +217,13 @@ def submit_feedback(data: FeedbackSubmitModel, request: Request):
                     message=f"{data.item_name} - {data.issue_type}",
                     action_url="/requests_admin?tab=feedback",
                 )
+
+            # 🔥 1.9.7：工单大厅通知设置勾选 Bark 时，走系统级 Bark 通道
+            try:
+                from app.domains.notifications.bark_push import safe_rule_push
+                safe_rule_push("feedback_new", "用户报错", msg)
+            except Exception:
+                pass
         else:
             # 默认不发送（关闭状态）
             pass

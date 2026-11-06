@@ -405,15 +405,12 @@
                     <button @click="openMySeriesModal()" class="py-2.5 rounded-xl bg-orange-50 text-orange-600 hover:bg-orange-100 dark:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20 text-xs font-bold transition flex flex-col items-center justify-center border border-orange-200 dark:border-orange-500/20"><i class="fa-solid fa-tv text-lg mb-1"></i> 追剧更新</button>
                 </div>
                 
-                <!-- 🔥 媒体库设置 + 娱乐功能入口 -->
-                <div class="w-full mt-2 grid grid-cols-2 gap-2 z-10">
+                <!-- 🔥 1.9.7：媒体库设置 / 通知设置 / 娱乐功能 三按钮一排，与上方三按钮对齐 -->
+                <div class="w-full mt-2 grid grid-cols-3 gap-2 z-10">
                     <button @click="libSettingsModalOpen = true; loadLibrarySettings()" class="py-2.5 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-400 dark:hover:bg-indigo-500/20 text-xs font-bold transition flex flex-col items-center justify-center border border-indigo-200 dark:border-indigo-500/20"><i class="fa-solid fa-photo-film text-lg mb-1"></i> 媒体库设置</button>
+                    <button type="button" onclick="epNotifyOpen()" class="py-2.5 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20 text-xs font-bold transition flex flex-col items-center justify-center border border-emerald-200 dark:border-emerald-500/20"><i class="fa-solid fa-bell text-lg mb-1"></i> 通知设置</button>
                     <button @click="entertainmentModalOpen = true" class="py-2.5 rounded-xl bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-500/10 dark:text-purple-400 dark:hover:bg-purple-500/20 text-xs font-bold transition flex flex-col items-center justify-center border border-purple-200 dark:border-purple-500/20"><i class="fa-solid fa-gamepad text-lg mb-1"></i> 娱乐功能</button>
                 </div>
-
-                <!-- 🔥 用户级通知设置（与管理端 Bark 互不干预） -->
-                <!-- 🔥 1.9.6：用户级通知设置改为独立页面（纯原生JS，规避Alpine作用域/缓存问题） -->
-                <a href="/user/notify_settings" class="w-full mt-2 py-2.5 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20 text-xs font-bold transition flex flex-col items-center justify-center border border-emerald-200 dark:border-emerald-500/20"><i class="fa-solid fa-bell text-lg mb-1"></i> 通知设置</a>
                 
             </div>
 
@@ -1369,8 +1366,6 @@
         </div>
     </div>
 </template>
-
-<!-- 🔥 用户级通知设置弹窗（10308「我的 → 通知设置」，与管理端 Bark 互不干预） -->
 
 <!-- 🔥 PWA 图标选择弹窗 -->
 <template x-teleport="body">
