@@ -204,10 +204,34 @@ def _bark_notify_new_item(item):
         _logger_provider().warning(f"[Bark] 新片入库通知异常: {e}")
 
 
+def _log_media_notification(item, tpl_vars):
+    """影视通知渲染后写入 notify_template 插件日志（每片仅记录一次，用于核对插件是否生效）。
+
+    不抛异常、不影响主流程：插件缺失或方法未实现时静默跳过。
+    """
+    tpl_plugin = _get_plugin_provider()("notify_template")
+    if not tpl_plugin or not hasattr(tpl_plugin, "log_media_notification"):
+        return
+    type_cn = tpl_vars["type_cn"]
+    name = tpl_vars["name"]
+    style = "自定义模板" if getattr(tpl_plugin, "enabled", False) else "默认模板"
+    try:
+        tpl_plugin.log_media_notification(type_cn, name, style)
+    except Exception:
+        pass
+
+
 def handle_library_new_item(bot, item):
     _logger_provider().info(f"[入库通知] 收到新片入库事件: {item.get('Name') or item.get('Id')} (Type={item.get('Type')})")
     # 系统级 Bark 通道独立于「入库通知总开关」，仅由自身开关控制
     _bark_notify_new_item(item)
+
+    # 🔥 影视通知渲染后写入插件日志（notify_template 插件「日志」可见，核实插件是否生效）
+    try:
+        _tpl_vars = _build_tpl_vars(item)
+        _log_media_notification(item, _tpl_vars)
+    except Exception as _e:
+        _logger_provider().warning(f"[插件日志] 影视通知写日志失败: {_e}")
 
     # 用户级通知：新片入库后，向开启「新片入库」开关的用户广播（正文复用模板，不含网址）
     try:

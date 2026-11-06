@@ -154,6 +154,7 @@ class ConfigManager:
             "wecom_token": "WECOM_TOKEN",
             "wecom_aeskey": "WECOM_AESKEY",
             "webhook_token": "WEBHOOK_TOKEN",
+            "bark_device_key": "BARK_DEVICE_KEY",
         }
 
         # 🔧 普通环境变量字段(用于首次初始化)

@@ -270,3 +270,46 @@ def test_library_new_item_outer_errors_are_logged(monkeypatch):
     assert channel_calls == []
     assert image_calls == []
     assert logger.errors == ["[入库通知] 处理失败: 'Id'"]
+
+
+class FakePluginWithLog:
+    enabled = True
+
+    def __init__(self):
+        self.render_calls = []
+        self.log_calls = []
+
+    def render(self, key, vars):
+        self.render_calls.append((key, vars))
+        return "plugin caption"
+
+    def log_media_notification(self, media_type_cn, name, style, detail=""):
+        self.log_calls.append((media_type_cn, name, style, detail))
+
+
+def test_library_new_item_writes_plugin_media_notification_log_once(monkeypatch):
+    from app.bot.notification_bot import bot_service
+
+    plugin = FakePluginWithLog()
+    bot, sent, channel_calls, image_calls = _make_bot(image_resolver=lambda *_args: "image-bytes")
+
+    monkeypatch.setattr(bot_service, "get_enable_library_notify", lambda: True)
+    monkeypatch.setattr(bot_service, "get_media_quality_info", lambda item_id: {})
+    monkeypatch.setattr(bot_service, "get_media_server_main_public_or_host", lambda: "https://emby.example.com")
+    monkeypatch.setattr(bot_service, "get_media_server_host", lambda: "")
+    monkeypatch.setattr(bot_service, "get_notify_channels", lambda notify_type: ["tg_bot"])
+    monkeypatch.setattr(bot_service, "get_plugin", lambda plugin_name: plugin)
+    monkeypatch.setattr(bot_service, "datetime", FakeDateTimeModule)
+
+    bot.on_library_new_item(
+        {"Id": "s-1", "Name": "Show", "ProductionYear": 2025, "Type": "Series"}
+    )
+
+    # 每部新片仅记录一次，且类型/名称/风格正确
+    assert len(plugin.log_calls) == 1
+    media_type_cn, name, style, _detail = plugin.log_calls[0]
+    assert media_type_cn == "剧集"
+    assert name == "Show"
+    assert style == "自定义模板"
+    # 渲染调用与日志调用都走同一个插件，互不干扰
+    assert len(plugin.render_calls) == 1

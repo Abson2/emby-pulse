@@ -56,9 +56,14 @@ class FakeCfg:
     def __init__(self):
         self.config = {}
         self.saved = False
+        self._env_sources = {}
 
     def get(self, key, default=None):
         return self.config.get(key, default)
+
+    def get_env_source(self, key):
+        # 模拟 config.py 的 env 来源判定：env 覆盖 / 否则 config
+        return self._env_sources.get(key, "config")
 
     def save(self):
         self.saved = True
@@ -191,6 +196,20 @@ check("运行期渠道配置 Key 为原文",
       ncfg.get_notification_channels_runtime_config()["bark"]["device_key"]
       == "NEW_REAL_KEY_9999")
 
+# 需求 C：环境变量 BARK_DEVICE_KEY 来源（与 WEBHOOK_TOKEN 同级安全处理）
+FAKE_CFG._env_sources = {"bark_device_key": "env"}
+env_masked = ncfg.get_bark_config(masked=True)
+check("env 来源显示占位符且不含真实 Key",
+      env_masked["device_key"] == "****（由环境变量设置）"
+      and "NEW_REAL_KEY_9999" not in env_masked["device_key"], str(env_masked))
+check("env 来源标记只读 + 来源标识",
+      env_masked["device_key_readonly"] is True
+      and env_masked["device_key_source"] == "env")
+env_runtime = ncfg.get_bark_runtime_config()
+check("运行期 env 来源仍可读取真实 Key 原文（推送可用）",
+      env_runtime["device_key"] == "NEW_REAL_KEY_9999", str(env_runtime))
+FAKE_CFG._env_sources = {}
+
 print("== 2. send()：开关 / 校验 / 请求体 / 兜底 ==")
 t = FakeTransport()
 r = bark.send("标题", "正文", config=conf(enabled=False), transport=t)
@@ -259,6 +278,43 @@ r = bark.send("标题", "正文", config=conf(), transport=t)
 check("网络异常被吞掉不抛出", r["ok"] is False and r["skipped"] is False)
 check("异常信息进入 detail", "network down" in r["detail"], str(r))
 check("异常返回体也不含 device_key", "device_key" not in r.get("payload", {}))
+
+print("== 2.5 Bark 正文/标题 HTML 剥离（根治乱码）==")
+# 新片入库走「自定义通知模板」渲染体，常带 <b> 等 Telegram 标签；
+# Bark 是纯文本通道，必须在 send() 统一出口层剥离，否则 <b> 被原样显示。
+t = FakeTransport()
+r = bark.push_new_library_item(
+    name="英雄连", item_type="Movie", year="2020",
+    body="🎬 <b>新入库 电影 英雄连</b> (2020)\n<b>质量：</b>4K  |  ⭐ 评分：N/A / 10",
+    play_url="https://emby.example.com/item/9",
+    config=conf(), transport=t)
+p = t.last_payload
+check("新片入库 Bark 剥离 <b> 标签", "<" not in p.get("body", ""), p.get("body"))
+check("剥离后保留正文核心内容",
+      "英雄连" in p.get("body", "") and "质量：4K" in p.get("body", ""), p.get("body"))
+
+# send() 统一出口对所有 Bark 渠道生效，标题同样剥离
+t = FakeTransport()
+r = bark.send("<b>新片入库</b>", "<b>质量：</b>4K HDR", config=conf(), transport=t)
+p = t.last_payload
+check("send() 标题剥离 HTML", "<" not in p.get("title", ""), p.get("title"))
+check("send() 正文剥离 HTML", "<" not in p.get("body", ""), p.get("body"))
+check("剥离后仍保留核心文本",
+      "新片入库" in p.get("title", "") and "质量：4K HDR" in p.get("body", ""))
+
+# 用户级 Bark 广播同样经 send() 出口（push_user_notify -> bark_send）
+t = FakeTransport()
+r = bark.send("新片入库", "🎬 <b>新入库 电影 测试</b>", config=conf(), transport=t)
+check("用户级 Bark 出口同样剥离 HTML",
+      "<" not in t.last_payload.get("body", ""), t.last_payload.get("body"))
+
+# 规则通知入口已剥离一次，经 send() 二次剥离幂等、不丢文本
+t = FakeTransport()
+r = bark.push_rule_notification("feedback_new", "用户报错",
+                               "<b>资源报错</b>：测试", config=conf(), transport=t)
+check("规则通知经 send() 二次剥离仍无标签且保留文本",
+      "<" not in t.last_payload.get("body", "")
+      and "资源报错" in t.last_payload.get("body", ""), t.last_payload.get("body"))
 
 print("== 3. 新片入库通知 ==")
 t = FakeTransport()

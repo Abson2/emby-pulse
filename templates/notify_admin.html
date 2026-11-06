@@ -226,7 +226,16 @@ async function init() {
         document.getElementById('wecom-webhook').value = config.wecom?.webhook || '';
         document.getElementById('bark-enabled').checked = config.bark?.enabled || false;
         document.getElementById('bark-server').value = config.bark?.server || '';
-        document.getElementById('bark-device-key').value = config.bark?.device_key || '';
+        const barkDk = document.getElementById('bark-device-key');
+        if (config.bark?.device_key_readonly) {
+            barkDk.value = '';
+            barkDk.placeholder = '••••••••（由环境变量设置）';
+            barkDk.readOnly = true;
+        } else {
+            barkDk.value = config.bark?.device_key || '';
+            barkDk.placeholder = 'Bark App 里的设备密钥';
+            barkDk.readOnly = false;
+        }
         document.getElementById('bark-sound').value = config.bark?.sound || 'default';
         document.getElementById('bark-group').value = config.bark?.group || 'EMBYPULSE';
         document.getElementById('bark-notify-library-new').checked = config.bark?.notify_library_new !== false;

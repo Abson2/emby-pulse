@@ -2,7 +2,11 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from typing import Optional
 
-from app.core.security_utils import sanitize_html, sanitize_rich_html
+from app.core.security_utils import (
+    decode_announcement_content,
+    sanitize_html,
+    sanitize_rich_html,
+)
 from app.domains.notifications.message_dao import (
     create_announcement as create_announcement_record,
     delete_announcement_by_id,
@@ -46,6 +50,9 @@ def get_announcements(request: Request, active_only: bool = False):
 
     rows = list_announcements(active_only)
     announcements = [dict(row) for row in rows] if rows else []
+    # 🔥 兼容历史二次转义数据（早期缺少 bleach 导致内容被整体转义）
+    for ann in announcements:
+        ann["content"] = decode_announcement_content(ann.get("content", ""))
     return {"status": "success", "data": announcements}
 
 
@@ -157,6 +164,9 @@ def user_get_announcements(request: Request):
     ensure_announcement_tables()
 
     announcements = list_active_announcements_with_reads(user_id)
+    # 🔥 兼容历史二次转义数据
+    for ann in announcements:
+        ann["content"] = decode_announcement_content(ann.get("content", ""))
 
     return {"status": "success", "data": announcements}
 

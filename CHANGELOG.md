@@ -1,5 +1,47 @@
 # 更新日志
 
+## 1.9.10
+
+围绕「推送体验」与「公告显示」四项落地修复，均为发布后反馈驱动，不改动入库推送主链路语义。
+
+### 1. Bark 新片入库推送乱码根治（纯文本通道剥离 HTML）
+
+用户反馈新片入库 Bark 推送出现 `<b>` 字面量与啰嗦。经核查「自定义通知模板 v1.1」插件已正常生效，乱码根因是 **Bark 是纯文本通道、不渲染 HTML**，而新片入库 Bark 路径此前漏调 HTML 剥离。
+
+- `app/domains/notifications/bark_push.py::send()` 在统一出口层对 `title` / `body` 调用 `_strip_html()` 后再截断长度，根治新片入库 / 用户级广播 / 规则通知等所有经 Bark 出口的 `<b>` 字面量问题。
+- **不改动默认通知模板**：模板简洁化由用户自行在插件中心「自定义通知模板 v1.1」编写自定义模板完成（用户明确选择此路径），本版本只负责把 HTML 标签在 Bark 纯文本出口剥离。
+- 回归：`tests/test_bark_push.py` 新增 5 条 HTML 剥离断言（新片入库 / send 统一出口 / 用户级 / 规则通知二次剥离），全绿。
+
+### 2. 管理端 Bark Device Key 支持环境变量 BARK_DEVICE_KEY（与 WEBHOOK_TOKEN 同级安全处理）
+
+- `app/core/config.py` 的 `SENSITIVE_ENV_FIELDS` 新增 `"bark_device_key": "BARK_DEVICE_KEY"`，复用既有「env 强制覆盖 / 不落盘 / 来源判定 / 保存拒绝 / 读取回真实值」整套机制。
+- `app/infra/config/notification_settings.py::get_bark_config()` 新增 `device_key_source` / `device_key_readonly`：env 来源返回「****（由环境变量设置）」占位符且只读，config 来源返回掩码值；本模块不自行读取环境变量，统一走 `cfg.get_env_source` 判定。
+- 前端 `templates/bot.html` / `templates/notify_admin.html` 在 env 来源下清空输入框、设置只读与占位符。
+- `.env.example` 新增 `BARK_DEVICE_KEY` 说明（仅管理端系统级 Bark，可选；用户端各自粘贴 `bark_url` 不受影响）。
+- 范围：**仅管理端系统级 Bark**，不改动用户端 `user_notify_service.py`。
+
+### 3. 影视通知写入插件日志 + 上限管控（避免冗长）
+
+用户要求「自定义通知模版插件推送的影视通知需要在插件日志中体现，且日志做大小、时间上限管控」。
+
+- `app/plugins/plugin_dao.py::add_plugin_log()` 新增管控：单条 `message` 截断至 2000 字符；表超 500 行时删除最旧记录；超 30 天留存期的记录定期清理。
+- `app/plugins/notify_template/plugin.py` 新增 `log_media_notification(type_cn, name, style, detail="")`，影视通知渲染后调用，显式 `notify=False`（不触发全局通知刷屏），仅写入插件日志表（插件页「日志」可见，用于核对插件是否生效）。
+- `app/bot/notification_bot/notification_bot_library_new_item_service.py::handle_library_new_item()` 每部新片渲染后调用一次，记录类型 / 名称 / 风格（自定义模板 / 默认模板）。
+
+### 4. 公告富文本乱码修复（`&lt;p&gt;欢迎大家&lt;/p&gt;` 字面显示）
+
+用户通过管理端公告管理发布公告后，内容显示为 `&lt;p&gt;欢迎大家&lt;/p&gt;` 字面量。根因：**`sanitize_rich_html` 依赖第三方库 `bleach`，但 `bleach` 从未列入依赖**，ImportError 退化为 `html.escape()`，把 `<p>...</p>` 整体转义成 `&lt;p&gt;...&lt;/p&gt;` 存入数据库，前端渲染时露出实体。
+
+- `app/core/security_utils.py::sanitize_rich_html()` 重写为**零依赖自实现**的标签白名单净化器（基于标准库 `html.parser`），保留 `p/strong/em/u/s/a/span/ul/li/br/h1-6/img/...` 等安全标签与 `href/style` 等安全属性，剥离 `script` / `onerror` / `javascript:` 等危险内容，对所有文本节点做 HTML 转义——与历史 bleach 配置语义对齐，但不再二次转义。
+- 新增 `decode_announcement_content()`：仅对「不含真实标签字符、却含 `&lt;`/`&gt;` 实体」的历史二次转义数据解码一次还原；真实富文本原样返回，避免误伤。
+- `app/domains/notifications/announcements_router.py` 的两个 GET 接口（管理端列表 / 用户端列表）在读取时对 `content` 做兼容解码，历史公告无需改库即正常显示。
+- 回归：`tests/test_sanitize_rich_html.py` 新增（保留标签 / 剥离危险 / 实体兼容三类断言），全绿。
+
+### 发布与验证
+
+- 应用版本升级至 `1.9.10`；Dockerfile `APP_VERSION=1.9.10-hardened`；compose 默认锁定 `1.9.10`（保留 `1.9.9` 回退）；`request_app.js?v=1.9.10` 同步递增。
+- 升级后验证清单：① 新片入库 Bark 推送不再出现 `<b>` 字面量；② 配置 `BARK_DEVICE_KEY` 环境变量后，机器人助手 / 通知设置页 Device Key 自动只读；③ 发布/编辑一条富文本公告，管理端列表与用户端详情弹窗正确渲染段落与加粗（不再显示 `&lt;p&gt;` 实体）；④ 发布新片后，自定义通知模板插件「日志」中出现一条「影视通知渲染」记录。
+
 ## 1.9.9
 
 修复 1.9.8 上线后生产日志里出现的两条 `[Webhook] 未识别 Event=` 告警（`library.deleted` 与 `system.notificationtest`），并顺带抑制一批 Emby 高频系统/会话事件的噪声。属日志降噪与误判防护，不涉及入库推送主链路改动。

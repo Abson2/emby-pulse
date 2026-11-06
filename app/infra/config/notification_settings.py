@@ -9,12 +9,15 @@ BARK_SERVER_DEFAULT = "https://api.day.app"
 BARK_GROUP_DEFAULT = "EMBYPULSE"
 BARK_SOUND_DEFAULT = "default"
 
-# 🔥 1.9.7 配置边界说明（避免概念混淆）：
+# 🔥 配置边界说明（避免概念混淆）：
 # .env 里的 WEBHOOK_TOKEN 是 Emby Webhook 回调地址 ?token= 的**接口校验凭证**，
 # 属于「入库事件入口」链路；Bark 的服务器 / Device Key / 开关属于「推送出口」
-# 链路，只从 config.json 读写。两条链路没有任何配置耦合，不能用 WEBHOOK_TOKEN
-# 推断 Bark 是否已配置，也不能把 Bark 不推送归因于 .env。
-# 本模块不读取任何 BARK_* 环境变量，行为与 1.9.6 一致。
+# 链路。两条链路概念独立，不能用 WEBHOOK_TOKEN 推断 Bark 是否已配置，也不能把
+# Bark 不推送归因于 WEBHOOK_TOKEN。
+# Bark 的 Device Key 可由环境变量 BARK_DEVICE_KEY 提供，但**统一在
+# app/core/config.py 的 SENSITIVE_ENV_FIELDS 中央注册**（与 WEBHOOK_TOKEN 同一
+# 机制：env 强制覆盖 / 不落盘 / 来源判定），本模块不自行读取环境变量，只通过
+# cfg.get_env_source 判定来源，行为与历史版本一致。
 
 
 def _mask_secret(value):
@@ -36,18 +39,28 @@ def _bark_bool(value, default):
 def get_bark_config(*, masked: bool = True) -> dict:
     """系统级 Bark 配置。管理端读取时 Device Key 做掩码，运行期读取原文。
 
-    配置源恒为 config.json（见文件头「配置边界说明」），不引入环境变量优先级，
-    保证既有管理端读写行为与 1.9.6 完全一致。
+    与 WEBHOOK_TOKEN 同级安全处理：Device Key 可由环境变量 BARK_DEVICE_KEY 提供，
+    在 app/core/config.py 的 SENSITIVE_ENV_FIELDS 中央注册，享受「env 强制覆盖 /
+    不落盘 / 接口不返回明文 / 保存不覆盖」全部语义。本模块不自行读取环境变量，
+    仅通过 cfg.get_env_source 判定来源，行为与历史版本一致。
     """
     try:
         key = str(cfg.get("bark_device_key", "") or "")
     except Exception:
         key = ""
+    source = "env" if cfg.get_env_source("bark_device_key") == "env" else "config"
+    if masked:
+        # env 来源不返回真实值，仅给占位符 + 只读标记（与 webhook_token 一致）
+        display_key = "****（由环境变量设置）" if source == "env" else _mask_secret(key)
+    else:
+        display_key = key  # 运行期推送使用真实值
     return {
         "enabled": _bark_bool(cfg.get("bark_enabled", False), False),
         "server": str(cfg.get("bark_server", BARK_SERVER_DEFAULT)
                       or BARK_SERVER_DEFAULT).strip().rstrip("/"),
-        "device_key": _mask_secret(key) if masked else key,
+        "device_key": display_key,
+        "device_key_source": source,
+        "device_key_readonly": source == "env",
         "sound": str(cfg.get("bark_sound", BARK_SOUND_DEFAULT) or BARK_SOUND_DEFAULT).strip(),
         "group": str(cfg.get("bark_group", BARK_GROUP_DEFAULT) or BARK_GROUP_DEFAULT).strip(),
         "notify_library_new": _bark_bool(cfg.get("bark_notify_library_new", True), True),

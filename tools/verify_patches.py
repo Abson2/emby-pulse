@@ -320,11 +320,11 @@ check("系统设置接口给出可复制的 URL 模板",
 check("系统设置接口不再要求 Emby 配置 Header",
       "请在 Emby 中配置 Header" not in system_router)
 
-check("应用版本升级到 1.9.9", 'APP_VERSION = "1.9.9"' in read("app/shared/version.py"))
-check("Dockerfile 版本为 1.9.9-hardened", "APP_VERSION=1.9.9-hardened" in dockerfile)
-check("compose 默认拉取 1.9.9", "IMAGE_TAG:-1.9.9" in compose)
-check("CHANGELOG 含 1.9.0 / 1.9.1 / 1.9.2 / 1.9.6 / 1.9.7 / 1.9.8 / 1.9.9 发版说明",
-      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7", "## 1.9.8", "## 1.9.9")))
+check("应用版本升级到 1.9.10", 'APP_VERSION = "1.9.10"' in read("app/shared/version.py"))
+check("Dockerfile 版本为 1.9.10-hardened", "APP_VERSION=1.9.10-hardened" in dockerfile)
+check("compose 默认拉取 1.9.10", "IMAGE_TAG:-1.9.10" in compose)
+check("CHANGELOG 含 1.9.0 / 1.9.1 / 1.9.2 / 1.9.6 / 1.9.7 / 1.9.8 / 1.9.9 / 1.9.10 发版说明",
+      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7", "## 1.9.8", "## 1.9.9", "## 1.9.10")))
 check("CI 增加 Bark / Webhook 回归步骤",
       "tests/test_bark_push.py" in read(".github/workflows/docker-publish.yml"))
 
@@ -395,8 +395,8 @@ models_py = read("app/schemas/models.py")
 sys_views = read("app/domains/system/views.py")
 modal_notify = read("templates/request/modal_notify.html")
 
-check("request_app.js 引用带版本号（浏览器缓存破坏，1.9.9）",
-      "request_app.js?v=1.9.9" in req_tpl)
+check("request_app.js 引用带版本号（浏览器缓存破坏，1.9.10）",
+      "request_app.js?v=1.9.10" in req_tpl)
 # 1.9.6 起通知设置不再由 Alpine 主组件承载（1.9.7 改为页面内原生弹窗）
 check("request_app.js 不再包含任何通知设置 state/方法（1.9.6 起移除）",
       all(x not in req_js for x in (
@@ -469,11 +469,16 @@ nadmin_py = read("app/domains/notifications/notify_admin.py")
 users_tpl = read("templates/users.html")
 
 # 配置边界：WEBHOOK_TOKEN 属于 Webhook 回调校验链路，绝不能被当成 Bark 配置
-check("Bark 配置不引入 BARK_* 环境变量（不与 WEBHOOK_TOKEN 混淆）",
-      "BARK_ENV_FIELDS" not in ncfg_py
-      and "os.getenv" not in ncfg_py
-      and "WEBHOOK_TOKEN" in ncfg_py)
-check("Bark 配置仍只从 config.json 读写",
+check("Bark Device Key 经 config.py 中央注册 BARK_DEVICE_KEY（与 WEBHOOK_TOKEN 同级安全处理）",
+      'BARK_DEVICE_KEY' in read("app/core/config.py")
+      and '"bark_device_key"' in read("app/core/config.py"))
+check("Bark 配置层不直接读 os.getenv（统一走中央注册，避免分散）",
+      "os.getenv" not in ncfg_py)
+check("get_bark_config 回显 env 来源与只读标记",
+      "device_key_source" in ncfg_py and "device_key_readonly" in ncfg_py)
+check(".env.example 文档化 BARK_DEVICE_KEY（管理端系统级 Bark）",
+      "BARK_DEVICE_KEY" in env)
+check("Bark 配置仍只从 config.json 读写（env 覆盖时只读）",
       'cfg.get("bark_device_key"' in ncfg_py
       and "def set_bark_config(data: dict) -> None:" in ncfg_py)
 check("is_bark_channel_selected 按通知类型精确判断",

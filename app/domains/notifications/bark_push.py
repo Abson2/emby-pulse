@@ -142,8 +142,11 @@ def send(title, body, *, url=None, group=None, sound=None, level=None,
 
     payload = {
         "device_key": key,
-        "title": str(title or "")[:_TITLE_MAX],
-        "body": str(body or "")[:_BODY_MAX],
+        # 🔥 Bark 是纯文本通道，不渲染 <b> 等 Telegram HTML 标签；
+        # 在统一出口层剥离，根治「新片入库 / 用户级广播」推送出现 <b> 字面量的乱码。
+        # 规则通知此前已在入口剥离，此处二次剥离幂等无副作用。
+        "title": _strip_html(title)[:_TITLE_MAX],
+        "body": _strip_html(body)[:_BODY_MAX],
         "sound": str(sound or conf.get("sound") or DEFAULT_BARK_SOUND),
         "group": str(group or conf.get("group") or DEFAULT_BARK_GROUP),
         "level": str(level or conf.get("level") or DEFAULT_BARK_LEVEL),

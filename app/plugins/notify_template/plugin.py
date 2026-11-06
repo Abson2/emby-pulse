@@ -200,6 +200,17 @@ class NotifyTemplatePlugin(PluginBase):
             logger.warning(f"[模板渲染] 错误: {e}")
         return tpl
 
+    def log_media_notification(self, media_type_cn, name, style, detail=""):
+        """影视通知（新片 / 新剧集入库）渲染后写入插件日志。
+
+        仅写入插件日志表（插件页「日志」可见），显式 notify=False 不触发全局
+        通知，避免每次入库都刷系统通知。用于核对插件是否生效。
+        """
+        msg = f"影视通知渲染 | 类型={media_type_cn} 名称={name} 风格={style}"
+        if detail:
+            msg += f" | {detail}"
+        self.log(msg, level="info", notify=False)
+
     def preview(self, template_key, template_text=""):
         """预览模板"""
         sample = {

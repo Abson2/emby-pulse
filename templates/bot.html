@@ -1023,7 +1023,16 @@
             const c = (json.data && json.data.bark) || {};
             document.getElementById('bot-bark-enabled').checked = !!c.enabled;
             document.getElementById('bot-bark-server').value = c.server || '';
-            document.getElementById('bot-bark-device-key').value = c.device_key || '';
+            const barkDk = document.getElementById('bot-bark-device-key');
+            if (c.device_key_readonly) {
+                barkDk.value = '';
+                barkDk.placeholder = '••••••••（由环境变量设置）';
+                barkDk.readOnly = true;
+            } else {
+                barkDk.value = c.device_key || '';
+                barkDk.placeholder = 'Bark App 里的设备密钥';
+                barkDk.readOnly = false;
+            }
             document.getElementById('bot-bark-sound').value = c.sound || 'default';
             document.getElementById('bot-bark-group').value = c.group || 'EMBYPULSE';
             document.getElementById('bot-bark-notify-library-new').checked = c.notify_library_new !== false;

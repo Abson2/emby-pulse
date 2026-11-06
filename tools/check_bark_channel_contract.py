@@ -109,9 +109,15 @@ check("bark_push 实现通知规则推送入口",
       "def push_rule_notification(" in bark and "def safe_rule_push(" in bark)
 check("未推送原因写进日志（可自证缺 Key / 未启用 / 地址非法）",
       "未推送原因" in bark)
-check("配置层不引入 BARK_* env，不混淆 WEBHOOK_TOKEN",
-      "BARK_ENV_FIELDS" not in ncfg and "os.getenv" not in ncfg
-      and "WEBHOOK_TOKEN" in ncfg)
+check("Bark Device Key 经 config.py 中央注册 BARK_DEVICE_KEY（与 WEBHOOK_TOKEN 同级安全处理）",
+      "BARK_DEVICE_KEY" in read("app/core/config.py")
+      and '"bark_device_key"' in read("app/core/config.py"))
+check("配置层不直接读 os.getenv（统一走 config.py 中央注册，避免分散）",
+      "os.getenv" not in ncfg)
+check("get_bark_config 回显 env 来源与只读标记",
+      "device_key_source" in ncfg and "device_key_readonly" in ncfg)
+check("WEBHOOK_TOKEN 仍由 WEBHOOK 链路独占，不与 Bark 混淆",
+      "WEBHOOK_TOKEN" in ncfg)
 check("is_bark_channel_selected 按 notify_type 精确判断",
       "def is_bark_channel_selected(notify_type" in ncfg)
 check("CHANNEL_OPTIONS 含 Bark 渠道", '{"id": "bark"' in nadmin)

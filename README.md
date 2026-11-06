@@ -169,7 +169,7 @@
   1. 机器人助手页「Bark 推送」卡片有独立「保存 Bark」按钮，**顶部「保存配置」不提交该卡片字段**，且保存成功后 `init()` 会重读并清空表单——用户填完 Device Key 只点顶部保存，配置根本没有落盘。1.9.7 起顶部保存会一并提交 Bark 卡片并等待结果。
   2. `library_notify_channels` 里的 `'bark'` 由 `bark_push.safe_push()` 按事件类型精确折算为启用信号（借鉴企微 channels 驱动），勾了即生效；按 `library_new` / `request_new` 分别判断，避免入库勾选串扰求片、或求片被重复推送。
   3. 未推送原因（未启用 / 缺 Device Key / 服务器地址非法）明确写入系统日志，可自证，不再只有一句静默 INFO。
-- **配置边界澄清**：`.env` 中的 `WEBHOOK_TOKEN` 只是 Emby Webhook 回调地址 `?token=` 的**接口校验凭证**，属于「入库事件入口」；Bark 的服务器 / Device Key / 开关属于「推送出口」，只从 `config.json` 读写。两条链路没有配置耦合，Bark 不推送与 `.env` 无关；本版也未引入任何 `BARK_*` 环境变量。
+- **配置边界澄清**：`.env` 中的 `WEBHOOK_TOKEN` 只是 Emby Webhook 回调地址 `?token=` 的**接口校验凭证**，属于「入库事件入口」；Bark 的服务器 / Device Key / 开关属于「推送出口」，只从 `config.json` 读写。两条链路没有配置耦合，Bark 不推送与 `.env` 无关。从 1.9.10 起，Bark 的 Device Key 额外支持通过环境变量 `BARK_DEVICE_KEY` 提供（与 `WEBHOOK_TOKEN` 同级的中央注册安全处理：env 强制覆盖、不落盘、掩码、只读、保存不覆盖），且仅作用于管理端系统级 Bark，不耦合用户端各自粘贴的 `bark_url`。
 - **用户端通知设置回归页面内弹窗**：1.9.6 独立页打不开的物理层根因是 10308 用户端 wrapper 的路径白名单不含 `/user/notify_settings`，直接 403「非法越界」（与 Alpine 作用域、JS 缓存均无关）。按反馈改为与「媒体库设置」一致的页面内弹窗（纯原生 JS、随 HTML 下发、零 Alpine / teleport），「媒体库设置 / 通知设置 / 娱乐功能」三按钮一排并与上方「我的心愿 / 我的报错 / 追剧更新」对齐；独立页文件已删除，旧缓存 / 收藏链接由服务端 303 回 `/request?tab=profile&notify=1` 并自动打开弹窗，白名单保留放行以免 403。
 - **管理端通知设置增加真实 Bark 开关**：「工单大厅通知设置」（工单提交 / 新追新 / 状态变更 / 用户报错）与「用户管理通知设置」（用户注册 / 用户登录 / 用户删除）七类均新增 Bark 渠道勾选；`CHANNEL_OPTIONS` 纳入 `bark`，后端 6 个触发点接入 `safe_rule_push()` 真实推送（求片提交复用既有 `safe_push()` 门控，避免重复推送），不是只保存不消费的假开关。管理端 Telegram HTML 文案在 Bark 侧自动去标签。
 
@@ -246,12 +246,12 @@ WEBHOOK_ALLOW_QUERY_TOKEN=1   # Emby Webhook 插件只能配 ?token= URL；反�
 
 ### 3.2 `docker-compose.yml`（拉取镜像）
 
-镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.8`）拉取指定版本，不设置则默认 `1.9.9`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
+镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.9`）拉取指定版本，不设置则默认 `1.9.10`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
 
 ```yaml
 services:
   embypulse-pro:
-    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.9}
+    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.10}
     container_name: embypulse-pro
     restart: unless-stopped
     ports:
