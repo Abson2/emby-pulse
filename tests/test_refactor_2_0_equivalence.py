@@ -125,6 +125,11 @@ _ensure_once_mod = load_module(
     "app.infra.db.ensure_once",
     os.path.join(ROOT, "app/infra/db/ensure_once.py"))
 sys.modules["app.infra.db"].ensure_once = _ensure_once_mod
+# 2.0 B3-B：message_dao 的纯建表样板改用公共 helper，桩包需注册真实子模块
+_ddl_bootstrap_mod = load_module(
+    "app.infra.db.ddl_bootstrap",
+    os.path.join(ROOT, "app/infra/db/ddl_bootstrap.py"))
+sys.modules["app.infra.db"].ddl_bootstrap = _ddl_bootstrap_mod
 
 ddl_calls: list[str] = []
 store_new = FakeStore()

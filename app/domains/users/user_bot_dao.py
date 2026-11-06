@@ -1,5 +1,6 @@
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+from app.infra.db.ddl_bootstrap import ensure_registered_tables
 
 
 USER_BOT_REGISTRY_TABLES = (
@@ -12,11 +13,7 @@ USER_BOT_REGISTRY_TABLES = (
 
 
 def ensure_user_bot_tables() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        for table_name in USER_BOT_REGISTRY_TABLES:
-            ensure_registered_table(cursor, table_name)
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, USER_BOT_REGISTRY_TABLES)
 
 
 def delete_user_binding(tg_user_id) -> None:

@@ -763,6 +763,58 @@ check("B 批不触碰对外接口与用户级通知入口",
           "def push_user_notify(", "def notify_users_by_flag(",
           "def notify_request_users(")))
 
+print("== 问题 20: 2.0 主线优化 B3-B（ensure_* 纯建表样板抽离） ==")
+ddl_helper_rel = "app/infra/db/ddl_bootstrap.py"
+ddl_helper = read(ddl_helper_rel)
+_helper_fn20 = next(n for n in ast.parse(ddl_helper).body
+                    if isinstance(n, ast.FunctionDef)
+                    and n.name == "ensure_registered_tables")
+_helper_body20 = ast.get_source_segment(ddl_helper, _helper_fn20) or ""
+check("B3-B 新增无状态纯函数 helper（显式传入 store / ensure_fn）",
+      os.path.isfile(os.path.join(ROOT, ddl_helper_rel))
+      and "def ensure_registered_tables(store, ensure_fn, table_names)" in _helper_body20
+      and "system_store" not in _helper_body20
+      and "import " not in _helper_body20
+      and "store.connect()" in _helper_body20 and "conn.commit()" in _helper_body20)
+# 用 AST 统计「函数体内真实调用」：helper 定义行 def ensure_registered_tables(
+# 会让裸子串自匹配成 21 个，必须排除（沿用本项目静态断言一律 AST 的纪律）。
+_callers20, _migration20 = [], []
+for _dir20, _, _files20 in os.walk(os.path.join(ROOT, "app")):
+    for _f20 in _files20:
+        if not _f20.endswith(".py"):
+            continue
+        _p20 = os.path.join(_dir20, _f20)
+        with open(_p20, encoding="utf-8") as _fh20:
+            _text20 = _fh20.read()
+        try:
+            _tree20 = ast.parse(_text20)
+        except SyntaxError:
+            continue
+        _rel20 = os.path.relpath(_p20, ROOT)
+        for _n20 in _tree20.body:
+            if isinstance(_n20, ast.FunctionDef) and _n20.name.startswith("ensure_"):
+                _src20 = ast.get_source_segment(_text20, _n20) or ""
+                _called20 = any(
+                    isinstance(_c20, ast.Call) and isinstance(_c20.func, ast.Name)
+                    and _c20.func.id == "ensure_registered_tables"
+                    for _c20 in ast.walk(_n20))
+                if _called20:
+                    _callers20.append((_rel20, _n20.name))
+                if "PRAGMA" in _src20.upper() or "ALTER TABLE" in _src20.upper():
+                    _migration20.append((_n20.name, _called20))
+check("20 个纯建表 ensure_* 全部接入 helper（AST 真实调用计数）",
+      len(_callers20) == 20, str(len(_callers20)))
+check("20 个调用点签名与函数名不变（无参 + -> None）",
+      all("def " + name + "() -> None:" in read(p) for p, name in _callers20))
+check("带 PRAGMA / ALTER 的迁移型 ensure_* 一行未动",
+      len(_migration20) >= 4 and all(not called for _, called in _migration20),
+      str([n for n, _ in _migration20]))
+check("B3-B 等价性回归第 5 节已落地（旧骨架 oracle 逐事件比对）",
+      "== 5. B3-B 纯建表样板抽离" in read("tests/test_b_batch_equivalence.py")
+      and "def old_bootstrap(" in read("tests/test_b_batch_equivalence.py")
+      and "DDL 顺序 / 连接 / cursor / commit 逐事件一致"
+      in read("tests/test_b_batch_equivalence.py"))
+
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:
     for f in FAILS:

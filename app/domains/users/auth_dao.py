@@ -2,6 +2,7 @@ from typing import Optional
 
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+from app.infra.db.ddl_bootstrap import ensure_registered_tables
 
 
 _LOCAL_USER_UPDATE_FIELDS = {"remark", "is_enabled", "role", "permissions"}
@@ -46,10 +47,7 @@ def cleanup_expired_login_locks() -> int:
 
 
 def ensure_local_users_table() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        ensure_registered_table(cursor, "local_users")
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, ("local_users",))
 
 
 def get_local_user_id_by_username(username: str):

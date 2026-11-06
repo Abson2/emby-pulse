@@ -1,12 +1,10 @@
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+from app.infra.db.ddl_bootstrap import ensure_registered_tables
 
 
 def ensure_pro_schema() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        ensure_registered_table(cursor, "sys_license")
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, ("sys_license",))
 
 
 def replace_license(license_key: str, machine_id: str, status: str = "pro") -> None:

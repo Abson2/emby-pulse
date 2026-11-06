@@ -353,6 +353,7 @@ C 批建议等 CI 具备 pytest + FastAPI 集成环境后再启动。
 | --- | --- | --- |
 | **B1** | 新建 `app/bot/notification_bot/_library_common.py`；两个双胞胎 service 的 provider 装配样板（48 行 → 15 行）与 `_format_overview` / `_format_type` / `_get_base_url` / `_get_platform` 四个同构纯函数收敛为薄包装。两文件 291+329 → 249+293 行，**净减 78 行重复** | `tests/test_b1_library_common_equivalence.py` 53/0：签名 11 个 keyword-only 参数不变、逐项覆盖 / None 不覆盖、**两模块 provider 状态互不串扰**、纯函数与旧实现逐字复制的 oracle 多组输入一致、后半段 handler / Bark / 用户级广播静态契约完整 |
 | **B3** | 新建 `app/infra/db/ensure_once.py` 通用门控（按 key 缓存 / 异常不写缓存 / reset / 线程锁）；`message_dao.ensure_announcement_tables()` 迁入，**保留** `_announcement_tables_ready` / `_announcement_tables_lock` / `reset_announcement_tables_cache()` 全部对外符号 | 既有 2.0 等价性测试中 DDL 连接次数 / 换库失效 / 异常重试 / reset 断言全部保持 88/0；B 批脚本另测门控本身 |
+| **B3-B** | 全库 40 个顶层 `ensure_*` 完整分类，严格 AST 匹配出 **20 个逐字同构的纯建表样板**（18 个文件），新建无状态 `app/infra/db/ddl_bootstrap.py`，调用点收敛为一行 `ensure_registered_tables(system_store, ensure_registered_table, (...))`；18 个 DAO 文件 `+38 / -86`，**净减 48 行重复**。`store` / `ensure_fn` 显式传入，helper 不持有任何 `system_store` / 注册表状态，**不引入缓存**，带 PRAGMA / ALTER / 业务 SQL 的迁移型 `ensure_*` 一律不接入 | `tests/test_b_batch_equivalence.py` 第 5 节（37/0）：以「抽离前逐字复制的旧骨架」作 oracle，对 1 / 3 / 0 张表逐事件比对 connect → cursor → DDL 顺序 → commit，并验证 DDL 异常同样外抛且不 commit；静态契约用 AST 真实调用计数锁定 20 个接入点、迁移型未改、helper 无状态。`verify_patches.py` 问题 20 组 238/0 |
 | **B4** | `SystemStore.execute_many()` 纯加法：多条写语句共用 1 连接 1 事务，失败整批回滚；`execute()` 逐条提交语义**一行未动** | 内存 SQLite 验证两条语句 1 次连接、失败批次零残留、`execute()` 源码仍为原实现 |
 | **S5** | `sanitize_rich_html` 对 `style` 清洗 `url()` / `expression()` / `@import` / `behavior:` / `-moz-binding`，合法声明逐字不变（只收紧非法输入，符合等价性契约第 2 条） | 合法 `style` 输出比对、4 类危险值剥离、script / onerror / javascript: 与 `<p>欢迎大家</p>` 回归全绿 |
 | **S6 + 测试** | 静态断言「表名 f-string 走集中注册表」；新增两个纯标准库回归、CI 接入 2 步、`verify_patches.py` 问题 19 组、安全契约 S5/S6 断言 | 全套 16 项回归 0 失败 |
@@ -366,7 +367,7 @@ C 批建议等 CI 具备 pytest + FastAPI 集成环境后再启动。
 | --- | --- | --- |
 | **B2 前端公共 JS** | 前置证据已实测 | 8 处 `escapeHtml` 实测为 **4 类不同实现**：DOM `textContent`、DOM `innerText`、正则 `&#039;`、正则 `&#39;`，且对 falsy 值 / 非字符串输入处理不同；三版 `parseMarkdown` 也不一致。**删除或统一定义必然改变页面输出**，与「合法输入输出逐字不变」直接冲突。需 DOM 级契约测试逐页灰度，纯标准库 CI 做不到 |
 | **B5 写入侧统一净化** | 未动 | `class="ql-align-*"` 等 Quill 属性在净化白名单外，会改变公告对齐格式（合法输入被改） |
-| **B3 余下 39 个 `ensure_*`** | 未动 | 部分带运行时动态加列 / 数据迁移语义，套缓存会破坏；需先逐个分类「纯建表 / 带迁移」。通用门控已就位，后续可低风险接入 |
+| **B3 余下 `ensure_*`** | 已分类，未动 | 40 个顶层 `ensure_*` 已全量分类：20 个纯建表样板由 B3-B 抽离，其余含 PRAGMA 动态加列 / `ALTER TABLE` / 业务 SQL / 非同构变体，套 helper 或缓存会改变 DDL 时序与异常语义，**保持原样**；后续如再抽离须先逐个证明同构 |
 | **P1 连接复用（B4 完全版）** | 部分 | 本批只加 `execute_many()`；把既有 `execute()` 改成复用连接会改变 WAL 并发与事务边界，需并发写压测 |
 | **P6 / P7 / C1–C6** | 未动 | C5 移除 `unsafe-eval` 会让 Alpine 表达式直接失效（**功能破坏**）；C1 牵动 116 处 provider 与全部边界测试；C3 拆分 `request_app.js` 历史上踩过 `x-data` 作用域与 JS 缓存坑。均需 pytest + FastAPI 集成环境逐字节证明等价 |
 | `report_service` / `stats_queries` N+1 | 待核查 | 静态分析未逐条核实，不做无依据结论 |
@@ -374,6 +375,10 @@ C 批建议等 CI 具备 pytest + FastAPI 集成环境后再启动。
 ### 8.3 完成度口径
 
 - **A 批低风险清理：100%**。
-- **B 批**：B1 完成、B3 完成「通用门控 + 首个接入」、B4 完成纯加法部分、S5 完成；B2 / B5 / B3 余量因等价性无法证明而按硬约束暂停。
+- **B 批**：B1 完成、B3 完成「通用门控 + 首个接入」、B3-B 完成「20 个纯建表样板抽离」、B4 完成纯加法部分、S5 完成；B2 / B5 / B3 余下迁移型因等价性无法证明而按硬约束暂停。
 - **C 批：0%，仅规划**。这不是遗漏，而是「100% 功能保留」在纯标准库 CI 条件下的必然边界；强行执行会产出无法证明等价的全库改动。
 - 所有落地项均按「先建基线 → 改动 → 纯标准库等价性验证 → 全量回归 → 独立提交」推进，可单独 revert。
+
+### 8.4 本批教训：静态断言必须判定「真实调用」，不能用裸子串
+
+B3-B 的调用点计数最初写成 `"ensure_registered_tables(" in src`，结果把 `ddl_bootstrap.py` 里 **helper 自身的定义行** `def ensure_registered_tables(...)` 也算成调用点，得到 21（真实为 20），并连带让「签名不变」断言误判。这与第二批 `tests/test_refactor_2_0_equivalence.py` 的 87/1 误报同源：检查脚本自身的字符串 / 定义行会被裸子串命中。**约定**：判断某调用「存在 / 不存在」时，一律用 `ast.Call` + `ast.Name` 精确判定函数体内真实调用，或用精确正则锚定，不用裸子串；`tests/test_b_batch_equivalence.py` 第 5 节与 `verify_patches.py` 问题 20 组均已按此实现。

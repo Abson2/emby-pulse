@@ -1,12 +1,10 @@
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+from app.infra.db.ddl_bootstrap import ensure_registered_tables
 
 
 def ensure_emby_restart_history_table() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        ensure_registered_table(cursor, "emby_restart_history")
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, ("emby_restart_history",))
 
 
 def list_emby_restart_history(limit: int = 20):

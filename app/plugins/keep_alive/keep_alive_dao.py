@@ -1,12 +1,10 @@
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+from app.infra.db.ddl_bootstrap import ensure_registered_tables
 
 
 def ensure_keep_alive_violations_table() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        ensure_registered_table(cursor, "keep_alive_violations")
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, ("keep_alive_violations",))
 
 
 def save_keep_alive_violation(

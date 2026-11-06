@@ -90,6 +90,9 @@ for name in ("app", "app.infra", "app.infra.db", "app.core"):
         sys.modules[name] = m
 sys.modules["app.infra.db.ensure_once"] = ensure_once
 sys.modules["app.infra.db"].ensure_once = ensure_once
+# 2.0 B3-B：纯建表 helper 为真实模块，注册进桩包供 message_dao 导入
+_ddl_bootstrap = load("app.infra.db.ddl_bootstrap", "app/infra/db/ddl_bootstrap.py")
+sys.modules["app.infra.db"].ddl_bootstrap = _ddl_bootstrap
 bootstrap = types.ModuleType("app.infra.db.schema_bootstrap")
 bootstrap.ensure_registered_table = lambda cursor, table: None
 sys.modules["app.infra.db.schema_bootstrap"] = bootstrap
@@ -251,6 +254,107 @@ reg = read("app/infra/db/schema_registry.py")
 check("S6 表名拼接防御：注册表仍是唯一表结构来源",
       "TABLE_SCHEMAS" in reg and "TABLE_INDEXES" in reg
       and "ensure_registered_table" in read("app/infra/db/schema_bootstrap.py"))
+
+print("== 5. B3-B 纯建表样板抽离（20 处）等价性 ==")
+
+
+def old_bootstrap(store, ensure_fn, table_names):
+    """抽离前逐字复制的 5~6 行骨架。"""
+    with store.connect() as conn:
+        cursor = conn.cursor()
+        for table_name in table_names:
+            ensure_fn(cursor, table_name)
+        conn.commit()
+
+
+def make_ddl_store(events):
+    class Conn:
+        def cursor(self):
+            events.append("cursor")
+            return self
+
+        def commit(self):
+            events.append("commit")
+
+    class Store:
+        @contextlib.contextmanager
+        def connect(self):
+            events.append("connect")
+            yield Conn()
+
+    return Store()
+
+
+for tables in (("a",), ("a", "b", "c"), ()):
+    ev_old, ev_new = [], []
+    fn_old = lambda c, t, e=ev_old: e.append(("ddl", t))
+    fn_new = lambda c, t, e=ev_new: e.append(("ddl", t))
+    old_bootstrap(make_ddl_store(ev_old), fn_old, tables)
+    _ddl_bootstrap.ensure_registered_tables(make_ddl_store(ev_new), fn_new, tables)
+    check("DDL 顺序 / 连接 / cursor / commit 逐事件一致：%r" % (tables,),
+          ev_old == ev_new, f"{ev_old} != {ev_new}")
+
+ev_fail_old, ev_fail_new = [], []
+
+
+def boom(cursor, table):
+    raise RuntimeError("ddl failed")
+
+
+for runner in (
+    lambda: old_bootstrap(make_ddl_store(ev_fail_old), boom, ("x",)),
+    lambda: _ddl_bootstrap.ensure_registered_tables(
+        make_ddl_store(ev_fail_new), boom, ("x",)),
+):
+    try:
+        runner()
+    except RuntimeError:
+        pass
+check("DDL 异常同样向外抛出且不 commit",
+      ev_fail_old == ev_fail_new == ["connect", "cursor"])
+
+# 静态契约：20 个调用点已接入，带迁移语义的 ensure_* 一行未动。
+# 注意：helper 定义行 `def ensure_registered_tables(` 会让裸子串自匹配成 21 个，
+# 因此用 AST 判定「函数体内真实调用」，沿用本项目静态断言一律 AST / 精确正则的纪律。
+import pathlib as _pathlib
+
+_callers, _migration = [], []
+for _p in sorted(_pathlib.Path(ROOT, "app").rglob("*.py")):
+    _text = _p.read_text(encoding="utf-8")
+    try:
+        _tree = ast.parse(_text)
+    except SyntaxError:
+        continue
+    for _n in _tree.body:
+        if isinstance(_n, ast.FunctionDef) and _n.name.startswith("ensure_"):
+            _src = ast.get_source_segment(_text, _n) or ""
+            _has_call = any(
+                isinstance(_c, ast.Call)
+                and isinstance(_c.func, ast.Name)
+                and _c.func.id == "ensure_registered_tables"
+                for _c in ast.walk(_n)
+            )
+            if _has_call:
+                _callers.append((str(_p.relative_to(ROOT)), _n.name))
+            if "PRAGMA" in _src.upper() or "ALTER TABLE" in _src.upper():
+                _migration.append((str(_p.relative_to(ROOT)), _n.name, _has_call))
+check("20 个纯建表样板全部接入公共 helper", len(_callers) == 20, str(len(_callers)))
+check("每个调用点函数签名与函数名不变（无参 + -> None）",
+      all("def " + name + "() -> None:" in read(p) for p, name in _callers))
+check("带 PRAGMA / ALTER 的迁移型 ensure_* 未被改动",
+      len(_migration) >= 4
+      and all(not called for _, _, called in _migration),
+      str([n for _, n, _ in _migration]))
+_helper_src = read("app/infra/db/ddl_bootstrap.py")
+_helper_fn = next(n for n in ast.parse(_helper_src).body
+                  if isinstance(n, ast.FunctionDef)
+                  and n.name == "ensure_registered_tables")
+_helper_body = ast.get_source_segment(_helper_src, _helper_fn) or ""
+check("helper 为无状态纯函数（不持有 system_store / 注册表 / 模块级导入）",
+      "def ensure_registered_tables(store, ensure_fn, table_names)" in _helper_body
+      and "system_store" not in _helper_body
+      and "import " not in _helper_body
+      and "store.connect()" in _helper_body and "conn.commit()" in _helper_body)
 
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:

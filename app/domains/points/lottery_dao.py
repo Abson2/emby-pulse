@@ -2,14 +2,11 @@ import datetime
 
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+from app.infra.db.ddl_bootstrap import ensure_registered_tables
 
 
 def ensure_lottery_table() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        for table_name in ("lottery_tickets", "lottery_results", "lottery_winners"):
-            ensure_registered_table(cursor, table_name)
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, ("lottery_tickets", "lottery_results", "lottery_winners"))
 
 
 def get_lottery_winning_numbers(draw_date: str):

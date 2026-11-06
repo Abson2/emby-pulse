@@ -7,16 +7,14 @@ from app.infra.db.schema_bootstrap import (
     table_columns,
 )
 from app.infra.db.system_store import system_store
+from app.infra.db.ddl_bootstrap import ensure_registered_tables
 
 
 _USERS_META_TABLE = "users_meta"
 
 
 def ensure_users_meta_schema() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        ensure_registered_table(cursor, _USERS_META_TABLE)
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, (_USERS_META_TABLE,))
 
 
 def ensure_users_meta_column(column_name: str, column_definition: Optional[str] = None) -> None:

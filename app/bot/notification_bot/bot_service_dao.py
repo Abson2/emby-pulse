@@ -1,12 +1,10 @@
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+from app.infra.db.ddl_bootstrap import ensure_registered_tables
 
 
 def ensure_request_admin_messages_table() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        ensure_registered_table(cursor, "request_admin_messages")
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, ("request_admin_messages",))
 
 
 def save_request_admin_message(tmdb_id, chat_id, message_id, is_caption, original_text) -> None:

@@ -3,6 +3,7 @@ import threading
 from app.infra.db.ensure_once import EnsureOnce
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+from app.infra.db.ddl_bootstrap import ensure_registered_tables
 
 
 MESSAGE_TABLES = ("msg_conversations", "msg_items", "msg_notify_block")
@@ -24,11 +25,7 @@ def reset_announcement_tables_cache() -> None:
 
 
 def ensure_msg_tables() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        for table_name in MESSAGE_TABLES:
-            ensure_registered_table(cursor, table_name)
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, MESSAGE_TABLES)
 
 
 def list_user_remarks():
@@ -230,10 +227,7 @@ def remove_notify_block(user_id: str) -> None:
 
 
 def ensure_mute_table() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        ensure_registered_table(cursor, "user_mutes")
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, ("user_mutes",))
 
 
 def get_active_mute(user_id: str):

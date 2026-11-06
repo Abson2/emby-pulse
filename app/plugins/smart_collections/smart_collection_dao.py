@@ -3,6 +3,7 @@ from typing import Optional
 
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+from app.infra.db.ddl_bootstrap import ensure_registered_tables
 
 
 _SMART_COLLECTION_REGISTRY_TABLES = (
@@ -13,11 +14,7 @@ _SMART_COLLECTION_REGISTRY_TABLES = (
 
 
 def ensure_smart_collection_tables() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        for table_name in _SMART_COLLECTION_REGISTRY_TABLES:
-            ensure_registered_table(cursor, table_name)
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, _SMART_COLLECTION_REGISTRY_TABLES)
 
 
 def list_smart_collections():

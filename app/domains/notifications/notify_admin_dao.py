@@ -2,13 +2,11 @@ import json
 
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+from app.infra.db.ddl_bootstrap import ensure_registered_tables
 
 
 def ensure_notify_rules_table() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        ensure_registered_table(cursor, "notify_rules")
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, ("notify_rules",))
 
 
 def get_notify_rule_row(notify_type: str):

@@ -1,16 +1,13 @@
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+from app.infra.db.ddl_bootstrap import ensure_registered_tables
 
 
 _TEMP_ACCOUNT_REGISTRY_TABLES = ("temp_accounts", "temp_account_password_history")
 
 
 def ensure_temp_account_tables() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        for table_name in _TEMP_ACCOUNT_REGISTRY_TABLES:
-            ensure_registered_table(cursor, table_name)
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, _TEMP_ACCOUNT_REGISTRY_TABLES)
 
 
 def list_temp_accounts():

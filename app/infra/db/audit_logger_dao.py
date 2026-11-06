@@ -4,13 +4,11 @@ from datetime import datetime
 
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+from app.infra.db.ddl_bootstrap import ensure_registered_tables
 
 
 def ensure_audit_table() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        ensure_registered_table(cursor, "audit_logs")
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, ("audit_logs",))
 
 
 def insert_audit_log(

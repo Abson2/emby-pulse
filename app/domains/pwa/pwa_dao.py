@@ -1,12 +1,10 @@
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+from app.infra.db.ddl_bootstrap import ensure_registered_tables
 
 
 def ensure_pwa_config_table() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        ensure_registered_table(cursor, "pwa_config")
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, ("pwa_config",))
 
 
 def get_pwa_config_values() -> dict:
@@ -24,10 +22,7 @@ def save_pwa_config_value(key: str, value: str) -> None:
 
 
 def ensure_user_pwa_icons_table() -> None:
-    with system_store.connect() as conn:
-        cursor = conn.cursor()
-        ensure_registered_table(cursor, "user_pwa_icons")
-        conn.commit()
+    ensure_registered_tables(system_store, ensure_registered_table, ("user_pwa_icons",))
 
 
 def get_user_pwa_icon(user_id: str):
