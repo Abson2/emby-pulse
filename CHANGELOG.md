@@ -1,8 +1,8 @@
 # 更新日志
 
-## 2.0 第二批（零风险收尾，v2.0 tag 之后 / 版本号不变）
+## 2.0.1
 
-按「风险最小、稳定性、安全性、100% 功能保留」筛选，只做确凿同类 bug 修复、安全契约固化与测试补强，**不改对外接口、不改版本号、不做 DI 容器 / 前端公共 JS / DDL 通用化等运行时行为大改**。完整决策记录见 [docs/REFACTOR_2.0.md](docs/REFACTOR_2.0.md) 第 7 节。
+零风险补丁版（v2.0 之后）。按「风险最小、稳定性、安全性、100% 功能保留」筛选，只做确凿同类 bug 修复、安全契约固化与测试补强，**不改对外接口、不删任何特性、不做 DI 容器 / 前端公共 JS / DDL 通用化等运行时行为大改**。完整决策记录见 [docs/REFACTOR_2.0.md](docs/REFACTOR_2.0.md) 第 7 节。
 
 ### 1. 同类乱码收尾（管理员消息用户级通知）
 
@@ -18,12 +18,14 @@
 ### 3. 回归与边界
 
 - `tests/test_refactor_2_0_equivalence.py` 扩展第 8 节（88/0）：AST 精确抽取 `push_user_notify` 调用验证正文替换与参数不变、网页端存储未动、三个未改动入口仍在、用户级通知服务签名不变、安全契约脚本只用标准库（AST import 白名单，避免裸子串自匹配误伤）、CI 接线、2.0 版本号稳定。
-- `tools/verify_patches.py` 新增「问题 17」断言组，锁定第二批边界。
+- `tools/verify_patches.py` 新增「问题 17」（第二批边界）与「问题 18」（主页文档收敛）两组断言，224/0。
 - 全套既有回归、`compileall`、`node --check`、YAML 解析、凭证扫描保持全绿。
 
-### 4. 版本说明
+### 4. 版本与文档同步
 
-`v2.0` 已发布且 tag 已推送，本批**不升版本号、不重推已发布 tag**，仅作为 `main` 上的收尾提交；`APP_VERSION` / 镜像 tag / JS 缓存版本号均保持 `2.0`。如需独立补丁镜像，再单独发 `v2.0.1`。
+- 版本号 `2.0` → `2.0.1`：`app/shared/version.py`、`Dockerfile`（`2.0.1-hardened`）、`docker-compose.yml`（默认 `IMAGE_TAG:-2.0.1`）、`templates/request.html`（`request_app.js?v=2.0.1`，每次发版必改）、README、CHANGELOG。`verify_patches.py` 与等价性测试的版本断言同步更新。
+- **`v2.0` tag 与已发布镜像不重推**（避免已部署实例、Release 与镜像摘要漂移）；`IMAGE_TAG=1.9.10` 回退路径保持不变。
+- **GitHub 主页文档同步收敛**：README 保持原 4 段式结构，第二节由按版本罗列的修复史改为按能力归类的功能清单，第三节去掉各版本根因 / 症状说明只留当前用法；每项能力的详细更新说明仍以 CHANGELOG 对应版本与 GitHub Releases 为准，主页不展开。`verify_patches.py` 新增「问题 18」断言组固化该约定。
 
 ## 2.0
 

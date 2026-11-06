@@ -250,6 +250,8 @@ DDL：app/infra/db/schema_registry.py <── schema_bootstrap.ensure_registered
 | `tools/verify_patches.py` | 版本断言 → 2.0，CHANGELOG 断言追加 `## 2.0` |
 | `docs/REFACTOR_2.0.md` | 本文档 |
 
+> `2.0.1` 补丁版按同一清单同步为 `2.0.1`（`APP_VERSION=2.0.1-hardened` / `IMAGE_TAG:-2.0.1` / `request_app.js?v=2.0.1` / `## 2.0.1` / README 主页收敛），`v2.0` tag 保持不动。
+
 **兼容性**：所有旧版本标签（`v1.9.10` 等）与 `IMAGE_TAG` 回退路径保持不变；对外 API、模板变量、配置键、DB schema 均不改。
 
 ---
@@ -298,8 +300,9 @@ C 批建议等 CI 具备 pytest + FastAPI 集成环境后再启动。
 | `tools/check_security_contracts.py`（新增） | 10 组静态 + 行为级安全契约断言，纯标准库只读源码 | 无（CI 脚本，不进镜像运行路径） |
 | `.github/workflows/docker-publish.yml` | `verify` job 增加安全契约 + 富文本净化回归两步 | 仅 CI |
 | `tests/test_refactor_2_0_equivalence.py` | 扩展第 8 节锁定第二批边界；把「只用标准库」断言改为 AST import 白名单 | 仅测试 |
-| `tools/verify_patches.py` | 新增「问题 17」断言组 | 仅 CI |
-| `CHANGELOG.md` / 本文档 | 记录第二批决策与版本策略 | 无 |
+| `tools/verify_patches.py` | 新增「问题 17」边界组与「问题 18」主页文档收敛组 | 仅 CI |
+| `README.md` | 收敛为功能清单 + 使用说明（357 → 185 行），保留 4 段式，删除按版本罗列的修复史 | 无 |
+| `CHANGELOG.md` / 本文档 | 记录第二批决策、`v2.0.1` 版本点与主页文档约定 | 无 |
 
 **测试断言误报修复**：等价性测试原用裸子串 `"import bleach" not in sec_contract`，而安全契约脚本自身第 129 行就含该字符串（用于检查 `security_utils.py` 未被污染），造成自匹配误伤（87/1）。改为 AST 解析真实 import 语句、只检查顶层模块名白名单，既排除误报又比子串更严谨（88/0）。教训与 2.0 首批一致：**静态断言不得用裸子串判断「不存在」**。
 
@@ -319,7 +322,7 @@ C 批建议等 CI 具备 pytest + FastAPI 集成环境后再启动。
 | --- | --- | --- |
 | `tests/test_refactor_2_0_equivalence.py` | A 批等价性 + B0 + 第二批边界 | 88/0 |
 | `tools/check_security_contracts.py` | 10 类安全契约（含行为级净化） | 42/0 |
-| `tools/verify_patches.py` | 全量静态断言（204 → 220，新增问题 17 组 16 条） | 220/0 |
+| `tools/verify_patches.py` | 全量静态断言（204 → 224：问题 17 组 16 条 + 问题 18 主页收敛组 4 条） | 224/0 |
 | `tests/test_sanitize_rich_html.py` | 富文本净化 / 历史二次转义兼容 | 14/0 |
 | `tools/check_bark_channel_contract.py` | Bark 前后端字段契约 | 51/0 |
 | `tests/test_bark_push.py` | Bark 出口 HTML 剥离 / Webhook token / env 掩码 | 103/0 |
@@ -333,4 +336,6 @@ C 批建议等 CI 具备 pytest + FastAPI 集成环境后再启动。
 
 ### 7.6 版本策略
 
-`v2.0` 已发布、tag 与 GHCR 镜像均已推送。本批**不升版本号、不 force-push 已发布 tag**：重推 tag 会让已部署实例、Release 与镜像摘要产生漂移，风险高于收益。本批仅作为 `main` 上的收尾提交，`APP_VERSION` / `IMAGE_TAG` / `request_app.js?v=` 全部保持 `2.0`。若确需独立补丁镜像，另发 `v2.0.1` 并同步第 5 节全部 6 个版本点。
+`v2.0` 已发布、tag 与 GHCR 镜像均已推送。本批先作为 `main` 上的收尾提交（`2a94e83`），随后发布 **`v2.0.1` 零风险补丁版**：按第 5 节清单把 6 个版本点从 `2.0` 同步到 `2.0.1`（含 `request_app.js?v=2.0.1` 缓存破坏），并同步 `verify_patches.py` / 等价性测试的版本断言。**`v2.0` tag 不重推**（重推会让已部署实例、Release 与镜像摘要漂移），`IMAGE_TAG=1.9.10` 回退路径不变。
+
+同时按用户要求把 **GitHub 主页 README 收敛**为「功能清单 + 使用说明」：保留原 4 段式结构，删除按版本罗列的修复史与各版本根因 / 症状说明，详细更新说明一律指向 [CHANGELOG](../CHANGELOG.md) 对应版本与 GitHub Releases；`verify_patches.py` 新增「问题 18」组把该约定固化为 CI 断言。
