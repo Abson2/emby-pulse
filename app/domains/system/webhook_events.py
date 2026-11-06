@@ -43,6 +43,22 @@ KNOWN_INTERNAL_EVENTS = {
     "auth", "login", "delete", "remove",
 }
 
+# 已知可忽略的 Emby 原生事件：既不是入库事件，也不承载业务动作
+# （不触发通知 / 播放统计 / 违规拦截）。列入集合后：
+#   1) 不再打印「未识别 Event=」限流告警，避免日志被测试 / 系统事件刷屏；
+#   2) webhook.py 会直接 return，不向事件总线发布，避免 library.deleted 等
+#      含 "delete" 子串的事件被下游 "delete" in event 误判成「媒体被删除」通知。
+# 只放「确实非入库、无业务动作」的事件；若日后出现新的入库类事件，
+# 应加入 EMBY_TO_INTERNAL，而不是放进这里。
+IGNORE_EVENT_KEYS = {
+    "librarydeleted",          # LibraryDeleted：整个媒体库被移除，≠ 单项媒体删除
+    "systemnotificationtest",  # Emby 后台「发送测试通知」按钮
+    "systemwebhooktest",       # Webhook 自测
+    "sessionstarted",          # 会话开始（高频，无业务动作）
+    "sessionstopped",          # 会话结束
+    "userdatasaved",           # 用户评分 / 进度保存（高频，无业务动作）
+}
+
 _RECENT_TTL = 300.0        # 5 分钟内同一 Item.Id 只入队一次
 _RECENT_MAX = 4096
 _recent_lock = threading.Lock()
@@ -87,6 +103,11 @@ def is_library_changed(raw) -> bool:
 
 def is_known_event(normalized: str) -> bool:
     return normalized in KNOWN_INTERNAL_EVENTS
+
+
+def is_ignorable_event(raw) -> bool:
+    """Emby 测试 / 系统 / 会话类事件：已知非业务，可安全忽略（不告警、不发布）。"""
+    return event_key(raw) in IGNORE_EVENT_KEYS
 
 
 def split_library_changed(data: dict):

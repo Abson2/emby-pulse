@@ -214,6 +214,35 @@ _d4 = _Daemon()
 svc.handle_webhook_event(_d4, "item.added", {"Event": "item.added", "Item": {"Id": "only-id"}})
 check("只有 Item.Id 也能入队", len(_d4.items) == 1)
 
+print("== 7. 已知非业务事件抑制（1.9.9） ==")
+# 两类真实告警：library.deleted（整个媒体库被移除，非单项媒体删除）、
+# system.notificationtest（Emby 后台「发送测试通知」按钮）。两者都不是入库事件，
+# 应按用户提示「若为入库事件请补充映射表」——它们不是，应被静默忽略，不刷屏告警、
+# 也不向事件总线发布（否则 library.deleted 会被下游 "delete" in event 误判成媒体删除通知）。
+check("library.deleted 被判为可忽略", we.is_ignorable_event("library.deleted"))
+check("LibraryDeleted 大小写不敏感", we.is_ignorable_event("LibraryDeleted"))
+check("system.notificationtest 被判为可忽略", we.is_ignorable_event("system.notificationtest"))
+check("SessionStarted 被判为可忽略（高频会话事件）", we.is_ignorable_event("SessionStarted"))
+check("ItemAdded 不是可忽略（是入库）", not we.is_ignorable_event("ItemAdded"))
+check("LibraryChanged 不是可忽略（是入库拆条入口）", not we.is_ignorable_event("LibraryChanged"))
+check("ItemRemoved 不是可忽略（确实是媒体删除，应走 remove 映射）",
+      not we.is_ignorable_event("ItemRemoved"))
+
+# 复刻 webhook.py 的告警门控：未知 + 非已知 + 非可忽略 才告警
+def _should_warn(raw, normalized):
+    return bool(normalized) and not we.is_known_event(normalized) \
+        and not we.is_ignorable_event(raw)
+
+check("library.deleted 不触发告警也不发布",
+      not _should_warn("library.deleted", we.normalize_event("library.deleted")))
+check("system.notificationtest 不触发告警也不发布",
+      not _should_warn("system.notificationtest", we.normalize_event("system.notificationtest")))
+check("归一化后 library.deleted 仍未进内部事件集（确认只能靠忽略门控拦截）",
+      we.normalize_event("library.deleted") == "library.deleted"
+      and not we.is_known_event("library.deleted"))
+check("真正未知的 foo.bar 仍会按名称限流告警",
+      _should_warn("foo.bar", we.normalize_event("foo.bar")))
+
 print("\n通过 %d / 失败 %d" % (PASSED, len(FAILED)))
 if FAILED:
     for f in FAILED:

@@ -1,5 +1,48 @@
 # 更新日志
 
+## 1.9.9
+
+修复 1.9.8 上线后生产日志里出现的两条 `[Webhook] 未识别 Event=` 告警（`library.deleted` 与 `system.notificationtest`），并顺带抑制一批 Emby 高频系统/会话事件的噪声。属日志降噪与误判防护，不涉及入库推送主链路改动。
+
+### 背景：两个告警都不是入库事件
+
+1.9.8 上线后容器日志出现：
+
+```
+[2026-11-06 17:58:26] WARNING:  [Webhook] 未识别 Event=library.deleted (归一化=library.deleted)；若为入库事件请补充映射表
+[2026-11-06 18:03:14] WARNING:  [Webhook] 未识别 Event=system.notificationtest (归一化=system.notificationtest)；若为入库事件请补充映射表
+```
+
+两条事件都是 Emby 发出、但**不是入库事件**：
+
+- `library.deleted`（Emby `LibraryDeleted`）：整个媒体库被移除，不是单项媒体被删；下游「媒体被删除」通知（`notify.item.deleted`）面向的是带 `Type`/`Name` 的单个媒体条目，把它当单项删除处理会推出「未知资源被删除」的误导消息。
+- `system.notificationtest`：Emby 后台「发送测试通知」按钮触发的纯测试事件，无任何业务含义。
+
+按 1.9.8 告警自身的提示「若为入库事件请补充映射表」——两者都不是入库事件，因此正确做法是**静默忽略**，而不是塞进 `EMBY_TO_INTERNAL` 映射表。
+
+### 误判风险（关键）
+
+`library.deleted` 归一化后是 `library.deleted`，其中包含子串 `delete`；而下游 `notification_bot_webhook_event_service.handle_webhook_event()` 用 `"delete" in event or "remove" in event` 来判定是否发「媒体被删除」通知。若只是让它落进事件总线、只压制告警，它仍会被误匹配成删除通知。因此 1.9.9 在 `webhook.py` 入口对已知非业务事件做**早返回**：既不打印告警、也**不向事件总线发布**，从源头切断误判。
+
+### 改造：`webhook_events.py` 新增 `IGNORE_EVENT_KEYS` 与 `is_ignorable_event()`
+
+- `IGNORE_EVENT_KEYS`：已归一化（去分隔符小写）的事件名集合，收录 `librarydeleted` / `systemnotificationtest` / `systemwebhooktest` / `sessionstarted` / `sessionstopped` / `userdatasaved`。只放「确实非入库、无业务动作」的事件；若日后出现新的入库类事件，应进 `EMBY_TO_INTERNAL` 映射表，而不是这里。
+- `is_ignorable_event(raw)`：用 `event_key()` 归一化后查集合，大小写/分隔符无关。
+- `webhook.py::emby_webhook` 在计算 `event` 之后、重要事件日志与告警之前插入早返回：`is_ignorable_event(raw_event)` 命中即记一条 debug 并返回 `{"status": "success", "message": "ignored"}`，不告警、不发布、不触发播放 IP 保存等后续分支（这些事件也不承载对应动作）。
+
+`EMBY_TO_INTERNAL` 中真实媒体删除事件（`itemremoved` / `itemdeleted` / `libraryitemremoved` / `libraryitemdeleted` → `remove`）保持不变，仍会正常走「媒体被删除」通知链路（该通知默认关闭，由 `notify_item_deleted` 开关控制）。
+
+### 回归
+
+- `tests/test_webhook_events.py` 新增第 7 节「已知非业务事件抑制（1.9.9）」：验证 `library.deleted` / `system.notificationtest` / `SessionStarted` 被判定为可忽略、`ItemAdded` / `LibraryChanged` / `ItemRemoved` 不被误判；复刻 `webhook.py` 告警门控确认两者既不告警也不发布；并反向确认真正未知的 `foo.bar` 仍会按名称限流告警。断言由 47 项增至 58 项，全绿。
+- `tools/verify_patches.py` 新增「问题 15」断言组（忽略集合 / `is_ignorable_event` / `webhook.py` 早返回门控 / 告警前插入 / CI 接入 / CHANGELOG），并把全部版本断言升至 1.9.9。
+- 全量回归：`compileall`、`verify_patches`、`check_bark_channel_contract`、`test_bark_push`、`test_webhook_events`、`test_user_notify`、`test_tg_whitelist_sync`、`check_notification_bot_subscription`、`check-no-secrets`、模板内联 JS `node --check`、YAML 解析。
+
+### 发布与验证
+
+- 应用版本升级至 `1.9.9`；compose 默认锁定 `1.9.9`，`1.9.8` 仍保留，可用 `IMAGE_TAG=1.9.8` 回退；`request_app.js?v=1.9.9` 同步递增。
+- 升级后验证清单：① 触发一次 Emby 后台「发送测试通知」或让 Emby 移除一个媒体库，容器日志**不应再出现** `[Webhook] 未识别 Event=library.deleted` / `system.notificationtest`；② 这两条事件也不应产生任何「媒体被删除」推送（无论 `notify_item_deleted` 是否开启）；③ 入库推送主链路不受影响——真实新片入库仍应出现 `🔔 触发事件: item.added` 并正常推 Bark / 用户端通知；④ 若仍出现**其它**未识别事件告警，把事件名反馈回来评估是否补进映射表或忽略集合。
+
 ## 1.9.8
 
 修复 1.9.7 升级后「用户端能收管理员通知、但收不到新片入库；管理端 Bark 也收不到新片入库」的问题。根因在上游 Webhook 事件入口，与 Bark 配置、渠道开关、用户级推送链路均无关；依据用户侧 NAS 排查结论与资料库 `embypulse_bark_fix.md` 第四节实施源码改造（方案 A，治本）。

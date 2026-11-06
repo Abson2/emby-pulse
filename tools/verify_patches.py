@@ -320,11 +320,11 @@ check("系统设置接口给出可复制的 URL 模板",
 check("系统设置接口不再要求 Emby 配置 Header",
       "请在 Emby 中配置 Header" not in system_router)
 
-check("应用版本升级到 1.9.8", 'APP_VERSION = "1.9.8"' in read("app/shared/version.py"))
-check("Dockerfile 版本为 1.9.8-hardened", "APP_VERSION=1.9.8-hardened" in dockerfile)
-check("compose 默认拉取 1.9.8", "IMAGE_TAG:-1.9.8" in compose)
-check("CHANGELOG 含 1.9.0 / 1.9.1 / 1.9.2 / 1.9.6 / 1.9.7 / 1.9.8 发版说明",
-      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7", "## 1.9.8")))
+check("应用版本升级到 1.9.9", 'APP_VERSION = "1.9.9"' in read("app/shared/version.py"))
+check("Dockerfile 版本为 1.9.9-hardened", "APP_VERSION=1.9.9-hardened" in dockerfile)
+check("compose 默认拉取 1.9.9", "IMAGE_TAG:-1.9.9" in compose)
+check("CHANGELOG 含 1.9.0 / 1.9.1 / 1.9.2 / 1.9.6 / 1.9.7 / 1.9.8 / 1.9.9 发版说明",
+      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7", "## 1.9.8", "## 1.9.9")))
 check("CI 增加 Bark / Webhook 回归步骤",
       "tests/test_bark_push.py" in read(".github/workflows/docker-publish.yml"))
 
@@ -395,8 +395,8 @@ models_py = read("app/schemas/models.py")
 sys_views = read("app/domains/system/views.py")
 modal_notify = read("templates/request/modal_notify.html")
 
-check("request_app.js 引用带版本号（浏览器缓存破坏，1.9.8）",
-      "request_app.js?v=1.9.8" in req_tpl)
+check("request_app.js 引用带版本号（浏览器缓存破坏，1.9.9）",
+      "request_app.js?v=1.9.9" in req_tpl)
 # 1.9.6 起通知设置不再由 Alpine 主组件承载（1.9.7 改为页面内原生弹窗）
 check("request_app.js 不再包含任何通知设置 state/方法（1.9.6 起移除）",
       all(x not in req_js for x in (
@@ -552,6 +552,30 @@ check("行为回归覆盖端到端入队与旧缺陷复现",
 check("CI 已接入 Emby 事件映射回归",
       "tests/test_webhook_events.py" in ci)
 check("CHANGELOG 含 1.9.8 发版说明", "## 1.9.8" in changelog)
+
+print("== 问题 15: v1.9.9 抑制 Emby 非业务事件告警 / 误判 ==")
+we15 = read("app/domains/system/webhook_events.py")
+wh15 = read("app/domains/system/webhook.py")
+
+check("事件模块定义已知可忽略事件集合", "IGNORE_EVENT_KEYS" in we15)
+check("忽略集合覆盖 LibraryDeleted（整个媒体库被移除，非单项媒体删除）",
+      "librarydeleted" in we15)
+check("忽略集合覆盖系统测试通知", "systemnotificationtest" in we15)
+check("忽略集合覆盖高频会话/保存事件",
+      all(k in we15 for k in ("sessionstarted", "sessionstopped", "userdatasaved")))
+check("提供 is_ignorable_event 判定函数", "def is_ignorable_event(" in we15)
+check("webhook.py 接入忽略门控（早返回，不告警、不发布）",
+      "is_ignorable_event(raw_event)" in wh15
+      and 'return {"status": "success", "message": "ignored"}' in wh15)
+check("忽略判定位于重要事件日志与告警之前（避免刷屏）",
+      wh15.index("is_ignorable_event(raw_event)")
+      < wh15.index("important_events = ["))
+check("library.deleted 不会进入下游事件总线（否则被 'delete' in event 误判为媒体删除通知）",
+      # 复刻 webhook.py 门控：可忽略事件在 publish 前已 return
+      "if webhook_events.is_ignorable_event(raw_event):" in wh15)
+check("CI 已接入 Emby 事件映射回归（含 1.9.9 忽略断言）",
+      "tests/test_webhook_events.py" in ci)
+check("CHANGELOG 含 1.9.9 发版说明", "## 1.9.9" in changelog)
 
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:

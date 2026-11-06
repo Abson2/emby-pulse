@@ -154,6 +154,15 @@ async def emby_webhook(request: Request):
         # 下游只认 item.added / library.new；不翻译会把入库事件静默丢弃。
         raw_event = webhook_events.get_raw_event(data)
         event = webhook_events.normalize_event(raw_event)
+
+        # 🔥 1.9.9：已知非业务事件（LibraryDeleted / 系统测试通知 / 会话事件等）直接忽略，
+        # 既不刷屏告警，也不发布到事件总线——否则 library.deleted 会被下游
+        # "delete" in event 子串匹配误判为「媒体被删除」通知。这些事件不承载
+        # 入库 / 播放 / 拦截等业务动作，跳过即可，无需映射进 EMBY_TO_INTERNAL。
+        if webhook_events.is_ignorable_event(raw_event):
+            logger.debug(f"[Webhook] 忽略已知非业务事件: {raw_event or '-'}")
+            return {"status": "success", "message": "ignored"}
+
         # 只对重要事件输出日志，减少刷屏
         important_events = ["playback.start", "playback.stop", "item.added", "library.new", "auth", "login", "delete", "remove"]
         if event and any(e in event for e in important_events):

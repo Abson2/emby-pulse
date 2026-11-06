@@ -246,12 +246,12 @@ WEBHOOK_ALLOW_QUERY_TOKEN=1   # Emby Webhook 插件只能配 ?token= URL；反�
 
 ### 3.2 `docker-compose.yml`（拉取镜像）
 
-镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.7`）拉取指定版本，不设置则默认 `1.9.8`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
+镜像支持**版本锁定**：在 `.env` 里设置 `IMAGE_TAG`（如 `IMAGE_TAG=1.9.8`）拉取指定版本，不设置则默认 `1.9.9`。已发布版本见 [CHANGELOG](CHANGELOG.md) 与 [GitHub Releases](https://github.com/Abson2/emby-pulse/releases)。
 
 ```yaml
 services:
   embypulse-pro:
-    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.8}
+    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-1.9.9}
     container_name: embypulse-pro
     restart: unless-stopped
     ports:
@@ -325,6 +325,8 @@ docker compose up -d
 在 Emby Webhook 插件里填 `http://<内网IP>:10307/api/v1/webhook?token=<WEBHOOK_TOKEN 的原值>`；带 Token 的完整地址可在「通知与机器人 → 推送场景总控 → 新资源入库通知」一键复制（1.9.6 起原系统设置页入口已移除，统一在此配置）。后端默认已兼容 `?token=`。该回调走**内网直连**，不经过公网链路。
 
 > **1.9.8 起**：Emby Webhooks 插件请勾选 `Item Added` 与 `Library Changed` 两项入库事件，系统会自动把驼峰事件名翻译成内部 `item.added` 并把 `ItemsAdded` 数组拆条；两个都勾也不会重复推送（5 分钟内按 `Item.Id` 去重）。若入库仍收不到通知，先看容器日志有没有 `🔔 触发事件: item.added`；一条都没有说明 Webhook 根本没到达本服务，请核对插件里的回调 URL 与 Token；若出现 `[Webhook] 未识别 Event=`，把该事件名反馈回来补进映射表即可。
+
+> **1.9.9 起**：Emby Webhooks 还会发出 `LibraryDeleted`（整个媒体库被移除）、`system.notificationtest`（后台「发送测试通知」按钮）、`SessionStarted/Stopped`、`UserDataSaved` 等**非入库、无业务动作**的系统/测试事件。这些事件不再打印「未识别 Event=」告警，也不会被发布到事件总线（避免 `library.deleted` 被下游 `delete` 子串误判为「媒体被删除」通知），可放心忽略；只有真正未知且可能是入库类的事件才会继续告警。
 
 ### 3.8 用户端口「通知设置」使用说明（1.9.3 新增，1.9.7 回归页面内弹窗）
 
