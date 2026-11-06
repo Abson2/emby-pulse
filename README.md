@@ -6,15 +6,11 @@
   <h3>Emby 服务器的高级伴侣：数据洞察、全能管理与下载自动化助手 · 安全加固独立发行版</h3>
 
   <p align="center">
-    <a href="https://github.com/Abson2/emby-pulse">
-      <img src="https://img.shields.io/badge/本项目仓库-Abson2%2Femby--pulse-6366F1?style=for-the-badge&logo=github&labelColor=4F46E5" alt="Abson2/emby-pulse" />
-    </a>
-    <a href="https://github.com/zeyu8023/emby-pulse">
-      <img src="https://img.shields.io/badge/源项目1-zeyu8023%2Femby--pulse-22C55E?style=for-the-badge&logo=github&labelColor=16A34A" alt="zeyu8023/emby-pulse" />
-    </a>
-    <a href="https://github.com/amlkiller/emby-pulse">
-      <img src="https://img.shields.io/badge/源项目2-amlkiller%2Femby--pulse-F59E0B?style=for-the-badge&logo=github&labelColor=D97706" alt="amlkiller/emby-pulse" />
-    </a>
+    <a href="https://github.com/Abson2/emby-pulse"><img src="static/img/github-mark.svg" alt="GitHub" width="16" height="16" valign="middle" /> 本项目仓库 · Abson2/emby-pulse</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/zeyu8023/emby-pulse"><img src="static/img/github-mark.svg" alt="GitHub" width="16" height="16" valign="middle" /> 源项目 1 · zeyu8023/emby-pulse</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/amlkiller/emby-pulse"><img src="static/img/github-mark.svg" alt="GitHub" width="16" height="16" valign="middle" /> 源项目 2 · amlkiller/emby-pulse</a>
   </p>
 </div>
 
