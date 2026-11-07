@@ -38,9 +38,9 @@ DOMAIN_ALLOW = {
     "astral.sh", "ubuntu.com", "debian.org",
     # Bark 官方公共推送服务默认地址（系统级推送配置说明），非个人配置
     "day.app",
-    # 用户明确引用的公开项目（Cloudflare Tunnel 内网穿透介绍），非个人配置
+    # Cloudflare Tunnel 实际隧道地址（README 3.3 链接），非个人配置
     "naspk.com",
-    # Cloudflare Tunnel 官方文档（README 3.3 链接），非个人配置
+    # Cloudflare CDN（cdnjs.cloudflare.com，前端静态资源 Font Awesome / ColorThief），非个人配置
     "cloudflare.com",
 }
 TLD = {

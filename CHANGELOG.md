@@ -40,7 +40,7 @@
 
 ### 7. GitHub 项目介绍补回 Cloudflare Tunnel 链接
 
-- README「3.3 启动与端口」把 "Cloudflare Tunnel" 补为指向官方文档的超链接（此前链接丢失，仅余文本）。
+- README「3.3 启动与端口」把 "Cloudflare Tunnel" 补回指向实际隧道地址 `https://tunnel.naspk.com/` 的超链接（此前链接丢失，仅余文本）。
 
 ### 8. 明确不采纳项（本次）
 

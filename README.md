@@ -130,7 +130,7 @@ services:
 docker compose up -d
 ```
 
-只开放注册 / 求片时仅暴露 `10308`，`10307` 留在内网更安全。[Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) 等反代回源指向 `http://<宿主机>:10307`（或 `10308`），tunnel 侧无需额外配置请求头。
+只开放注册 / 求片时仅暴露 `10308`，`10307` 留在内网更安全。[Cloudflare Tunnel](https://tunnel.naspk.com/) 等反代回源指向 `http://<宿主机>:10307`（或 `10308`），tunnel 侧无需额外配置请求头。
 
 ### 3.4 环境变量速查
 
