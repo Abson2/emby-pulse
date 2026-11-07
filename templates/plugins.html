@@ -14,11 +14,37 @@
                 </div>
             </div>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
-            <button onclick="openPluginImportModal()" class="px-4 py-2.5 bg-brand-500 text-white font-bold rounded-xl hover:bg-brand-600 transition-colors shadow-lg shadow-brand-500/20 active:scale-95 text-[13px] flex items-center gap-2">
-                <i class="fa-solid fa-file-import"></i>导入插件
-            </button>
+        <div class="flex flex-col items-stretch md:items-end gap-2.5 shrink-0">
+            <!-- 2.5 插件中心功能排：市场 / 定时 / 开发资源 / 刷新 -->
+            <div class="flex flex-wrap items-center md:justify-end gap-2">
+                <button onclick="openPluginMarket()" class="px-3.5 py-1.5 text-[12px] font-bold rounded-full bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-300 border border-violet-100 dark:border-violet-500/20 hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors"><i class="fa-solid fa-store mr-1"></i>插件市场</button>
+                <button onclick="openPluginSchedulePanel()" class="px-3.5 py-1.5 text-[12px] font-bold rounded-full bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-300 border border-violet-100 dark:border-violet-500/20 hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors"><i class="fa-regular fa-clock mr-1"></i>定时执行</button>
+                <button onclick="openPluginDevDoc('ai-prompt')" class="px-3.5 py-1.5 text-[12px] font-bold rounded-full bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-300 border border-violet-100 dark:border-violet-500/20 hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors"><i class="fa-solid fa-robot mr-1"></i>AI 开发提示词</button>
+                <button onclick="openPluginDevDoc('guide')" class="px-3.5 py-1.5 text-[12px] font-bold rounded-full bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-300 border border-violet-100 dark:border-violet-500/20 hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors"><i class="fa-solid fa-book-open mr-1"></i>开发指南</button>
+                <button onclick="downloadPluginExample('zip')" class="px-3.5 py-1.5 text-[12px] font-bold rounded-full bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-300 border border-violet-100 dark:border-violet-500/20 hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors"><i class="fa-solid fa-file-zipper mr-1"></i>ZIP 开发示例</button>
+                <button onclick="downloadPluginExample('single')" class="px-3.5 py-1.5 text-[12px] font-bold rounded-full bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-300 border border-violet-100 dark:border-violet-500/20 hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors"><i class="fa-regular fa-file-code mr-1"></i>单文件.py 示例</button>
+                <button onclick="loadPlugins()" class="px-3.5 py-1.5 text-[12px] font-bold rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300 border border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"><i class="fa-solid fa-rotate mr-1"></i>刷新</button>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <button onclick="openPluginImportModal()" class="px-4 py-2.5 bg-brand-500 text-white font-bold rounded-xl hover:bg-brand-600 transition-colors shadow-lg shadow-brand-500/20 active:scale-95 text-[13px] flex items-center gap-2">
+                    <i class="fa-solid fa-file-import"></i>导入插件
+                </button>
+            </div>
         </div>
+    </div>
+
+    <!-- 2.5 OpenAPI 入口卡片：令牌管理 + 接口文档，供脚本与插件调用网页功能 -->
+    <div class="grid grid-cols-1 gap-4 shrink-0">
+        <button onclick="openOpenApiPanel()" class="text-left bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all p-5 flex items-center gap-4">
+            <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 text-white flex items-center justify-center text-[17px] shrink-0 shadow-lg shadow-sky-500/20">
+                <i class="fa-solid fa-braille"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+                <h3 class="text-[15px] font-bold text-gray-900 dark:text-white flex items-center gap-2">OpenAPI</h3>
+                <p class="text-[12px] text-gray-500 mt-0.5">创建访问令牌、查阅接口文档，供脚本与插件调用网页功能。</p>
+            </div>
+            <i class="fa-solid fa-chevron-right text-gray-300 dark:text-gray-600 shrink-0"></i>
+        </button>
     </div>
 
     <div id="plugins-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
@@ -73,6 +99,112 @@
                 </label>
             </div>
             <div id="pi-result" class="hidden mt-4 rounded-xl p-3 text-[12px] leading-relaxed"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 2.5 插件市场弹窗：官方索引一键安装 -->
+<div id="plugin-market-modal" class="fixed inset-0 z-[210] hidden items-center justify-center p-4 backdrop-blur-sm bg-black/40" onclick="if(event.target===this) closePluginModal('plugin-market-modal')">
+    <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[88vh] border border-gray-100 dark:border-white/10">
+        <div class="px-5 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center shrink-0">
+            <h3 class="text-[16px] font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center"><i class="fa-solid fa-store text-white text-[11px]"></i></div>
+                插件市场
+            </h3>
+            <button onclick="closePluginModal('plugin-market-modal')" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-5 overflow-y-auto mac-scrollbar flex-1">
+            <p class="text-[11px] text-gray-500 leading-relaxed mb-3"><i class="fa-brands fa-github mr-1"></i>来自本项目官方发布索引 <code class="font-mono">plugins/index.json</code>，下载产物强制 sha256 校验；安装后默认禁用，请在列表中显式启用。</p>
+            <div id="market-list" class="space-y-2">
+                <div class="text-center py-8 text-gray-400 text-[12px]"><i class="fa-solid fa-spinner fa-spin mr-1"></i>正在读取官方索引…</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 2.5 定时执行面板 -->
+<div id="plugin-schedule-modal" class="fixed inset-0 z-[210] hidden items-center justify-center p-4 backdrop-blur-sm bg-black/40" onclick="if(event.target===this) closePluginModal('plugin-schedule-modal')">
+    <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[88vh] border border-gray-100 dark:border-white/10">
+        <div class="px-5 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center shrink-0">
+            <h3 class="text-[16px] font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center"><i class="fa-regular fa-clock text-white text-[11px]"></i></div>
+                定时执行
+            </h3>
+            <button onclick="closePluginModal('plugin-schedule-modal')" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-5 overflow-y-auto mac-scrollbar flex-1">
+            <p class="text-[11px] text-gray-500 leading-relaxed mb-3">按「分钟」间隔触发插件的定时动作（0 = 关闭，最大 10080 = 7 天）。仅<b>已启用</b>且实现了定时动作的插件会被触发；间隔随插件配置保存，重启后依旧生效。</p>
+            <div id="schedule-list" class="space-y-2">
+                <div class="text-center py-8 text-gray-400 text-[12px]"><i class="fa-solid fa-spinner fa-spin mr-1"></i>正在读取…</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 2.5 开发文档弹窗（AI 开发提示词 / 开发指南 共用） -->
+<div id="plugin-devdoc-modal" class="fixed inset-0 z-[210] hidden items-center justify-center p-4 backdrop-blur-sm bg-black/40" onclick="if(event.target===this) closePluginModal('plugin-devdoc-modal')">
+    <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[88vh] border border-gray-100 dark:border-white/10">
+        <div class="px-5 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center shrink-0">
+            <h3 id="devdoc-title" class="text-[16px] font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-sky-500 to-blue-500 flex items-center justify-center"><i class="fa-solid fa-book-open text-white text-[11px]"></i></div>
+                <span>开发指南</span>
+            </h3>
+            <div class="flex items-center gap-2">
+                <button id="devdoc-copy-btn" onclick="copyDevDoc()" class="px-3 py-1.5 text-[12px] font-bold rounded-lg bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/20 transition-colors"><i class="fa-regular fa-copy mr-1"></i>复制全文</button>
+                <button onclick="closePluginModal('plugin-devdoc-modal')" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+        </div>
+        <div class="p-5 overflow-y-auto mac-scrollbar flex-1">
+            <pre id="devdoc-content" class="whitespace-pre-wrap break-words text-[12px] leading-relaxed font-mono text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-black/20 rounded-xl p-4 border border-gray-100 dark:border-white/5"></pre>
+        </div>
+    </div>
+</div>
+
+<!-- 2.5 OpenAPI 面板：访问令牌 + 接口文档 -->
+<div id="plugin-openapi-modal" class="fixed inset-0 z-[210] hidden items-center justify-center p-4 backdrop-blur-sm bg-black/40" onclick="if(event.target===this) closePluginModal('plugin-openapi-modal')">
+    <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-3xl rounded-2xl shadow-2xl flex flex-col max-h-[88vh] border border-gray-100 dark:border-white/10">
+        <div class="px-5 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center shrink-0">
+            <h3 class="text-[16px] font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center"><i class="fa-solid fa-braille text-white text-[11px]"></i></div>
+                OpenAPI
+            </h3>
+            <button onclick="closePluginModal('plugin-openapi-modal')" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-5 overflow-y-auto mac-scrollbar flex-1 space-y-5">
+            <div class="flex items-center justify-between">
+                <p class="text-[12px] text-gray-500">管理访问令牌、查阅接口文档，供脚本与插件调用网页功能。</p>
+                <a href="/openapi.json" download="emby-pulse-openapi.json" class="px-3.5 py-2 text-[12px] font-bold rounded-xl bg-sky-500 text-white hover:bg-sky-600 transition-colors shrink-0"><i class="fa-solid fa-download mr-1"></i>下载 OpenAPI 规范</a>
+            </div>
+            <div class="rounded-2xl border border-gray-100 dark:border-white/5 p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-[14px] font-black text-gray-800 dark:text-gray-100">访问令牌 <span id="openapi-token-count" class="text-[11px] font-bold text-gray-400 font-mono"></span></h4>
+                </div>
+                <p class="text-[11px] text-gray-500 mb-1">使用请求头 <code class="font-mono bg-gray-100 dark:bg-gray-800 px-1 rounded">Authorization: Bearer YOUR_OPENAPI_TOKEN</code> 鉴权。</p>
+                <p class="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-xl p-2.5 mb-3">令牌拥有后台管理员权限，可以读取配置并修改或删除数据。仅交给可信的应用和插件；完整令牌只在创建时显示一次，可以随时撤销。</p>
+                <div class="flex gap-2 items-center mb-3">
+                    <input type="text" id="openapi-token-name" placeholder="例如：我的整理插件" maxlength="64" class="flex-1 min-w-0 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    <button onclick="createOpenApiToken()" id="openapi-create-btn" class="px-4 py-2.5 text-[12px] font-bold rounded-xl bg-sky-500 text-white hover:bg-sky-600 transition-colors shrink-0">创建令牌</button>
+                </div>
+                <div id="openapi-new-token" class="hidden mb-3 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-3">
+                    <p class="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 mb-1.5"><i class="fa-solid fa-key mr-1"></i>请立即保存，关闭后将不再显示：</p>
+                    <div class="flex gap-2 items-center">
+                        <code id="openapi-new-token-value" class="flex-1 min-w-0 break-all text-[11px] font-mono text-emerald-800 dark:text-emerald-200 bg-white/70 dark:bg-black/20 rounded-lg px-2 py-1.5"></code>
+                        <button onclick="copyNewOpenApiToken(this)" class="px-3 py-1.5 text-[11px] font-bold rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors shrink-0">复制</button>
+                    </div>
+                </div>
+                <div id="openapi-token-list" class="space-y-2">
+                    <div class="text-center py-4 text-gray-400 text-[12px]"><i class="fa-solid fa-spinner fa-spin mr-1"></i>正在读取…</div>
+                </div>
+            </div>
+            <div class="rounded-2xl border border-gray-100 dark:border-white/5 p-4">
+                <h4 class="text-[14px] font-black text-gray-800 dark:text-gray-100 mb-2"><span class="text-sky-500 mr-1.5">快速开始</span>先查接口，再编写插件</h4>
+                <ul class="text-[12px] text-gray-600 dark:text-gray-400 leading-relaxed space-y-1.5 list-disc pl-5">
+                    <li>下载 JSON 规范交给你的 AI，结合「AI 开发提示词」编写插件。示例使用占位令牌，实际令牌应在运行时通过环境变量配置，不要交给 AI 或写入插件包。</li>
+                    <li>容器使用 bridge 网络时，<code class="font-mono">localhost</code> 指容器自身；Linux host 模式共享宿主机网络。请按实际监听端口和网络配置选择可达的服务地址。</li>
+                    <li>文档只提供查看和复制示例，不会实际调用所选接口。通用结构未细化的字段会保留说明，调用前请核对必填参数；独立回调沿用自身认证方式，以接口详情为准。</li>
+                    <li>插件进程内也可直接复用服务端能力：实现 <code class="font-mono">on_schedule()</code> 钩子接「定时执行」，通过 <code class="font-mono">self.log()</code> 写运行日志与通知。</li>
+                </ul>
+            </div>
         </div>
     </div>
 </div>
@@ -6098,6 +6230,299 @@ async function uninstallExternalPlugin(pluginId) {
     } catch (e) {
         showToast('error', '卸载失败', e.message);
     }
+}
+
+// ================= 2.5 插件中心：市场 / 定时执行 / 开发资源 / OpenAPI =================
+
+function openPluginModal(id) {
+    const modal = document.getElementById(id);
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+function closePluginModal(id) {
+    const modal = document.getElementById(id);
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+// ---- 插件市场：官方索引一键安装 ----
+async function openPluginMarket() {
+    openPluginModal('plugin-market-modal');
+    const list = document.getElementById('market-list');
+    list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]"><i class="fa-solid fa-spinner fa-spin mr-2"></i>读取官方索引中...</div>';
+    try {
+        const res = await (await fetch('/api/plugins/registry')).json();
+        if (res.status !== 'success') {
+            list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]">' + epEsc(res.message || '读取失败') + '</div>';
+            return;
+        }
+        const items = (res.data && res.data.plugins) || [];
+        if (!items.length) {
+            list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]">官方索引暂无插件。在 plugins/index.json 与 plugins/dist/ 发布后重试。</div>';
+            return;
+        }
+        list.innerHTML = items.map(function (item) {
+            const extra = item.min_app_version ? ' · 需 EmbyPulse ' + epEsc(item.min_app_version) : '';
+            return '<div class="flex items-center gap-3 p-3.5 rounded-xl border border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/20">'
+                + '<div class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-white flex items-center justify-center shrink-0"><i class="fa-solid fa-puzzle-piece text-[14px]"></i></div>'
+                + '<div class="flex-1 min-w-0">'
+                + '<div class="flex items-center gap-2"><span class="text-[13px] font-bold text-gray-800 dark:text-gray-100 truncate">' + epEsc(item.name) + '</span>'
+                + '<span class="text-[9px] font-mono text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded shrink-0">v' + epEsc(item.version) + '</span></div>'
+                + '<p class="text-[11px] text-gray-500 mt-1 leading-relaxed">' + epEsc(item.description) + '</p>'
+                + '<p class="text-[10px] text-gray-400 mt-1 font-mono truncate">' + epEsc(item.id) + extra + '</p>'
+                + '</div>'
+                + '<button data-gh-id="' + epEsc(item.id) + '" onclick="installMarketPlugin(this.dataset.ghId, this)" class="px-3.5 py-2 bg-brand-500 text-white font-bold rounded-xl hover:bg-brand-600 transition-colors text-[12px] shrink-0 disabled:opacity-50">安装</button>'
+                + '</div>';
+        }).join('');
+    } catch (e) {
+        list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]">' + epEsc(e.message) + '</div>';
+    }
+}
+
+async function installMarketPlugin(pluginId, btn) {
+    if (!epValidId(pluginId)) return;
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/plugins/import/github', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plugin_id: pluginId, overwrite: true })
+        });
+        const data = await res.json();
+        if (data.status !== 'success') {
+            showToast('error', '安装失败', data.message || '');
+            return;
+        }
+        showToast('success', '安装成功', '已导入并默认禁用，请在列表中启用');
+        closePluginModal('plugin-market-modal');
+        loadPlugins();
+    } catch (e) {
+        showToast('error', '安装失败', e.message);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// ---- 定时执行面板 ----
+async function openPluginSchedulePanel() {
+    openPluginModal('plugin-schedule-modal');
+    const list = document.getElementById('schedule-list');
+    list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]"><i class="fa-solid fa-spinner fa-spin mr-2"></i>读取中...</div>';
+    try {
+        const res = await (await fetch('/api/plugins/schedules')).json();
+        if (res.status !== 'success') {
+            list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]">' + epEsc(res.message || '读取失败') + '</div>';
+            return;
+        }
+        const items = res.data || [];
+        if (!items.length) {
+            list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]">暂无插件</div>';
+            return;
+        }
+        list.innerHTML = items.map(function (p) {
+            const badge = p.enabled
+                ? '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 shrink-0">已启用</span>'
+                : '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 shrink-0">未启用</span>';
+            const lastRun = p.last_run ? new Date(p.last_run * 1000).toLocaleString() : '从未执行';
+            const runBtn = (p.loaded && p.enabled)
+                ? '<button data-sched-id="' + epEsc(p.id) + '" onclick="runPluginScheduleNow(this.dataset.schedId, this)" class="px-3 py-1.5 text-[11px] font-bold rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-300 border border-amber-100 dark:border-amber-500/20 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors shrink-0 disabled:opacity-50">立即执行</button>'
+                : '';
+            const hint = (p.enabled && !p.loaded) ? '<p class="text-[10px] text-gray-400 mt-1">外部插件启用后才会加载代码并参与调度</p>' : '';
+            return '<div class="flex items-center gap-3 p-3.5 rounded-xl border border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/20">'
+                + '<div class="flex-1 min-w-0">'
+                + '<div class="flex items-center gap-2"><span class="text-[13px] font-bold text-gray-800 dark:text-gray-100 truncate">' + epEsc(p.name) + '</span>' + badge + '</div>'
+                + '<p class="text-[10px] text-gray-400 mt-1 font-mono">上次触发：' + epEsc(lastRun) + (p.minutes > 0 ? ' · 约 ' + Math.ceil((p.next_due_in || 0) / 60) + ' 分钟后到点' : '') + '</p>'
+                + hint
+                + '</div>'
+                + '<div class="flex items-center gap-2 shrink-0">'
+                + '<input type="number" min="0" max="10080" value="' + (p.minutes || 0) + '" data-min-input="' + epEsc(p.id) + '" class="w-20 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-brand-500">'
+                + '<span class="text-[11px] text-gray-400">分钟</span>'
+                + '<button data-sched-id="' + epEsc(p.id) + '" onclick="savePluginSchedule(this.dataset.schedId, this)" class="px-3 py-1.5 text-[11px] font-bold rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors disabled:opacity-50">保存</button>'
+                + runBtn
+                + '</div>'
+                + '</div>';
+        }).join('');
+    } catch (e) {
+        list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]">' + epEsc(e.message) + '</div>';
+    }
+}
+
+async function savePluginSchedule(pluginId, btn) {
+    const input = document.querySelector('[data-min-input="' + pluginId + '"]');
+    const minutes = parseInt((input && input.value) || '0', 10);
+    if (isNaN(minutes) || minutes < 0 || minutes > 10080) {
+        showToast('warning', '取值无效', '间隔取 0（关闭）~ 10080 分钟');
+        return;
+    }
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/plugins/' + encodeURIComponent(pluginId) + '/schedule', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ minutes: minutes })
+        });
+        const data = await res.json();
+        if (data.status !== 'success') { showToast('error', '保存失败', data.message || ''); return; }
+        showToast('success', '已保存', minutes > 0 ? '每 ' + minutes + ' 分钟触发一次' : '已关闭定时执行');
+        openPluginSchedulePanel();
+    } catch (e) {
+        showToast('error', '保存失败', e.message);
+    } finally { btn.disabled = false; }
+}
+
+async function runPluginScheduleNow(pluginId, btn) {
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/plugins/' + encodeURIComponent(pluginId) + '/run-schedule', { method: 'POST' });
+        const data = await res.json();
+        if (data.status !== 'success') { showToast('error', '执行失败', data.message || ''); return; }
+        showToast('success', '已触发', data.message || '定时动作已执行');
+    } catch (e) {
+        showToast('error', '执行失败', e.message);
+    } finally { btn.disabled = false; }
+}
+
+// ---- 开发文档（AI 开发提示词 / 开发指南 共用弹窗） ----
+let devDocCache = { kind: '', title: '', content: '' };
+
+async function openPluginDevDoc(kind) {
+    const isPrompt = kind === 'ai-prompt';
+    const title = isPrompt ? 'AI 开发提示词' : '插件开发指南';
+    const modal = document.getElementById('plugin-devdoc-modal');
+    document.getElementById('devdoc-title').querySelector('span').textContent = title;
+    const pre = document.getElementById('devdoc-content');
+    pre.textContent = '加载中…';
+    openPluginModal('plugin-devdoc-modal');
+    devDocCache = { kind: kind, title: title, content: '' };
+    try {
+        const res = await (await fetch('/api/plugins/dev/' + (isPrompt ? 'ai-prompt' : 'guide'))).json();
+        if (res.status !== 'success') {
+            pre.textContent = res.message || '文档资源缺失';
+            return;
+        }
+        devDocCache.content = res.content || '';
+        pre.textContent = devDocCache.content;
+    } catch (e) {
+        pre.textContent = '读取失败：' + e.message;
+    }
+}
+
+function copyDevDoc() {
+    if (!devDocCache.content) { showToast('warning', '暂无可复制内容', ''); return; }
+    copyTextToClipboard(devDocCache.content, '已复制全文', '可整段粘贴给任意 AI 生成插件包');
+}
+
+function copyTextToClipboard(text, okTitle, okBody) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+            showToast('success', okTitle, okBody);
+        }, function () {
+            fallbackCopyText(text, okTitle, okBody);
+        });
+    } else {
+        fallbackCopyText(text, okBody ? okTitle : okTitle, okBody);
+    }
+}
+function fallbackCopyText(text, okTitle, okBody) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); showToast('success', okTitle, okBody); }
+    catch (e) { showToast('error', '复制失败', '请手动选择文本复制'); }
+    document.body.removeChild(ta);
+}
+
+// ---- 示例插件下载 ----
+function downloadPluginExample(kind) {
+    // 会话 Cookie 鉴权；浏览器直接下载，不经过第三方
+    window.location.href = '/api/plugins/dev/' + (kind === 'zip' ? 'example-zip' : 'example-single');
+}
+
+// ---- OpenAPI 面板：访问令牌管理 ----
+let newOpenApiTokenValue = '';
+
+async function openOpenApiPanel() {
+    openPluginModal('plugin-openapi-modal');
+    document.getElementById('openapi-new-token').classList.add('hidden');
+    await loadOpenApiTokens();
+}
+
+async function loadOpenApiTokens() {
+    const list = document.getElementById('openapi-token-list');
+    const countEl = document.getElementById('openapi-token-count');
+    list.innerHTML = '<div class="text-center py-4 text-gray-400 text-[12px]"><i class="fa-solid fa-spinner fa-spin mr-2"></i>正在读取…</div>';
+    try {
+        const res = await (await fetch('/api/tokens/list')).json();
+        if (res.status !== 'success') {
+            list.innerHTML = '<div class="text-center py-4 text-gray-400 text-[12px]">' + epEsc(res.detail || res.message || '读取失败') + '</div>';
+            return;
+        }
+        const tokens = res.tokens || [];
+        countEl.textContent = tokens.length + ' / 20';
+        if (!tokens.length) {
+            list.innerHTML = '<div class="text-center py-4 text-gray-400 text-[12px]">还没有令牌，起个名字创建第一个。</div>';
+            return;
+        }
+        list.innerHTML = tokens.map(function (t) {
+            return '<div class="flex items-center gap-3 p-3 rounded-xl border border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/20">'
+                + '<div class="flex-1 min-w-0">'
+                + '<p class="text-[13px] font-bold text-gray-800 dark:text-gray-100 truncate">' + epEsc(t.name) + '</p>'
+                + '<p class="text-[10px] text-gray-400 mt-0.5 font-mono">创建：' + epEsc((t.created_at || '').replace('T', ' ').slice(0, 19))
+                + ' · 最近使用：' + epEsc((t.last_used_at || '从未').replace('T', ' ').slice(0, 19)) + '</p>'
+                + '</div>'
+                + '<button data-token-id="' + parseInt(t.id, 10) + '" onclick="revokeOpenApiToken(this.dataset.tokenId, this)" class="px-3 py-1.5 text-[11px] font-bold rounded-lg bg-rose-50 dark:bg-rose-500/10 text-rose-500 dark:text-rose-300 border border-rose-100 dark:border-rose-500/20 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-colors shrink-0 disabled:opacity-50">撤销</button>'
+                + '</div>';
+        }).join('');
+    } catch (e) {
+        list.innerHTML = '<div class="text-center py-4 text-gray-400 text-[12px]">' + epEsc(e.message) + '</div>';
+    }
+}
+
+async function createOpenApiToken() {
+    const btn = document.getElementById('openapi-create-btn');
+    const nameInput = document.getElementById('openapi-token-name');
+    const name = (nameInput.value || '').trim();
+    if (!name) { showToast('warning', '请填写令牌名称', '例如：我的整理插件'); return; }
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/tokens/create', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            // 后端 expires_hours 为必算字段（None 会 500），这里取允许上限 1 年
+            body: JSON.stringify({ name: name, expires_hours: 24 * 365 })
+        });
+        const data = await res.json();
+        if (res.status !== 200 || data.status !== 'success') {
+            showToast('error', '创建失败', data.detail || data.message || '');
+            return;
+        }
+        newOpenApiTokenValue = data.token || '';
+        document.getElementById('openapi-new-token-value').textContent = newOpenApiTokenValue;
+        document.getElementById('openapi-new-token').classList.remove('hidden');
+        nameInput.value = '';
+        loadOpenApiTokens();
+    } catch (e) {
+        showToast('error', '创建失败', e.message);
+    } finally { btn.disabled = false; }
+}
+
+function copyNewOpenApiToken(btn) {
+    if (!newOpenApiTokenValue) return;
+    copyTextToClipboard(newOpenApiTokenValue, '令牌已复制', '请妥善保存，仅此一次展示');
+}
+
+async function revokeOpenApiToken(tokenId, btn) {
+    if (!confirm('确定撤销该令牌？使用它的脚本与插件将立即失去访问权限。')) return;
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/tokens/' + encodeURIComponent(tokenId), { method: 'DELETE' });
+        const data = await res.json();
+        if (data.status !== 'success') { showToast('error', '撤销失败', data.detail || data.message || ''); return; }
+        showToast('success', '已撤销', '令牌已立即失效');
+        loadOpenApiTokens();
+    } catch (e) {
+        showToast('error', '撤销失败', e.message);
+    } finally { btn.disabled = false; }
 }
 </script>
 {% endblock %}

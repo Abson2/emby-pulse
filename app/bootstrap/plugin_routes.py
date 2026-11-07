@@ -17,3 +17,10 @@ def register_plugin_routes(app) -> None:
 
     app.include_router(plugins_router.router)
     plugins_router.set_app(app)
+
+    # 2.5：插件中心「定时执行」全局调度器（幂等；只对已加载插件触发 on_schedule）
+    try:
+        from app.plugins.scheduler import start_plugin_scheduler
+        start_plugin_scheduler()
+    except Exception as e:
+        print(f"[🧩 插件] 定时调度器启动失败: {e}")

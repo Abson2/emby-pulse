@@ -268,6 +268,9 @@ async def api_import_plugin(request: Request, file: UploadFile = File(...)):
     mf = result["manifest"]
     # 关键：无论历史上是否装过同 id 插件，导入后一律回到禁用状态
     plugin_dao.set_plugin_enabled(mf["id"], False)
+    # 2.5 修复：同步内存 manifest 表，导入后插件中心立即可见（此前要重启才出现）
+    from app.plugins import refresh_external_manifests
+    refresh_external_manifests()
     return {"status": "success", "data": _import_summary(mf, result["origin"])}
 
 
@@ -296,6 +299,9 @@ async def api_import_plugin_from_github(request: Request):
         return {"status": "error", "message": str(exc)}
     mf = result["manifest"]
     plugin_dao.set_plugin_enabled(mf["id"], False)
+    # 2.5 修复：同步内存 manifest 表，导入后插件中心立即可见
+    from app.plugins import refresh_external_manifests
+    refresh_external_manifests()
     return {"status": "success", "data": _import_summary(mf, result["origin"])}
 
 
@@ -314,4 +320,163 @@ def api_uninstall_plugin(plugin_id: str, request: Request):
         return {"status": "error", "message": "仅可卸载外部导入的插件"}
     # 清理启用状态，避免重新导入同 id 时被当作「已启用」自动执行代码
     plugin_dao.delete_plugin_state(plugin_id)
+    refresh_external_manifests()
     return {"status": "success", "message": "已卸载；重启应用后残留路由将彻底清理"}
+
+
+# ==========================================
+# 2.5 开发资源：开发指南 / AI 开发提示词 / 示例插件
+# ==========================================
+# 内容以 docs/ 为唯一事实源（Docker 镜像通过 COPY docs/ 带入）；
+# 示例在内存中即时生成，保证与当前版本插件契约一致。
+
+_DEV_DOC_MAX_BYTES = 512 * 1024
+
+
+def _doc_response(content: str) -> dict:
+    if not content:
+        return {"status": "error", "message": "文档资源缺失（docs/ 未随应用部署）"}
+    return {"status": "success", "content": content[:_DEV_DOC_MAX_BYTES]}
+
+
+@router.get("/api/plugins/dev/ai-prompt")
+def api_plugin_ai_prompt(request: Request):
+    """AI 开发提示词全文（复制给任意 AI 生成插件包）。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    from app.plugins import dev_resources
+    return _doc_response(dev_resources.get_ai_prompt())
+
+
+@router.get("/api/plugins/dev/guide")
+def api_plugin_dev_guide(request: Request):
+    """插件开发指南全文。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    from app.plugins import dev_resources
+    return _doc_response(dev_resources.get_dev_guide())
+
+
+@router.get("/api/plugins/dev/example-zip")
+def api_plugin_example_zip(request: Request):
+    """下载 ZIP 开发示例（内存即时生成，通过 2.3 全部安全校验）。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    from fastapi.responses import Response
+    from app.plugins import dev_resources
+
+    data = dev_resources.build_example_zip()
+    filename = "hello_plugin-%s.zip" % dev_resources.EXAMPLE_PLUGIN_VERSION
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="%s"' % filename},
+    )
+
+
+@router.get("/api/plugins/dev/example-single")
+def api_plugin_example_single(request: Request):
+    """下载单文件 .py 开发示例。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    from fastapi.responses import Response
+    from app.plugins import dev_resources
+
+    return Response(
+        content=dev_resources.EXAMPLE_PLUGIN_PY,
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="hello_single.py"'},
+    )
+
+
+# ==========================================
+# 2.5 定时执行：插件全局调度（间隔存于插件配置 schedule_minutes，0 = 关）
+# ==========================================
+
+_SCHEDULE_MIN, _SCHEDULE_MAX = 0, 7 * 24 * 60  # 0=关闭；上限 7 天
+
+
+def _schedule_minutes_of(plugin_id: str) -> int:
+    from app.plugins import get_plugin_config
+
+    try:
+        minutes = int(get_plugin_config(plugin_id).get("schedule_minutes") or 0)
+    except (TypeError, ValueError):
+        minutes = 0
+    return max(0, min(minutes, _SCHEDULE_MAX))
+
+
+@router.get("/api/plugins/schedules")
+def api_plugin_schedules(request: Request):
+    """所有插件的定时执行配置与状态（供「定时执行」面板渲染）。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    from app.plugins import get_all_plugins, get_plugin_scheduler
+
+    scheduler = get_plugin_scheduler()
+    items = []
+    for meta in get_all_plugins():
+        minutes = _schedule_minutes_of(meta["id"])
+        last_run = scheduler.last_run_of(meta["id"]) if scheduler else None
+        items.append({
+            "id": meta["id"],
+            "name": meta["name"],
+            "enabled": meta["enabled"],
+            "loaded": meta.get("loaded", True),
+            "external": meta.get("external", False),
+            "minutes": minutes,
+            "last_run": last_run,
+            "next_due_in": scheduler.next_due_in(meta["id"], minutes) if scheduler else None,
+        })
+    return {"status": "success", "data": items}
+
+
+@router.post("/api/plugins/{plugin_id}/schedule")
+async def api_set_plugin_schedule(plugin_id: str, request: Request):
+    """设置插件定时执行间隔（分钟，0 = 关闭）；未启用的外部插件也允许预配置。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    from app.plugins import update_plugin_config
+
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    minutes = data.get("minutes") if isinstance(data, dict) else None
+    try:
+        minutes = int(minutes)
+    except (TypeError, ValueError):
+        return {"status": "error", "message": "minutes 必须是整数分钟"}
+    if minutes < _SCHEDULE_MIN or minutes > _SCHEDULE_MAX:
+        return {"status": "error", "message": "minutes 取值 0（关闭）~ %d" % _SCHEDULE_MAX}
+    update_plugin_config(plugin_id, {"schedule_minutes": minutes}, merge=True)
+    return {"status": "success", "minutes": minutes}
+
+
+@router.post("/api/plugins/{plugin_id}/run-schedule")
+async def api_run_plugin_schedule(plugin_id: str, request: Request):
+    """手动「立即执行」一次插件定时动作；仅对已加载（启用）的插件生效。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    from app.plugins import get_plugin, get_plugin_scheduler
+
+    plugin = get_plugin(plugin_id)
+    if plugin is None or not plugin.enabled:
+        return {"status": "error", "message": "插件未启用，定时动作不可执行"}
+    if not hasattr(type(plugin), "on_schedule"):
+        return {"status": "error", "message": "该插件未实现定时动作"}
+
+    def _run():
+        try:
+            plugin.on_schedule()
+            return True
+        except Exception:
+            return False
+
+    ok = await run_in_threadpool(_run)
+    scheduler = get_plugin_scheduler()
+    if scheduler:
+        scheduler.mark_ran(plugin_id)
+    if not ok:
+        return {"status": "error", "message": "执行失败，详见插件日志"}
+    return {"status": "success", "message": "已触发一次定时动作"}

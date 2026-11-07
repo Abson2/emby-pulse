@@ -158,6 +158,20 @@ def get_external_manifests() -> Dict[str, dict]:
     return dict(_external_manifests)
 
 
+def refresh_external_manifests() -> None:
+    """重新扫描外部插件目录并同步内存 manifest 表（2.5）。
+
+    修复：2.3 的导入接口只落盘，内存 ``_external_manifests`` 要等下次重启
+    ``discover_plugins()`` 才会更新，导致「导入成功但插件中心看不到」。
+    本函数在导入 / 卸载后调用，让列表即时反映磁盘状态；不加载任何插件代码。
+    """
+    global _external_manifests
+    try:
+        _external_manifests = external.list_installed()
+    except Exception as e:
+        logger.error("[🧩 插件] 刷新外部插件 manifest 失败: %s", e)
+
+
 def uninstall_plugin(plugin_id: str) -> bool:
     """卸载外部插件（内置插件永不受影响）；已启用的先停止。"""
     plugin = _registry.get(plugin_id)

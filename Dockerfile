@@ -54,11 +54,15 @@ COPY --from=builder /build/app ./app
 COPY run.py ./run.py
 COPY templates/ ./templates/
 COPY static/ ./static/
+# 2.5：插件中心「开发指南 / AI 开发提示词」弹窗内容的事实源（只读文档，无敏感信息）
+COPY docs/PLUGIN_DEVELOPMENT.md docs/PLUGIN_AI_PROMPT.md ./docs/
 
 # 构建期自检：确认补丁产物确实进入镜像，且前端不再把 token 拼进 URL
 RUN mkdir -p /workspace/config /workspace/data && \
     test -f /workspace/app/core/auth_gate_middleware.pyc && \
     test -f /workspace/app/core/csrf_middleware.pyc && \
+    test -f /workspace/docs/PLUGIN_DEVELOPMENT.md && \
+    test -f /workspace/docs/PLUGIN_AI_PROMPT.md && \
     ! grep -q 'webhook?token=\${token}' /workspace/templates/settings.html && \
     ! grep -q 'webhook?token=' /workspace/templates/settings.html && \
     echo "hardening assets verified"

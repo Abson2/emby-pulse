@@ -93,6 +93,15 @@ class PluginBase:
         """子类可覆盖：禁用时的清理逻辑"""
         pass
 
+    def on_schedule(self):
+        """子类可覆盖：插件中心「定时执行」调度到点时的动作（2.5）。
+
+        由全局插件调度器按插件配置里的 ``schedule_minutes`` 间隔调用，
+        也可由管理员在插件中心手动「立即执行」。默认无动作；
+        未覆盖本钩子的插件即使配置了间隔也不会有任何效果。
+        """
+        pass
+
     async def _enabled_guard_dependency(self):
         """FastAPI 依赖：禁用的插件路由返回 404"""
         if not self._enabled:
