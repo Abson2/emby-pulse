@@ -596,10 +596,10 @@ ci_src = read(".github/workflows/docker-publish.yml")
 check("安全契约与富文本净化回归均接入 CI",
       "tools/check_security_contracts.py" in ci_src
       and "tests/test_sanitize_rich_html.py" in ci_src)
-check("2.4 发版版本点已同步（历史 tag 不重推）",
-      'APP_VERSION = "2.4"' in read("app/shared/version.py")
-      and "IMAGE_TAG:-2.4" in read("docker-compose.yml")
-      and "request_app.js?v=2.4" in read("templates/request.html"))
+check("2.5 发版版本点已同步（历史 tag 不重推）",
+      'APP_VERSION = "2.5"' in read("app/shared/version.py")
+      and "IMAGE_TAG:-2.5" in read("docker-compose.yml")
+      and "request_app.js?v=2.5" in read("templates/request.html"))
 
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:

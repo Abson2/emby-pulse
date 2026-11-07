@@ -320,12 +320,12 @@ check("系统设置接口给出可复制的 URL 模板",
 check("系统设置接口不再要求 Emby 配置 Header",
       "请在 Emby 中配置 Header" not in system_router)
 
-check("应用版本升级到 2.4", 'APP_VERSION = "2.4"' in read("app/shared/version.py"))
-check("Dockerfile 版本为 2.4-hardened", "APP_VERSION=2.4-hardened" in dockerfile)
-check("compose 默认拉取 2.4", "IMAGE_TAG:-2.4" in compose)
+check("应用版本升级到 2.5", 'APP_VERSION = "2.5"' in read("app/shared/version.py"))
+check("Dockerfile 版本为 2.5-hardened", "APP_VERSION=2.5-hardened" in dockerfile)
+check("compose 默认拉取 2.5", "IMAGE_TAG:-2.5" in compose)
 check("compose 保留 1.9.10 回退说明（不删除历史版本特性）", "IMAGE_TAG=1.9.10" in compose)
 check("CHANGELOG 含 1.9.x 全系列与 2.0 / 2.0.1 / 2.0.2 / 2.1 / 2.3 / 2.4 发版说明",
-      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7", "## 1.9.8", "## 1.9.9", "## 1.9.10", "## 2.0", "## 2.0.1", "## 2.0.2", "## 2.1", "## 2.3", "## 2.4")))
+      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7", "## 1.9.8", "## 1.9.9", "## 1.9.10", "## 2.0", "## 2.0.1", "## 2.0.2", "## 2.1", "## 2.3", "## 2.4", "## 2.5")))
 check("CI 增加 Bark / Webhook 回归步骤",
       "tests/test_bark_push.py" in read(".github/workflows/docker-publish.yml"))
 
@@ -396,8 +396,8 @@ models_py = read("app/schemas/models.py")
 sys_views = read("app/domains/system/views.py")
 modal_notify = read("templates/request/modal_notify.html")
 
-check("request_app.js 引用带版本号（浏览器缓存破坏，2.4）",
-      "request_app.js?v=2.4" in req_tpl)
+check("request_app.js 引用带版本号（浏览器缓存破坏，2.5）",
+      "request_app.js?v=2.5" in req_tpl)
 # 1.9.6 起通知设置不再由 Alpine 主组件承载（1.9.7 改为页面内原生弹窗）
 check("request_app.js 不再包含任何通知设置 state/方法（1.9.6 起移除）",
       all(x not in req_js for x in (
@@ -694,10 +694,10 @@ check("CI 接入安全契约与富文本净化回归",
       and "tests/test_sanitize_rich_html.py" in ci)
 check("等价性回归扩展第二批第 8 节",
       "== 8. 第二批" in read("tests/test_refactor_2_0_equivalence.py"))
-check("2.4 发版版本点已同步（历史 tag 不重推）",
-      'APP_VERSION = "2.4"' in read("app/shared/version.py")
-      and "IMAGE_TAG:-2.4" in read("docker-compose.yml")
-      and "request_app.js?v=2.4" in read("templates/request.html"))
+check("2.5 发版版本点已同步（历史 tag 不重推）",
+      'APP_VERSION = "2.5"' in read("app/shared/version.py")
+      and "IMAGE_TAG:-2.5" in read("docker-compose.yml")
+      and "request_app.js?v=2.5" in read("templates/request.html"))
 check("CHANGELOG 记录第二批零风险收尾", "第二批" in changelog)
 check("重构文档记录第二批决策与 B0 收口建议撤销",
       "## 7. 第二批零风险加固" in read("docs/REFACTOR_2.0.md")
@@ -716,8 +716,8 @@ check("主页只列功能与用法，不堆按版本罗列的修复史",
 check("主页指向 CHANGELOG / Releases 查看详细更新说明",
       "CHANGELOG.md" in readme and "GitHub Releases" in readme)
 check("主页版本锁定与实际 compose 一致",
-      "IMAGE_TAG:-2.4" in readme
-      and "ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-2.4}" in readme)
+      "IMAGE_TAG:-2.5" in readme
+      and "ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-2.5}" in readme)
 
 print("== 问题 19: 2.0 主线优化 B 批（公共逻辑抽离 / 性能 / 安全） ==")
 LIB_BASE = "app/bot/notification_bot/"
@@ -894,10 +894,10 @@ check("梯队 0 四项能力全部接入 CI verify",
           "tools/architecture_report.py .",
           "tools/bench_hotpaths.py .",
           "tools/run_all_checks.py .")))
-check("2.4 发版：版本点已同步到 2.4（历史 tag 不重推）",
-      'APP_VERSION = "2.4"' in read("app/shared/version.py")
-      and "IMAGE_TAG:-2.4" in read("docker-compose.yml")
-      and "request_app.js?v=2.4" in read("templates/request.html"))
+check("2.5 发版：版本点已同步到 2.5（历史 tag 不重推）",
+      'APP_VERSION = "2.5"' in read("app/shared/version.py")
+      and "IMAGE_TAG:-2.5" in read("docker-compose.yml")
+      and "request_app.js?v=2.5" in read("templates/request.html"))
 check("重构文档新增 8.6 节记录梯队 0 与零运行时改动口径",
       "### 8.6" in read("docs/REFACTOR_2.0.md")
       and "零运行时代码改动" in read("docs/REFACTOR_2.0.md"))
