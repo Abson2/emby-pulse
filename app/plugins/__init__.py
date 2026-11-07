@@ -158,6 +158,17 @@ def get_external_manifests() -> Dict[str, dict]:
     return dict(_external_manifests)
 
 
+def get_plugin_scheduler():
+    """转发到 ``app.plugins.scheduler`` 子模块（2.5.1）。
+
+    修复：路由层写的是 ``from app.plugins import get_plugin_scheduler``，但该函数
+    此前只存在于子模块、包级未导出，导致「定时执行」面板接口 ImportError 500。
+    延迟导入避免与插件发现流程产生循环依赖。
+    """
+    from app.plugins.scheduler import get_plugin_scheduler as _get_scheduler
+    return _get_scheduler()
+
+
 def refresh_external_manifests() -> None:
     """重新扫描外部插件目录并同步内存 manifest 表（2.5）。
 

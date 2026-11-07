@@ -44,6 +44,179 @@ def api_list_plugins(request: Request):
     return {"status": "success", "data": get_all_plugins()}
 
 
+# ==========================================
+# 2.5.1 定时执行（cron 计划）：北京时间 UTC+8 / 防并发 / 离线不补跑
+# 静态前缀置于所有 /api/plugins/{plugin_id}/... 动态路由之前，避免被抢占匹配。
+# ==========================================
+
+def _plans_module():
+    from app.plugins import schedule_plans
+    return schedule_plans
+
+
+def _plan_runtime():
+    """取得计划运行时（bootstrap 未接线时按需幂等启动，避免接口 500）。"""
+    sp = _plans_module()
+    runtime = sp.get_plan_runtime()
+    if runtime is None:
+        runtime = sp.start_plugin_plan_scheduler()
+    return runtime
+
+
+def _plan_view(plan: dict, plugin_names: dict) -> dict:
+    """把存储结构补成前端卡片所需的展示字段。"""
+    sp = _plans_module()
+    status_text = {
+        "success": "运行成功", "failed": "运行失败", "skipped": "已跳过", "": "尚未运行",
+    }.get(plan.get("last_status", ""), plan.get("last_status", ""))
+    return {
+        "id": plan["id"],
+        "name": plan["name"],
+        "description": plan.get("description", ""),
+        "plugin_id": plan["plugin_id"],
+        "plugin_name": plugin_names.get(plan["plugin_id"], plan["plugin_id"]),
+        "cron": plan["cron"],
+        "enabled": bool(plan.get("enabled")),
+        "next_run_at": plan.get("next_run_at"),
+        "next_run_text": sp.fmt_ts(plan.get("next_run_at")) or "—",
+        "last_run_at": plan.get("last_run_at"),
+        "last_run_text": sp.fmt_ts(plan.get("last_run_at")),
+        "last_status": plan.get("last_status", ""),
+        "last_status_text": status_text,
+        "last_message": plan.get("last_message", ""),
+        "last_duration_ms": plan.get("last_duration_ms", 0),
+        "results_count": len(plan.get("results", [])),
+    }
+
+
+@router.get("/api/plugins/plans")
+def api_list_plugin_plans(request: Request):
+    """定时计划列表 + 可选插件下拉 + 服务器当前北京时间。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    sp = _plans_module()
+    store = sp.get_plan_store()
+    plugins = []
+    names = {}
+    for meta in get_all_plugins():
+        names[meta["id"]] = meta.get("name", meta["id"])
+        plugins.append({
+            "id": meta["id"], "name": meta.get("name", meta["id"]),
+            "enabled": bool(meta.get("enabled")),
+            "loaded": bool(meta.get("loaded", True)),
+            "external": bool(meta.get("external")),
+        })
+    data = [_plan_view(p, names) for p in store.list_plans()]
+    return {
+        "status": "success",
+        "data": data,
+        "plugins": plugins,
+        "server_time": sp.fmt_ts(time.time()),
+        "timezone": "UTC+8",
+    }
+
+
+@router.post("/api/plugins/plans")
+async def api_create_plugin_plan(request: Request):
+    """新增定时计划。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    sp = _plans_module()
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        return {"status": "error", "message": "请求数据格式错误"}
+    try:
+        plan = sp.get_plan_store().create_plan(payload)
+    except sp.PlanError as exc:
+        return {"status": "error", "message": str(exc)}
+    except Exception as exc:
+        return {"status": "error", "message": "计划保存失败: %s" % exc}
+    _plan_runtime()
+    return {"status": "success", "data": _plan_view(plan, {}), "message": "计划已创建"}
+
+
+@router.put("/api/plugins/plans/{plan_id}")
+async def api_update_plugin_plan(plan_id: str, request: Request):
+    """编辑计划（名称/描述/插件/cron/启停）。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    sp = _plans_module()
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        return {"status": "error", "message": "请求数据格式错误"}
+    try:
+        plan = sp.get_plan_store().update_plan(plan_id, payload)
+    except sp.PlanError as exc:
+        return {"status": "error", "message": str(exc)}
+    except Exception as exc:
+        return {"status": "error", "message": "计划更新失败: %s" % exc}
+    if plan is None:
+        return {"status": "error", "message": "计划不存在"}
+    _plan_runtime()
+    return {"status": "success", "data": _plan_view(plan, {}), "message": "计划已更新"}
+
+
+@router.post("/api/plugins/plans/{plan_id}/toggle")
+async def api_toggle_plugin_plan(plan_id: str, request: Request):
+    """停用 / 启用计划（截图「停用」按钮）。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    sp = _plans_module()
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    enabled = bool(payload.get("enabled")) if isinstance(payload, dict) else False
+    plan = sp.get_plan_store().update_plan(plan_id, {"enabled": enabled})
+    if plan is None:
+        return {"status": "error", "message": "计划不存在"}
+    return {"status": "success", "message": "已启用" if enabled else "已停用"}
+
+
+@router.post("/api/plugins/plans/{plan_id}/run")
+async def api_run_plugin_plan(plan_id: str, request: Request):
+    """「立即执行」：与 cron 触发共用同一运行时，上一轮未结束则跳过。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    runtime = _plan_runtime()
+    ok, message = await run_in_threadpool(runtime.run_plan, plan_id, "manual")
+    return {"status": "success" if ok else "error", "message": message or "已触发"}
+
+
+@router.get("/api/plugins/plans/{plan_id}/results")
+def api_plugin_plan_results(plan_id: str, request: Request):
+    """「查看结果」：最近 20 次运行记录（北京时间倒序）。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    sp = _plans_module()
+    if sp.get_plan_store().get_plan(plan_id) is None:
+        return {"status": "error", "message": "计划不存在"}
+    rows = sp.get_plan_store().results_of(plan_id)
+    status_text = {"success": "运行成功", "failed": "运行失败", "skipped": "已跳过"}
+    for row in rows:
+        row["at_text"] = sp.fmt_ts(row.get("at"))
+        row["status_text"] = status_text.get(row.get("status", ""), row.get("status", ""))
+        row["trigger_text"] = "手动" if row.get("trigger") == "manual" else "定时"
+    return {"status": "success", "data": rows}
+
+
+@router.delete("/api/plugins/plans/{plan_id}")
+def api_delete_plugin_plan(plan_id: str, request: Request):
+    """删除计划（不影响插件本身与其配置）。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    ok = _plans_module().get_plan_store().delete_plan(plan_id)
+    if not ok:
+        return {"status": "error", "message": "计划不存在"}
+    return {"status": "success", "message": "计划已删除"}
+
+
 @router.post("/api/plugins/{plugin_id}/toggle")
 async def api_toggle_plugin(plugin_id: str, request: Request):
     # 🔒 安全检查：必须管理员
@@ -310,7 +483,7 @@ def api_uninstall_plugin(plugin_id: str, request: Request):
     """卸载外部导入的插件；内置插件不可卸载。"""
     if not _admin_ok(request):
         return {"status": "error", "message": "需要管理员权限"}
-    from app.plugins import uninstall_plugin, plugin_dao
+    from app.plugins import uninstall_plugin, plugin_dao, refresh_external_manifests
 
     try:
         ok = uninstall_plugin(plugin_id)
@@ -318,9 +491,16 @@ def api_uninstall_plugin(plugin_id: str, request: Request):
         return {"status": "error", "message": str(exc)}
     if not ok:
         return {"status": "error", "message": "仅可卸载外部导入的插件"}
-    # 清理启用状态，避免重新导入同 id 时被当作「已启用」自动执行代码
-    plugin_dao.delete_plugin_state(plugin_id)
-    refresh_external_manifests()
+    # 清理启用状态，避免重新导入同 id 时被当作「已启用」自动执行代码。
+    # 磁盘目录已删除，后续清理失败不得把「卸载成功」翻转成 500（2.5.1 修复）。
+    try:
+        plugin_dao.delete_plugin_state(plugin_id)
+    except Exception:
+        return {"status": "success", "message": "已卸载（启用状态清理失败，不影响卸载结果）"}
+    try:
+        refresh_external_manifests()
+    except Exception:
+        pass
     return {"status": "success", "message": "已卸载；重启应用后残留路由将彻底清理"}
 
 
@@ -411,7 +591,8 @@ def api_plugin_schedules(request: Request):
     """所有插件的定时执行配置与状态（供「定时执行」面板渲染）。"""
     if not _admin_ok(request):
         return {"status": "error", "message": "需要管理员权限"}
-    from app.plugins import get_all_plugins, get_plugin_scheduler
+    from app.plugins import get_all_plugins
+    from app.plugins.scheduler import get_plugin_scheduler
 
     scheduler = get_plugin_scheduler()
     items = []
@@ -458,7 +639,8 @@ async def api_run_plugin_schedule(plugin_id: str, request: Request):
     """手动「立即执行」一次插件定时动作；仅对已加载（启用）的插件生效。"""
     if not _admin_ok(request):
         return {"status": "error", "message": "需要管理员权限"}
-    from app.plugins import get_plugin, get_plugin_scheduler
+    from app.plugins import get_plugin
+    from app.plugins.scheduler import get_plugin_scheduler
 
     plugin = get_plugin(plugin_id)
     if plugin is None or not plugin.enabled:

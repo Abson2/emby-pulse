@@ -1,5 +1,33 @@
 # 更新日志
 
+## 2.5.1
+
+插件定时执行修复与完善版：修复两个线上故障，并把「按分钟间隔」升级为北京时间 cron 计划管理。
+
+### 1. 修复：定时执行面板打不开（P0，运行时 ImportError）
+- 根因：`/api/plugins/schedules` 与 `/api/plugins/{id}/run-schedule` 写的是 `from app.plugins import get_plugin_scheduler`，但该函数只存在于 `app.plugins.scheduler` 子模块、包级未导出，接口抛 `ImportError` → 500，前端取不到 JSON 而显示打开失败。
+- 修复：`app/plugins/__init__.py` 增加延迟导入的转发导出；两个旧接口同时显式改从 `app.plugins.scheduler` 导入。新增静态契约（AST）校验 router 中所有 `from app.plugins import X` 的名字都能被解析，防止同类回归。
+
+### 2. 修复：卸载外部插件报「卸载失败」但文件其实已删除（P0，假失败）
+- 根因：`api_uninstall_plugin` 末尾调用了裸名字 `refresh_external_manifests()`，既无模块级也无局部导入，抛 `NameError` → 500；此时磁盘目录与启用状态已清理完成，用户看到失败并可能重复点击。
+- 修复：显式导入该函数；对 `delete_plugin_state` / `refresh_external_manifests` 做异常隔离，卸载主体成功即返回 `success`（清理失败仅在 message 中说明），不再把已完成的卸载翻转成 500。
+- 新增静态契约：AST 校验 router 中不存在「未定义裸名字调用」。
+
+### 3. 定时执行改为 cron 计划管理
+- 新增 `app/plugins/schedule_plans.py`（纯标准库）：5 段 cron 解析（`*` / 步长 `*/n` / 范围 `a-b` / 列表 `a,b` / 星期别名）、日与周的标准 OR 语义、非法表达式拒绝。
+- **北京时间 UTC+8**：不受容器 TZ 影响，页面显示「下次执行 / 最近触发」均为 UTC+8。
+- **上一轮仍在运行或排队时跳过本次触发**：cron 与手动「立即执行」共用 running 集合，跳过时写 `skipped` 结果并把下次执行后移，不堆积。
+- **服务离线期间不补跑**：启动时 `reconcile()` 把过期计划直接推进到「当前时间之后的下一次」，不回溯执行遗漏的触发。
+- 计划落盘到持久化卷（默认 `/workspace/data/plugin_schedules.json`），原子写 + 进程内锁，重启不丢；保留最近 20 条运行记录。
+- 新增管理端 API：`/api/plugins/plans` 列表/新增、`/{id}` 编辑/删除、`/{id}/toggle` 启停、`/{id}/run` 立即执行、`/{id}/results` 查看结果；全部沿用管理员守卫与 AuthGate 纵深防御。
+- 前端按计划卡片重做：标题/描述/状态徽章、cron 表达式框、参数说明、下次执行、最近触发与运行结果，以及编辑 / 停用 / 查看结果 / 立即执行 / 删除；新增计划弹窗含插件下拉与 5 个常用 cron 预设。
+- 2.5 的 `schedule_minutes` 按分钟间隔接口与调度器**全部保留**，不与新计划冲突，既有配置照常生效。
+
+### 4. 验证
+- 新增 `tests/test_plugin_schedule_plans.py`（96/0）：cron 解析与 UTC+8、输入校验、存储 CRUD/原子落盘/损坏容错、防并发跳过、离线不补跑、两个故障的 AST 回归契约、前端截图风格契约。
+- 全量纯标准库校验网 150/0、verify_patches、架构 6 项门槛、compileall、node --check、凭证扫描、YAML、git diff --check 全绿。
+- 架构基线按合法增长重采（`inline_script_lines` +138，来自新增的 cron 计划卡片与弹窗交互）。
+
 ## 2.5
 
 插件中心能力增强版：补齐管理端插件中心的完整工作流，并开放供脚本与插件调用的全局 OpenAPI 能力。

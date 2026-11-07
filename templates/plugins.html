@@ -122,21 +122,86 @@
     </div>
 </div>
 
-<!-- 2.5 定时执行面板 -->
+<!-- 2.5.1 插件定时执行：cron 计划管理（北京时间 UTC+8） -->
 <div id="plugin-schedule-modal" class="fixed inset-0 z-[210] hidden items-center justify-center p-4 backdrop-blur-sm bg-black/40" onclick="if(event.target===this) closePluginModal('plugin-schedule-modal')">
     <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[88vh] border border-gray-100 dark:border-white/10">
-        <div class="px-5 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center shrink-0">
-            <h3 class="text-[16px] font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center"><i class="fa-regular fa-clock text-white text-[11px]"></i></div>
-                定时执行
-            </h3>
-            <button onclick="closePluginModal('plugin-schedule-modal')" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+        <div class="px-6 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-start shrink-0">
+            <div class="min-w-0 pr-3">
+                <h3 class="text-[17px] font-black text-gray-800 dark:text-gray-100">插件定时执行</h3>
+                <p class="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed mt-1">
+                    cron 按北京时间（UTC+8）执行。上一轮仍在运行或排队时跳过本次触发；服务离线期间不补跑。
+                </p>
+            </div>
+            <button onclick="closePluginModal('plugin-schedule-modal')" class="w-8 h-8 shrink-0 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="px-6 py-3 border-b border-gray-100 dark:border-white/5 flex items-center justify-between gap-3 shrink-0">
+            <span class="text-[13px] font-bold text-gray-700 dark:text-gray-200"><span id="schedule-plan-count">0</span> 个定时计划</span>
+            <div class="flex items-center gap-2">
+                <button onclick="loadPluginPlans()" class="px-3.5 py-1.5 text-[12px] font-bold rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"><i class="fa-solid fa-rotate mr-1"></i>刷新计划</button>
+                <button onclick="openPluginPlanEditor()" class="px-3.5 py-1.5 text-[12px] font-bold rounded-xl bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors"><i class="fa-solid fa-plus mr-1"></i>新增计划</button>
+            </div>
         </div>
         <div class="p-5 overflow-y-auto mac-scrollbar flex-1">
-            <p class="text-[11px] text-gray-500 leading-relaxed mb-3">按「分钟」间隔触发插件的定时动作（0 = 关闭，最大 10080 = 7 天）。仅<b>已启用</b>且实现了定时动作的插件会被触发；间隔随插件配置保存，重启后依旧生效。</p>
-            <div id="schedule-list" class="space-y-2">
-                <div class="text-center py-8 text-gray-400 text-[12px]"><i class="fa-solid fa-spinner fa-spin mr-1"></i>正在读取…</div>
+            <div id="schedule-plan-list" class="space-y-3">
+                <div class="text-center py-8 text-gray-400 text-[12px]"><i class="fa-solid fa-spinner fa-spin mr-1"></i>正在读取计划…</div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- 2.5.1 新增 / 编辑定时计划 -->
+<div id="plugin-plan-edit-modal" class="fixed inset-0 z-[220] hidden items-center justify-center p-4 backdrop-blur-sm bg-black/40" onclick="if(event.target===this) closePluginModal('plugin-plan-edit-modal')">
+    <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[88vh] border border-gray-100 dark:border-white/10">
+        <div class="px-6 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center shrink-0">
+            <h3 id="plan-editor-title" class="text-[16px] font-black text-gray-800 dark:text-gray-100">新增计划</h3>
+            <button onclick="closePluginModal('plugin-plan-edit-modal')" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-6 overflow-y-auto mac-scrollbar flex-1 space-y-4">
+            <div>
+                <label class="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1.5 block">计划名称</label>
+                <input type="text" id="plan-name" maxlength="64" placeholder="例如：完结关键词清理" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-violet-500">
+            </div>
+            <div>
+                <label class="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1.5 block">描述（可选）</label>
+                <input type="text" id="plan-desc" maxlength="128" placeholder="例如：求片完结关键词清理" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-violet-500">
+            </div>
+            <div>
+                <label class="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1.5 block">执行插件</label>
+                <select id="plan-plugin" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-violet-500"></select>
+                <p class="text-[10px] text-gray-400 mt-1">计划复用插件已保存的设置；外部插件需先启用才会加载代码。</p>
+            </div>
+            <div>
+                <label class="text-[11px] font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1.5 block">cron 表达式（分 时 日 月 周 · 北京时间）</label>
+                <input type="text" id="plan-cron" maxlength="64" placeholder="0 9 * * *" oninput="updatePlanCronHint()" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-[13px] font-mono focus:outline-none focus:ring-2 focus:ring-violet-500">
+                <div class="flex flex-wrap gap-1.5 mt-2" id="plan-cron-presets">
+                    <button onclick="setPlanCron('0 9 * * *')" class="px-2 py-1 text-[10px] font-bold rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">每天 09:00</button>
+                    <button onclick="setPlanCron('0 * * * *')" class="px-2 py-1 text-[10px] font-bold rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">每小时</button>
+                    <button onclick="setPlanCron('*/30 * * * *')" class="px-2 py-1 text-[10px] font-bold rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">每 30 分钟</button>
+                    <button onclick="setPlanCron('0 3 * * 0')" class="px-2 py-1 text-[10px] font-bold rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">每周日 03:00</button>
+                    <button onclick="setPlanCron('0 2 1 * *')" class="px-2 py-1 text-[10px] font-bold rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors">每月 1 日 02:00</button>
+                </div>
+                <p id="plan-cron-hint" class="text-[10px] text-gray-400 mt-1.5 font-mono">下次执行：—</p>
+            </div>
+            <label class="flex items-center gap-2.5 text-[12px] text-gray-600 dark:text-gray-300 cursor-pointer">
+                <input type="checkbox" id="plan-enabled" class="w-4 h-4 rounded text-violet-500 border-gray-300" checked> 创建后立即启用
+            </label>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-100 dark:border-white/5 flex justify-end gap-2 shrink-0">
+            <button onclick="closePluginModal('plugin-plan-edit-modal')" class="px-4 py-2 text-[12px] font-bold rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">取消</button>
+            <button id="plan-save-btn" onclick="savePluginPlan()" class="px-5 py-2 text-[12px] font-bold rounded-xl bg-violet-500 text-white hover:bg-violet-600 transition-colors disabled:opacity-50">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- 2.5.1 查看执行结果 -->
+<div id="plugin-plan-results-modal" class="fixed inset-0 z-[220] hidden items-center justify-center p-4 backdrop-blur-sm bg-black/40" onclick="if(event.target===this) closePluginModal('plugin-plan-results-modal')">
+    <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[88vh] border border-gray-100 dark:border-white/10">
+        <div class="px-6 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center shrink-0">
+            <h3 class="text-[16px] font-black text-gray-800 dark:text-gray-100">执行结果 <span id="plan-results-name" class="text-[12px] font-bold text-gray-400 ml-1"></span></h3>
+            <button onclick="closePluginModal('plugin-plan-results-modal')" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-5 overflow-y-auto mac-scrollbar flex-1">
+            <div id="plan-results-list" class="space-y-2"></div>
         </div>
     </div>
 </div>
@@ -6302,82 +6367,220 @@ async function installMarketPlugin(pluginId, btn) {
     }
 }
 
-// ---- 定时执行面板 ----
+// ---- 2.5.1 定时执行：cron 计划管理（北京时间 UTC+8） ----
+let planCache = { plans: [], plugins: [] };
+let planEditingId = '';
+
 async function openPluginSchedulePanel() {
     openPluginModal('plugin-schedule-modal');
-    const list = document.getElementById('schedule-list');
-    list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]"><i class="fa-solid fa-spinner fa-spin mr-2"></i>读取中...</div>';
+    await loadPluginPlans();
+}
+
+function planEsc(v) { return epEsc(v == null ? '' : String(v)); }
+
+async function loadPluginPlans() {
+    const list = document.getElementById('schedule-plan-list');
+    const countEl = document.getElementById('schedule-plan-count');
+    list.innerHTML = '<div class="text-center py-8 text-gray-400 text-[12px]"><i class="fa-solid fa-spinner fa-spin mr-2"></i>正在读取计划…</div>';
     try {
-        const res = await (await fetch('/api/plugins/schedules')).json();
+        const res = await (await fetch('/api/plugins/plans')).json();
         if (res.status !== 'success') {
-            list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]">' + epEsc(res.message || '读取失败') + '</div>';
+            list.innerHTML = '<div class="text-center py-8 text-gray-400 text-[12px]">' + planEsc(res.message || '读取失败') + '</div>';
             return;
         }
-        const items = res.data || [];
-        if (!items.length) {
-            list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]">暂无插件</div>';
+        planCache = { plans: res.data || [], plugins: res.plugins || [] };
+        countEl.textContent = planCache.plans.length;
+        if (!planCache.plans.length) {
+            list.innerHTML = '<div class="text-center py-10 text-gray-400 text-[12px] border border-dashed border-gray-200 dark:border-white/10 rounded-2xl">'
+                + '还没有定时计划，点右上角「新增计划」创建一个。</div>';
             return;
         }
-        list.innerHTML = items.map(function (p) {
-            const badge = p.enabled
-                ? '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 shrink-0">已启用</span>'
-                : '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-400 shrink-0">未启用</span>';
-            const lastRun = p.last_run ? new Date(p.last_run * 1000).toLocaleString() : '从未执行';
-            const runBtn = (p.loaded && p.enabled)
-                ? '<button data-sched-id="' + epEsc(p.id) + '" onclick="runPluginScheduleNow(this.dataset.schedId, this)" class="px-3 py-1.5 text-[11px] font-bold rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-300 border border-amber-100 dark:border-amber-500/20 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors shrink-0 disabled:opacity-50">立即执行</button>'
-                : '';
-            const hint = (p.enabled && !p.loaded) ? '<p class="text-[10px] text-gray-400 mt-1">外部插件启用后才会加载代码并参与调度</p>' : '';
-            return '<div class="flex items-center gap-3 p-3.5 rounded-xl border border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/20">'
-                + '<div class="flex-1 min-w-0">'
-                + '<div class="flex items-center gap-2"><span class="text-[13px] font-bold text-gray-800 dark:text-gray-100 truncate">' + epEsc(p.name) + '</span>' + badge + '</div>'
-                + '<p class="text-[10px] text-gray-400 mt-1 font-mono">上次触发：' + epEsc(lastRun) + (p.minutes > 0 ? ' · 约 ' + Math.ceil((p.next_due_in || 0) / 60) + ' 分钟后到点' : '') + '</p>'
-                + hint
-                + '</div>'
-                + '<div class="flex items-center gap-2 shrink-0">'
-                + '<input type="number" min="0" max="10080" value="' + (p.minutes || 0) + '" data-min-input="' + epEsc(p.id) + '" class="w-20 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-brand-500">'
-                + '<span class="text-[11px] text-gray-400">分钟</span>'
-                + '<button data-sched-id="' + epEsc(p.id) + '" onclick="savePluginSchedule(this.dataset.schedId, this)" class="px-3 py-1.5 text-[11px] font-bold rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors disabled:opacity-50">保存</button>'
-                + runBtn
-                + '</div>'
-                + '</div>';
-        }).join('');
+        list.innerHTML = planCache.plans.map(renderPlanCard).join('');
     } catch (e) {
-        list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]">' + epEsc(e.message) + '</div>';
+        list.innerHTML = '<div class="text-center py-8 text-gray-400 text-[12px]">读取失败：' + planEsc(e.message) + '</div>';
     }
 }
 
-async function savePluginSchedule(pluginId, btn) {
-    const input = document.querySelector('[data-min-input="' + pluginId + '"]');
-    const minutes = parseInt((input && input.value) || '0', 10);
-    if (isNaN(minutes) || minutes < 0 || minutes > 10080) {
-        showToast('warning', '取值无效', '间隔取 0（关闭）~ 10080 分钟');
+function renderPlanCard(p) {
+    const id = planEsc(p.id);
+    const badge = p.enabled
+        ? '<span class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 shrink-0">已启用</span>'
+        : '<span class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 shrink-0">已停用</span>';
+    const statusClass = p.last_status === 'success'
+        ? 'text-emerald-600 dark:text-emerald-400'
+        : (p.last_status === 'failed' ? 'text-rose-600 dark:text-rose-400' : 'text-gray-400');
+    const lastText = p.last_run_text
+        ? '最近触发：' + planEsc(p.last_run_text) + ' · <span class="' + statusClass + '">' + planEsc(p.last_status_text || '—') + '</span>'
+        : '最近触发：尚未运行';
+    const btn = 'px-3.5 py-2 text-[12px] font-bold rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50';
+    return '<div class="rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.02] p-4">'
+        + '<div class="flex items-start justify-between gap-3">'
+        + '<div class="min-w-0"><h4 class="text-[15px] font-black text-gray-800 dark:text-gray-100">' + planEsc(p.name) + '</h4>'
+        + '<p class="text-[12px] text-gray-500 dark:text-gray-400 mt-1">' + planEsc(p.description || p.plugin_name) + '</p></div>'
+        + badge + '</div>'
+        + '<div class="mt-3 rounded-xl bg-gray-50 dark:bg-black/20 border border-gray-100 dark:border-white/5 px-4 py-3 font-mono text-[13px] tracking-wide text-gray-700 dark:text-gray-200">' + planEsc(p.cron) + '</div>'
+        + '<p class="text-[12px] text-gray-500 dark:text-gray-400 mt-3">参数：复用插件已保存的设置（' + planEsc(p.plugin_name) + '）</p>'
+        + '<p class="text-[12px] text-gray-500 dark:text-gray-400 mt-1">下次执行：' + planEsc(p.next_run_text) + '</p>'
+        + '<p class="text-[12px] text-gray-500 dark:text-gray-400 mt-1">' + lastText + '</p>'
+        + '<div class="mt-4 flex flex-wrap items-center gap-2">'
+        + '<button data-plan-id="' + id + '" onclick="openPluginPlanEditor(this.dataset.planId)" class="' + btn + '">编辑</button>'
+        + '<button data-plan-id="' + id + '" data-plan-enabled="' + (p.enabled ? '1' : '0') + '" onclick="togglePluginPlan(this.dataset.planId, this.dataset.planEnabled === \'0\', this)" class="' + btn + '">' + (p.enabled ? '停用' : '启用') + '</button>'
+        + '<button data-plan-id="' + id + '" onclick="viewPluginPlanResults(this.dataset.planId)" class="' + btn + '">查看结果</button>'
+        + '<span class="flex-1"></span>'
+        + '<button data-plan-id="' + id + '" onclick="runPluginPlanNow(this.dataset.planId, this)" class="px-3.5 py-2 text-[12px] font-bold rounded-xl bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors disabled:opacity-50">立即执行</button>'
+        + '<button data-plan-id="' + id + '" onclick="deletePluginPlan(this.dataset.planId, this)" class="' + btn + ' hover:!bg-rose-50 dark:hover:!bg-rose-500/10 hover:!text-rose-600">删除</button>'
+        + '</div></div>';
+}
+
+function setPlanCron(value) {
+    const input = document.getElementById('plan-cron');
+    if (input) { input.value = value; updatePlanCronHint(); }
+}
+
+// 前端轻量预览：仅解析常见的「分 时 日 月 周」数字/通配写法，最终以服务端校验为准
+function updatePlanCronHint() {
+    const hint = document.getElementById('plan-cron-hint');
+    const raw = (document.getElementById('plan-cron') || {}).value || '';
+    const parts = raw.trim().split(/\s+/);
+    if (!hint) return;
+    if (parts.length !== 5 || !/^[0-9*,/\-\s]+$/.test(raw)) {
+        hint.textContent = '下次执行：—（由服务端校验 cron 表达式）';
         return;
     }
+    const minF = parts[0], hourF = parts[1];
+    let text = '下次执行：—';
+    if (/^\d+$/.test(minF) && /^\d+$/.test(hourF)) {
+        text = '每天 ' + hourF.padStart(2, '0') + ':' + minF.padStart(2, '0') + '（北京时间）';
+    } else if (minF === '0' && hourF === '*') {
+        text = '每小时整点（北京时间）';
+    } else if (/^\*\/\d+$/.test(minF) && hourF === '*') {
+        text = '每 ' + minF.slice(2) + ' 分钟';
+    }
+    hint.textContent = text + ' · 以服务端校验为准';
+}
+
+function openPluginPlanEditor(planId) {
+    planEditingId = planId || '';
+    const p = planEditingId ? planCache.plans.find(function (x) { return x.id === planEditingId; }) : null;
+    document.getElementById('plan-editor-title').textContent = p ? '编辑计划' : '新增计划';
+    document.getElementById('plan-name').value = p ? p.name : '';
+    document.getElementById('plan-desc').value = p ? (p.description || '') : '';
+    const sel = document.getElementById('plan-plugin');
+    sel.innerHTML = planCache.plugins.length
+        ? planCache.plugins.map(function (x) {
+            return '<option value="' + planEsc(x.id) + '">' + planEsc(x.name) + '（' + planEsc(x.id) + '）</option>';
+        }).join('')
+        : '<option value="">暂无可用插件</option>';
+    sel.value = p ? p.plugin_id : (planCache.plugins[0] ? planCache.plugins[0].id : '');
+    document.getElementById('plan-cron').value = p ? p.cron : '0 9 * * *';
+    document.getElementById('plan-enabled').checked = p ? p.enabled : true;
+    updatePlanCronHint();
+    openPluginModal('plugin-plan-edit-modal');
+}
+
+async function savePluginPlan() {
+    const btn = document.getElementById('plan-save-btn');
+    const payload = {
+        name: document.getElementById('plan-name').value.trim(),
+        description: document.getElementById('plan-desc').value.trim(),
+        plugin_id: document.getElementById('plan-plugin').value,
+        cron: document.getElementById('plan-cron').value.trim(),
+        enabled: document.getElementById('plan-enabled').checked
+    };
+    if (!payload.name) { showToast('warning', '请填写计划名称', ''); return; }
+    if (!payload.plugin_id) { showToast('warning', '请选择执行插件', ''); return; }
     btn.disabled = true;
     try {
-        const res = await fetch('/api/plugins/' + encodeURIComponent(pluginId) + '/schedule', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ minutes: minutes })
+        const url = planEditingId ? '/api/plugins/plans/' + encodeURIComponent(planEditingId) : '/api/plugins/plans';
+        const method = planEditingId ? 'PUT' : 'POST';
+        const res = await fetch(url, {
+            method: method, headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (data.status !== 'success') { showToast('error', '保存失败', data.message || ''); return; }
-        showToast('success', '已保存', minutes > 0 ? '每 ' + minutes + ' 分钟触发一次' : '已关闭定时执行');
-        openPluginSchedulePanel();
+        showToast('success', '已保存', data.message || '计划已保存');
+        closePluginModal('plugin-plan-edit-modal');
+        await loadPluginPlans();
     } catch (e) {
         showToast('error', '保存失败', e.message);
     } finally { btn.disabled = false; }
 }
 
-async function runPluginScheduleNow(pluginId, btn) {
+async function togglePluginPlan(planId, enable, btn) {
     btn.disabled = true;
     try {
-        const res = await fetch('/api/plugins/' + encodeURIComponent(pluginId) + '/run-schedule', { method: 'POST' });
+        const res = await fetch('/api/plugins/plans/' + encodeURIComponent(planId) + '/toggle', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: !!enable })
+        });
+        const data = await res.json();
+        if (data.status !== 'success') { showToast('error', '操作失败', data.message || ''); return; }
+        showToast('success', enable ? '已启用' : '已停用', data.message || '');
+        await loadPluginPlans();
+    } catch (e) {
+        showToast('error', '操作失败', e.message);
+    } finally { btn.disabled = false; }
+}
+
+async function runPluginPlanNow(planId, btn) {
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/plugins/plans/' + encodeURIComponent(planId) + '/run', { method: 'POST' });
         const data = await res.json();
         if (data.status !== 'success') { showToast('error', '执行失败', data.message || ''); return; }
-        showToast('success', '已触发', data.message || '定时动作已执行');
+        showToast('success', '运行成功', data.message || '已触发一次');
+        await loadPluginPlans();
     } catch (e) {
         showToast('error', '执行失败', e.message);
     } finally { btn.disabled = false; }
+}
+
+async function deletePluginPlan(planId, btn) {
+    const p = planCache.plans.find(function (x) { return x.id === planId; });
+    if (!confirm('确定删除定时计划「' + (p ? p.name : planId) + '」？插件本身不会被卸载。')) return;
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/plugins/plans/' + encodeURIComponent(planId), { method: 'DELETE' });
+        const data = await res.json();
+        if (data.status !== 'success') { showToast('error', '删除失败', data.message || ''); return; }
+        showToast('success', '已删除', data.message || '计划已删除');
+        await loadPluginPlans();
+    } catch (e) {
+        showToast('error', '删除失败', e.message);
+    } finally { btn.disabled = false; }
+}
+
+async function viewPluginPlanResults(planId) {
+    const p = planCache.plans.find(function (x) { return x.id === planId; });
+    document.getElementById('plan-results-name').textContent = p ? '· ' + p.name : '';
+    const box = document.getElementById('plan-results-list');
+    box.innerHTML = '<div class="text-center py-8 text-gray-400 text-[12px]"><i class="fa-solid fa-spinner fa-spin mr-2"></i>读取中…</div>';
+    openPluginModal('plugin-plan-results-modal');
+    try {
+        const res = await (await fetch('/api/plugins/plans/' + encodeURIComponent(planId) + '/results')).json();
+        if (res.status !== 'success') {
+            box.innerHTML = '<div class="text-center py-8 text-gray-400 text-[12px]">' + planEsc(res.message || '读取失败') + '</div>';
+            return;
+        }
+        const rows = res.data || [];
+        if (!rows.length) {
+            box.innerHTML = '<div class="text-center py-10 text-gray-400 text-[12px] border border-dashed border-gray-200 dark:border-white/10 rounded-2xl">尚无运行记录，可点「立即执行」试一次。</div>';
+            return;
+        }
+        box.innerHTML = rows.map(function (r) {
+            const cls = r.status === 'success' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                : (r.status === 'failed' ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300'
+                    : 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300');
+            return '<div class="flex items-start gap-3 p-3 rounded-xl border border-gray-100 dark:border-white/5">'
+                + '<div class="flex-1 min-w-0"><p class="text-[12px] font-bold font-mono text-gray-700 dark:text-gray-200">' + planEsc(r.at_text) + ' <span class="text-[10px] font-normal text-gray-400">' + planEsc(r.trigger_text) + '</span></p>'
+                + '<p class="text-[11px] text-gray-500 dark:text-gray-400 mt-1 break-all">' + planEsc(r.message || '—') + '</p></div>'
+                + '<span class="text-[10px] font-bold px-2 py-1 rounded-lg shrink-0 ' + cls + '">' + planEsc(r.status_text) + '</span>'
+                + '</div>';
+        }).join('');
+    } catch (e) {
+        box.innerHTML = '<div class="text-center py-8 text-gray-400 text-[12px]">读取失败：' + planEsc(e.message) + '</div>';
+    }
 }
 
 // ---- 开发文档（AI 开发提示词 / 开发指南 共用弹窗） ----
