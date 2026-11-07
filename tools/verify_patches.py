@@ -866,9 +866,10 @@ check("全量校验网自动发现 + 排除自身 + 29 项显式排除 + 超时�
       "excluded=%d" % len(_t0_excluded))
 _t0_gmax = _t0_literal(_t0_arch, "GATES_MAX")
 _t0_gmin = _t0_literal(_t0_arch, "GATES_MIN")
-check("架构门槛只 gate 4 项坏味道 + 1 项防回退（规模类不 gate）",
+check("架构门槛只 gate 5 项坏味道 + 1 项防回退（规模类不 gate）",
       set(_t0_gmax) == {"inline_script_lines", "inline_script_blocks",
-                        "loop_db_calls", "longest_function_lines"}
+                        "loop_db_calls", "loop_literal_regex_calls",
+                        "longest_function_lines"}
       and _t0_gmin == ["ddl_helper_calls"],
       "max=%s min=%s" % (_t0_gmax, _t0_gmin))
 check("架构 / 基准两份基线已入库且可用 --init 重建",
@@ -900,6 +901,55 @@ check("梯队 0 不发版：版本点仍锁定 v2.0.2",
 check("重构文档新增 8.6 节记录梯队 0 与零运行时改动口径",
       "### 8.6" in read("docs/REFACTOR_2.0.md")
       and "零运行时代码改动" in read("docs/REFACTOR_2.0.md"))
+
+print("== 问题 22: 2.1 批次 1（循环内字面量正则外提，可证等价） ==")
+_t1_golden = _json21.loads(read("tests/loop_regex_golden.json"))
+_t1_specs = _t1_golden["specs"]
+_t1_files = sorted({s["file"] for s in _t1_specs})
+check("改代码前采集的正则 golden 覆盖 16 组 spec / 7 个文件",
+      len(_t1_specs) == 16 and len(_t1_files) == 7
+      and all(set(s) >= {"id", "file", "op", "pattern", "flags", "inputs", "oracle"}
+              for s in _t1_specs),
+      "specs=%d files=%d" % (len(_t1_specs), len(_t1_files)))
+_t1_consts = 0
+_t1_loop_left = []
+for _rel22 in _t1_files:
+    _tr22 = ast.parse(read(_rel22))
+    for _n22 in _tr22.body:
+        if (isinstance(_n22, ast.Assign) and isinstance(_n22.value, ast.Call)
+                and isinstance(_n22.value.func, ast.Attribute)
+                and _n22.value.func.attr == "compile"
+                and isinstance(_n22.value.func.value, ast.Name)
+                and _n22.value.func.value.id == "re"):
+            _t1_consts += 1
+    for _n22 in ast.walk(_tr22):
+        if isinstance(_n22, (ast.For, ast.AsyncFor, ast.While)):
+            for _c22 in ast.walk(_n22):
+                if (isinstance(_c22, ast.Call) and isinstance(_c22.func, ast.Attribute)
+                        and isinstance(_c22.func.value, ast.Name)
+                        and _c22.func.value.id == "re" and _c22.args
+                        and isinstance(_c22.args[0], ast.Constant)
+                        and isinstance(_c22.args[0].value, str)):
+                    _t1_loop_left.append((_rel22, _c22.lineno))
+check("16 个模块级 re.compile 常量落地（AST 赋值计数）",
+      _t1_consts == 16, str(_t1_consts))
+check("7 个文件循环体内字面量正则调用归零（AST 真实调用）",
+      not _t1_loop_left, str(_t1_loop_left[:3]))
+check("等价性测试以 golden + AST 双重锁定并锁定 21 个调用点",
+      all(s in read("tests/test_loop_regex_equivalence.py") for s in (
+          "loop_regex_golden.json", "CONST_BY_ID", "compile_consts",
+          "循环体内已无字面量正则调用", "21 个调用点")))
+check("2.1 等价性回归接入 CI verify",
+      "tests/test_loop_regex_equivalence.py" in ci)
+check("架构门槛新增 loop_literal_regex_calls 且基线为 0",
+      "loop_literal_regex_calls" in read("tools/architecture_report.py")
+      and _json21.loads(read("tools/architecture_baseline.json")).get("loop_literal_regex_calls") == 0)
+check("2.1 未把既有 execute() 改成 execute_many（事务边界语义不变）",
+      _json21.loads(read("tools/architecture_baseline.json")).get("execute_many_calls") == 0
+      and "def execute(self, sql: str, params=()) -> int:" in read("app/infra/db/system_store.py"))
+check("重构文档新增 2.1 章节记录完成口径与事务边界约束",
+      "## 9. 2.1" in read("docs/REFACTOR_2.0.md")
+      and "事务边界" in read("docs/REFACTOR_2.0.md"))
 
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:

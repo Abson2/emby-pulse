@@ -3,6 +3,7 @@
 搜索影巢资源、解锁下载链接、账户状态、每日签到
 """
 import time
+import re
 import json
 import logging
 import threading
@@ -15,6 +16,9 @@ from app.infra.clients.hdhive_client import hdhive_client
 from app.infra.clients.tmdb_client import tmdb_client
 
 logger = logging.getLogger("uvicorn")
+# 自动签到 while 循环内解析时间：模块级预编译
+_CHECKIN_TIME_RE = re.compile(r'^(\d{1,2}):?(\d{2})?')
+
 
 
 class HDHivePlugin(PluginBase):
@@ -1263,7 +1267,7 @@ class HDHivePlugin(PluginBase):
                     checkin_minute = 0
                     
                     # 支持多种格式：HH:MM、HH:MM:SS、纯数字（小时）
-                    time_match = re.match(r'^(\d{1,2}):?(\d{2})?', checkin_time_str)
+                    time_match = _CHECKIN_TIME_RE.match(checkin_time_str)
                     if time_match:
                         checkin_hour = int(time_match.group(1))
                         if time_match.group(2):

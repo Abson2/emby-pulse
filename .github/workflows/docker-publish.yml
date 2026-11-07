@@ -73,6 +73,9 @@ jobs:
       - name: 校验三条净化通道 golden 与属性（梯队 0）
         run: python tests/test_sanitizer_properties.py
 
+      - name: 校验 2.1 循环内正则预编译等价性（golden + AST）
+        run: python tests/test_loop_regex_equivalence.py
+
       - name: 架构指标报告与不恶化门槛
         run: python tools/architecture_report.py .
 

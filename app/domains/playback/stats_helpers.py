@@ -9,6 +9,11 @@ from app.infra.clients.media_server_client import media_api
 
 
 logger = logging.getLogger("uvicorn")
+# 季号解析循环内高频使用：模块级预编译（pattern / flags 与原调用一致）
+_SEASON_S_RE = re.compile(r"(?:S|Season\s*)0*(\d+)", re.I)
+_SEASON_CN_NUM_RE = re.compile(r"第\s*(\d+)\s*季")
+_SEASON_CN_HANZI_RE = re.compile(r"第\s*([一二三四五六七八九十]+)\s*季")
+
 
 _stats_cache = {
     "overview": {"data": None, "expires": 0},
@@ -63,28 +68,28 @@ def get_clean_name(item_name, item_type):
     cn_map = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
 
     for part in parts[1:]:
-        m1 = re.search(r"(?:S|Season\s*)0*(\d+)", part, re.I)
+        m1 = _SEASON_S_RE.search(part)
         if m1:
             season_num = int(m1.group(1))
             break
-        m2 = re.search(r"第\s*(\d+)\s*季", part)
+        m2 = _SEASON_CN_NUM_RE.search(part)
         if m2:
             season_num = int(m2.group(1))
             break
-        m3 = re.search(r"第\s*([一二三四五六七八九十]+)\s*季", part)
+        m3 = _SEASON_CN_HANZI_RE.search(part)
         if m3:
             season_num = cn_map.get(m3.group(1), 1)
             break
 
     if season_num is not None:
         return f"{series_name} - 第 {season_num} 季"
-    m_f1 = re.search(r"(?:S|Season\s*)0*(\d+)", item_name, re.I)
+    m_f1 = _SEASON_S_RE.search(item_name)
     if m_f1:
         return f"{series_name} - 第 {int(m_f1.group(1))} 季"
-    m_f2 = re.search(r"第\s*([一二三四五六七八九十]+)\s*季", item_name)
+    m_f2 = _SEASON_CN_HANZI_RE.search(item_name)
     if m_f2:
         return f"{series_name} - 第 {cn_map.get(m_f2.group(1), 1)} 季"
-    m_f3 = re.search(r"第\s*(\d+)\s*季", item_name)
+    m_f3 = _SEASON_CN_NUM_RE.search(item_name)
     if m_f3:
         return f"{series_name} - 第 {int(m_f3.group(1))} 季"
 

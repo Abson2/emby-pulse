@@ -25,6 +25,10 @@
   * ``loop_db_calls``：``app/**/*.py`` 的 AST 中，位于 for/while 体内的
     ``execute / executemany / execute_many / fetchone / fetchall / connect /
     cursor / commit / rollback`` 调用节点数，按节点去重（嵌套循环不重复计）。
+  * ``loop_literal_regex_calls``：同样位于 for/while 体内、且第一个参数是
+    字符串字面量的 ``re.sub/subn/search/match/findall/fullmatch/split/
+    finditer/compile`` 调用数。2.1 批次 1 已把 16 处全部外提为模块级
+    ``re.compile``，因此该指标门槛为 0，防止回退。
   * ``longest_function_lines``：全部函数 / 方法定义中最大的
     ``end_lineno - lineno + 1``。
   * ``ensure_defs`` / ``ensure_calls``：AST 中名称以 ``ensure_`` 开头的
@@ -49,9 +53,14 @@ GATES_MAX = (
     "inline_script_lines",
     "inline_script_blocks",
     "loop_db_calls",
+    "loop_literal_regex_calls",
     "longest_function_lines",
 )
 GATES_MIN = ("ddl_helper_calls",)
+RE_OPS = {
+    "sub", "subn", "search", "match", "findall", "fullmatch",
+    "split", "finditer", "compile",
+}
 
 
 def parse_args(argv):
@@ -104,6 +113,7 @@ def compute(root):
     ensure_defs = 0
     ensure_calls = 0
     loop_db_calls = 0
+    loop_literal_regex_calls = 0
     ddl_helper_calls = 0
     execute_many_calls = 0
     provider_assembly_points = 0
@@ -137,9 +147,17 @@ def compute(root):
                 for sub in ast.walk(n):
                     if not isinstance(sub, ast.Call) or id(sub) in seen_loop_nodes:
                         continue
-                    if call_name(sub) in DB_CALLS:
+                    fname = call_name(sub)
+                    if fname in DB_CALLS:
                         seen_loop_nodes.add(id(sub))
                         loop_db_calls += 1
+                    if (fname in RE_OPS and isinstance(sub.func, ast.Attribute)
+                            and isinstance(sub.func.value, ast.Name)
+                            and sub.func.value.id == "re" and sub.args
+                            and isinstance(sub.args[0], ast.Constant)
+                            and isinstance(sub.args[0].value, str)):
+                        seen_loop_nodes.add(id(sub))
+                        loop_literal_regex_calls += 1
 
     longest.sort(reverse=True)
     return {
@@ -155,6 +173,7 @@ def compute(root):
         "ensure_defs": ensure_defs,
         "ensure_calls": ensure_calls,
         "loop_db_calls": loop_db_calls,
+        "loop_literal_regex_calls": loop_literal_regex_calls,
         "longest_function_lines": longest[0][0] if longest else 0,
         "top5_longest": [
             {"lines": a, "file": b, "name": c} for a, b, c in longest[:5]

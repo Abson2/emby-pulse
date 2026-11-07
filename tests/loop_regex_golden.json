@@ -1,0 +1,622 @@
+{
+ "meta": {
+  "captured": "改代码前（v2.0.2 之后梯队 0 基线，HEAD 5b00b2a）",
+  "purpose": "16 处循环内字面量正则外提为模块级 re.compile 的等价性 golden",
+  "count": 16
+ },
+ "specs": [
+  {
+   "id": "dedupe_quality_markers",
+   "file": "app/domains/playback/dedupe.py",
+   "op": "sub",
+   "pattern": "\\s*[-._]?\\s*(1080p|720p|4k|2160p|hdr|dv\\s*p\\d*|dv|x264|x265|hevc|av1|blu.?ray|web.?dl|bdrip|webrip|h\\.?265|h\\.?264|ddp|atmos|5\\.1|7\\.1).*",
+   "flags": "IGNORECASE",
+   "repl": "",
+   "inputs": [
+    "hero 1080p",
+    "Movie.2020.4K.HDR",
+    "Test 2160p DV P5 x265",
+    "no markers here",
+    "",
+    "ABC 720p extra",
+    "film 5.1 atmos",
+    "x.BluRay.x264"
+   ],
+   "oracle": [
+    "hero",
+    "Movie.2020",
+    "Test",
+    "no markers here",
+    "",
+    "ABC",
+    "film",
+    "x"
+   ]
+  },
+  {
+   "id": "stats_helpers_season_s",
+   "file": "app/domains/playback/stats_helpers.py",
+   "op": "search",
+   "pattern": "(?:S|Season\\s*)0*(\\d+)",
+   "flags": "I",
+   "inputs": [
+    "S01E02",
+    "Season 2",
+    "season0003",
+    "nothing",
+    "",
+    "s12"
+   ],
+   "oracle": [
+    {
+     "group0": "S01",
+     "groups": [
+      "1"
+     ],
+     "span": [
+      0,
+      3
+     ]
+    },
+    {
+     "group0": "Season 2",
+     "groups": [
+      "2"
+     ],
+     "span": [
+      0,
+      8
+     ]
+    },
+    {
+     "group0": "season0003",
+     "groups": [
+      "3"
+     ],
+     "span": [
+      0,
+      10
+     ]
+    },
+    null,
+    null,
+    {
+     "group0": "s12",
+     "groups": [
+      "12"
+     ],
+     "span": [
+      0,
+      3
+     ]
+    }
+   ]
+  },
+  {
+   "id": "stats_helpers_season_cn_num",
+   "file": "app/domains/playback/stats_helpers.py",
+   "op": "search",
+   "pattern": "第\\s*(\\d+)\\s*季",
+   "flags": "",
+   "inputs": [
+    "第 2 季",
+    "第12季",
+    "无",
+    "第 三 季",
+    ""
+   ],
+   "oracle": [
+    {
+     "group0": "第 2 季",
+     "groups": [
+      "2"
+     ],
+     "span": [
+      0,
+      5
+     ]
+    },
+    {
+     "group0": "第12季",
+     "groups": [
+      "12"
+     ],
+     "span": [
+      0,
+      4
+     ]
+    },
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "id": "stats_helpers_season_cn_hanzi",
+   "file": "app/domains/playback/stats_helpers.py",
+   "op": "search",
+   "pattern": "第\\s*([一二三四五六七八九十]+)\\s*季",
+   "flags": "",
+   "inputs": [
+    "第一季",
+    "第 十二 季",
+    "第3季",
+    "无",
+    ""
+   ],
+   "oracle": [
+    {
+     "group0": "第一季",
+     "groups": [
+      "一"
+     ],
+     "span": [
+      0,
+      3
+     ]
+    },
+    {
+     "group0": "第 十二 季",
+     "groups": [
+      "十二"
+     ],
+     "span": [
+      0,
+      6
+     ]
+    },
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "id": "user_details_datetime_full",
+   "file": "app/domains/playback/user_details_router.py",
+   "op": "search",
+   "pattern": "(\\d{4})-(\\d{2})-(\\d{2})[T\\s](\\d{2}):(\\d{2}):(\\d{2})",
+   "flags": "",
+   "inputs": [
+    "2026-11-07T12:34:56",
+    "2026-11-07 01:02:03",
+    "bad",
+    "",
+    "2026-1-7 1:2:3"
+   ],
+   "oracle": [
+    {
+     "group0": "2026-11-07T12:34:56",
+     "groups": [
+      "2026",
+      "11",
+      "07",
+      "12",
+      "34",
+      "56"
+     ],
+     "span": [
+      0,
+      19
+     ]
+    },
+    {
+     "group0": "2026-11-07 01:02:03",
+     "groups": [
+      "2026",
+      "11",
+      "07",
+      "01",
+      "02",
+      "03"
+     ],
+     "span": [
+      0,
+      19
+     ]
+    },
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "id": "user_details_date_only",
+   "file": "app/domains/playback/user_details_router.py",
+   "op": "search",
+   "pattern": "(\\d{4})-(\\d{2})-(\\d{2})",
+   "flags": "",
+   "inputs": [
+    "2026-11-07T12:34:56",
+    "2026-1-7",
+    "no date",
+    ""
+   ],
+   "oracle": [
+    {
+     "group0": "2026-11-07",
+     "groups": [
+      "2026",
+      "11",
+      "07"
+     ],
+     "span": [
+      0,
+      10
+     ]
+    },
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "id": "hdhive_checkin_time",
+   "file": "app/plugins/hdhive/plugin.py",
+   "op": "match",
+   "pattern": "^(\\d{1,2}):?(\\d{2})?",
+   "flags": "",
+   "inputs": [
+    "08:00",
+    "8",
+    "23:59:59",
+    "abc",
+    "",
+    "7:3"
+   ],
+   "oracle": [
+    {
+     "group0": "08:00",
+     "groups": [
+      "08",
+      "00"
+     ],
+     "span": [
+      0,
+      5
+     ]
+    },
+    {
+     "group0": "8",
+     "groups": [
+      "8",
+      null
+     ],
+     "span": [
+      0,
+      1
+     ]
+    },
+    {
+     "group0": "23:59",
+     "groups": [
+      "23",
+      "59"
+     ],
+     "span": [
+      0,
+      5
+     ]
+    },
+    null,
+    null,
+    {
+     "group0": "7:",
+     "groups": [
+      "7",
+      null
+     ],
+     "span": [
+      0,
+      2
+     ]
+    }
+   ]
+  },
+  {
+   "id": "hdhivesign_checkin_time",
+   "file": "app/plugins/hdhivesign/plugin.py",
+   "op": "match",
+   "pattern": "^(\\d{1,2}):?(\\d{2})?",
+   "flags": "",
+   "inputs": [
+    "08:00",
+    "8",
+    "23:59:59",
+    "abc",
+    "",
+    "7:3"
+   ],
+   "oracle": [
+    {
+     "group0": "08:00",
+     "groups": [
+      "08",
+      "00"
+     ],
+     "span": [
+      0,
+      5
+     ]
+    },
+    {
+     "group0": "8",
+     "groups": [
+      "8",
+      null
+     ],
+     "span": [
+      0,
+      1
+     ]
+    },
+    {
+     "group0": "23:59",
+     "groups": [
+      "23",
+      "59"
+     ],
+     "span": [
+      0,
+      5
+     ]
+    },
+    null,
+    null,
+    {
+     "group0": "7:",
+     "groups": [
+      "7",
+      null
+     ],
+     "span": [
+      0,
+      2
+     ]
+    }
+   ]
+  },
+  {
+   "id": "hdhivesign_server_ref",
+   "file": "app/plugins/hdhivesign/plugin.py",
+   "op": "findall",
+   "pattern": "createServerReference\\)\\(\"([a-fA-F0-9]{20,50})\"",
+   "flags": "",
+   "inputs": [
+    "createServerReference)(\"abcdef0123456789abcdef\")",
+    "x",
+    "createServerReference)(\"ABCDEF0123456789ABCDEF0123\")",
+    "",
+    "createServerReference)(\"short\")"
+   ],
+   "oracle": [
+    [
+     "abcdef0123456789abcdef"
+    ],
+    [],
+    [
+     "ABCDEF0123456789ABCDEF0123"
+    ],
+    [],
+    []
+   ]
+  },
+  {
+   "id": "library_cover_safe_name",
+   "file": "app/plugins/library_cover/plugin.py",
+   "op": "sub",
+   "pattern": "[^\\w\\-_\\.]",
+   "flags": "",
+   "repl": "_",
+   "inputs": [
+    "cover.jpg",
+    "my cover (1).png",
+    "中文 图片.jpg",
+    "",
+    "a/b\\c.png",
+    "a-b_c.d"
+   ],
+   "oracle": [
+    "cover.jpg",
+    "my_cover__1_.png",
+    "中文_图片.jpg",
+    "",
+    "a_b_c.png",
+    "a-b_c.d"
+   ]
+  },
+  {
+   "id": "notify_quality_empty_sep",
+   "file": "app/plugins/notify_template/plugin.py",
+   "op": "search",
+   "pattern": "质量：</b>\\s*[|｜]",
+   "flags": "",
+   "inputs": [
+    "<b>质量：</b>  |",
+    "<b>质量：</b>",
+    "<b>质量：</b>4K",
+    "｜质量：</b>｜",
+    ""
+   ],
+   "oracle": [
+    {
+     "group0": "质量：</b>  |",
+     "groups": [],
+     "span": [
+      3,
+      13
+     ]
+    },
+    null,
+    null,
+    {
+     "group0": "质量：</b>｜",
+     "groups": [],
+     "span": [
+      1,
+      9
+     ]
+    },
+    null
+   ]
+  },
+  {
+   "id": "notify_quality_empty_eol",
+   "file": "app/plugins/notify_template/plugin.py",
+   "op": "search",
+   "pattern": "质量：</b>\\s*$",
+   "flags": "",
+   "inputs": [
+    "<b>质量：</b>",
+    "<b>质量：</b>   ",
+    "<b>质量：</b>4K",
+    ""
+   ],
+   "oracle": [
+    {
+     "group0": "质量：</b>",
+     "groups": [],
+     "span": [
+      3,
+      10
+     ]
+    },
+    {
+     "group0": "质量：</b>   ",
+     "groups": [],
+     "span": [
+      3,
+      13
+     ]
+    },
+    null,
+    null
+   ]
+  },
+  {
+   "id": "notify_quality_blank_pipe",
+   "file": "app/plugins/notify_template/plugin.py",
+   "op": "search",
+   "pattern": "质量：</b>\\s+\\|",
+   "flags": "",
+   "inputs": [
+    "<b>质量：</b>  |",
+    "<b>质量：</b>|",
+    "<b>质量：</b> 4K",
+    ""
+   ],
+   "oracle": [
+    {
+     "group0": "质量：</b>  |",
+     "groups": [],
+     "span": [
+      3,
+      13
+     ]
+    },
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "id": "notify_encoding_empty_eol",
+   "file": "app/plugins/notify_template/plugin.py",
+   "op": "search",
+   "pattern": "编码：</b>\\s*$",
+   "flags": "",
+   "inputs": [
+    "<b>编码：</b>",
+    "<b>编码：</b>  ",
+    "<b>编码：</b>HEVC",
+    ""
+   ],
+   "oracle": [
+    {
+     "group0": "编码：</b>",
+     "groups": [],
+     "span": [
+      3,
+      10
+     ]
+    },
+    {
+     "group0": "编码：</b>  ",
+     "groups": [],
+     "span": [
+      3,
+      12
+     ]
+    },
+    null,
+    null
+   ]
+  },
+  {
+   "id": "notify_encoding_blank_eol",
+   "file": "app/plugins/notify_template/plugin.py",
+   "op": "search",
+   "pattern": "编码：</b>\\s+$",
+   "flags": "",
+   "inputs": [
+    "<b>编码：</b>   ",
+    "<b>编码：</b>",
+    "<b>编码：</b>HEVC",
+    ""
+   ],
+   "oracle": [
+    {
+     "group0": "编码：</b>   ",
+     "groups": [],
+     "span": [
+      3,
+      13
+     ]
+    },
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "id": "notify_icon_only_line",
+   "file": "app/plugins/notify_template/plugin.py",
+   "op": "match",
+   "pattern": "^[🎬📺📱💾📼✨⭐📌🕒📝\\s<>b/]+(质量|编码)[:：]</b>\\s*[|｜]*\\s*[⭐📌🕒\\s<>b/]*$",
+   "flags": "",
+   "inputs": [
+    "🎬 <b>质量：</b>  |  ⭐ 评分：",
+    "<b>质量：</b>",
+    "📝 <b>编码：</b>  |",
+    "🎬 质量: HEVC",
+    "普通文本",
+    ""
+   ],
+   "oracle": [
+    null,
+    {
+     "group0": "<b>质量：</b>",
+     "groups": [
+      "质量"
+     ],
+     "span": [
+      0,
+      10
+     ]
+    },
+    {
+     "group0": "📝 <b>编码：</b>  |",
+     "groups": [
+      "编码"
+     ],
+     "span": [
+      0,
+      15
+     ]
+    },
+    null,
+    null,
+    null
+   ]
+  }
+ ]
+}

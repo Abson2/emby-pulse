@@ -17,6 +17,9 @@ from app.infra.clients.media_server_client import media_api
 from app.domains.users import public_service as user_service
 
 logger = logging.getLogger("uvicorn")
+# 批量上传循环内文件名净化：模块级预编译
+_SAFE_FILENAME_RE = re.compile(r'[^\w\-_\.]')
+
 
 # 封面存储目录
 COVER_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "library_covers")
@@ -124,7 +127,7 @@ class LibraryCoverPlugin(PluginBase):
                 # 生成文件名
                 original_name = file.filename or "cover.jpg"
                 timestamp = int(time.time() * 1000)
-                safe_name = re.sub(r'[^\w\-_\.]', '_', original_name)
+                safe_name = _SAFE_FILENAME_RE.sub('_', original_name)
                 filename = f"{timestamp}_{safe_name}"
                 filepath = os.path.join(COVER_DIR, filename)
                 
@@ -178,7 +181,7 @@ class LibraryCoverPlugin(PluginBase):
                         continue
                     
                     timestamp = int(time.time() * 1000)
-                    safe_name = re.sub(r'[^\w\-_\.]', '_', file.filename or "cover.jpg")
+                    safe_name = _SAFE_FILENAME_RE.sub('_', file.filename or "cover.jpg")
                     filename = f"{timestamp}_{safe_name}"
                     filepath = os.path.join(COVER_DIR, filename)
                     

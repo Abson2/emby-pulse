@@ -25,6 +25,12 @@ from app.domains.users import public_service as user_service
 from app.core.security_utils import safe_error_message
 
 logger = logging.getLogger("uvicorn")
+# 循环内高频使用：模块级预编译，与原 re.sub(..., flags=re.IGNORECASE) 逐字等价
+_QUALITY_MARKER_RE = re.compile(
+    r'\s*[-._]?\s*(1080p|720p|4k|2160p|hdr|dv\s*p\d*|dv|x264|x265|hevc|av1|blu.?ray|web.?dl|bdrip|webrip|h\.?265|h\.?264|ddp|atmos|5\.1|7\.1).*',
+    re.IGNORECASE,
+)
+
 router = APIRouter(prefix="/api/dedupe", tags=["去重管理"])
 
 scan_state = {
@@ -245,7 +251,7 @@ def run_dedupe_scan(strategy: str = "quality", custom_weights: dict = None, excl
                         name_key = i.get("Name", "").strip().lower()
                         year = i.get("ProductionYear", 0)
                         # 移除常见的质量标记来匹配相似名称（包括DV P5这类带空格的）
-                        base_name = re.sub(r'\s*[-._]?\s*(1080p|720p|4k|2160p|hdr|dv\s*p\d*|dv|x264|x265|hevc|av1|blu.?ray|web.?dl|bdrip|webrip|h\.?265|h\.?264|ddp|atmos|5\.1|7\.1).*', '', name_key, flags=re.IGNORECASE)
+                        base_name = _QUALITY_MARKER_RE.sub('', name_key)
                         folder_key = f"folder_{folder_path}_{base_name}_{year}"
                         if folder_key not in whitelist:
                             folder_groups[folder_key].append(i)

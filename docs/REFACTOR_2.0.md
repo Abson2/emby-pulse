@@ -462,3 +462,75 @@ B3-B 的调用点计数最初写成 `"ensure_registered_tables(" in src`，结�
 #### 8.6.5 下一梯队入口
 
 `execute_many` 调用点仍为 0，而「同函数内 ≥2 次写」候选有 6 处——梯队 1 可直接复用 B4 的 oracle 证明等价。循环内 DB 访问 147 处、最长函数 842 行、内联 JS 23,734 行分别对应 P 批与 C3，须按 8.5 的前置条件推进。本批只把它们变成**可测量、可拦截**的指标，不提前动手。
+
+---
+
+## 9. 2.1：可证等价的运行时优化与发版
+
+> 8.6 里「同函数内 ≥2 次写候选有 6 处」是早期粗估；9.2 用 AST 全量重数得到 **106 个函数**，并据此修正结论。
+
+### 9.1 「完美」的可验证口径
+
+用户要求「继续优化，直到完美发版 2.1」。把「完美」定义为可机器判定，避免无限重构：
+
+1. **等价**：对同一输入集，新旧实现的可观察结果逐字节相同；golden **必须在改代码前采集**。
+2. **覆盖**：主网 `run_all_checks` 自动发现全部纯标准库脚本且 0 失败；架构门槛、基准契约、静态断言全绿。
+3. **边界**：被 100% 等价硬约束排除的项逐条写明原因，不编造完成。
+4. **发版**：6 个版本点、CHANGELOG、README 版本锁定、CI 断言、tag 与镜像可回溯，CI verify/build/release 全绿。
+
+不满足 ① 的改代码项一律不动；不满足 ③ 的项不算欠账。
+
+### 9.2 探查结论（改代码前实测）
+
+| 探查 | 实测 | 结论 |
+| --- | --- | --- |
+| 同函数内 ≥2 次写 | AST 统计 **106 个函数**（口径：函数体内 ≥2 次 `.execute` 调用） | **不做**。把逐条 `execute()` 改成 `execute_many()` 会把「每条独立提交」变成「整批单事务」，失败时 DB 残留完全不同，**事务边界与异常时机改变**，与逐字节等价互斥。`execute()` 源码一行未动，并把该状态写成 CI 断言（问题 22） |
+| 循环内 DB 访问 | 147 处（架构门槛口径） | 不做：外提读会改变循环内状态可见性，需逐条并发证明 |
+| 循环内字面量正则 | **16 处 / 7 文件 / 16 个不同 pattern**；同文件重复 ≥3 次的 pattern 0 个 | **可做**：`re.compile(p, f).op(...)` 与 `re.op(p, ..., flags=f)` 在标准库语义上等价，无副作用、无可观察状态变化 |
+| 29 个排除脚本 | 隔离 venv 装齐 pytest / fastapi / PIL / anyio 后重跑：**11 通过 / 18 仍失败**；18 个里 16 个被本机沙箱 `sitecustomize` 拦截、2 个是 `app` 导入路径 | **不进 CI**。verify job 刻意保持纯标准库（快、稳、零依赖漂移）；11 个作为 C 批工程环境的前置证据列入 9.5，不为好看而让 CI 变脆 |
+
+### 9.3 批次 1 落地：16 处循环内正则预编译外提
+
+7 个文件 `+53 / -19`（净增 34 行常量定义），19 行替换覆盖 **21 个调用点**：16 处循环内 + 5 处同文件循环外同 pattern 重复（`notify_template` 有两行各含两个 `re.search`）：
+
+| 文件 | 模块级常量 | 调用点 |
+| --- | --- | --- |
+| `app/domains/playback/dedupe.py` | `_QUALITY_MARKER_RE`（`re.IGNORECASE`） | 1 |
+| `app/domains/playback/stats_helpers.py` | `_SEASON_S_RE`（`re.I`）/ `_SEASON_CN_NUM_RE` / `_SEASON_CN_HANZI_RE` | 3 |
+| `app/domains/playback/user_details_router.py` | `_PLAY_DATETIME_RE` / `_PLAY_DATE_RE` | 2 |
+| `app/plugins/hdhive/plugin.py` | `_CHECKIN_TIME_RE`（补模块级 `import re`） | 1 |
+| `app/plugins/hdhivesign/plugin.py` | `_CHECKIN_TIME_RE` / `_SERVER_REF_RE` | 2 |
+| `app/plugins/library_cover/plugin.py` | `_SAFE_FILENAME_RE` | 1 |
+| `app/plugins/notify_template/plugin.py` | `_QUALITY_EMPTY_SEP_RE` / `_QUALITY_EMPTY_EOL_RE` / `_QUALITY_BLANK_PIPE_RE` / `_ENCODING_EMPTY_EOL_RE` / `_ENCODING_BLANK_EOL_RE` / `_ICON_ONLY_LINE_RE` | 6 |
+
+等价性证明（`tests/test_loop_regex_equivalence.py` **53/0**）：
+
+- golden `tests/loop_regex_golden.json` 在改代码前采集：16 组 spec × 4~8 个输入，记录 `sub/search/match/findall` 的 oracle 输出（`group0` / `groups` / `span` 全部序列化，避免只比布尔值漏判）。
+- **行为层**：`re.compile(pattern, flags)` 重放与模块级 `re.op(..., flags=...)` 双向比对，输出逐字相同。
+- **形态层**：AST 断言每个模块级常量的 pattern/flags 与 golden 一致、常量在函数体内被真实调用（`ast.Call` + `ast.Attribute`，不用裸子串）、7 个文件乃至 `app/**` 全库循环内字面量正则调用为 0；另断言「与 golden 同 pattern 的字面量重复调用已消失」与「21 个调用点全部走 16 个常量」。断言只覆盖本批 pattern，文件里 unrelated 的正则调用保留原样。
+
+`stats_helpers`（3 处）、`user_details_router`（1 处）、`library_cover`（1 处）的循环外同 pattern 调用也复用同一常量，消除文件内重复。补充探查另发现循环内变量 pattern 调用 11 处（多为动态拼接或安全净化核心 `_DANGEROUS_PATTERNS`）、循环内常量容器赋值 67 处（多数是会被修改的业务 dict，外提会串改）、循环外单次字面量调用 51 处（`re` 模块有内部缓存，收益接近 0 而改动会扩到 30+ 文件）——三类均按「风险最小」排除，不做无依据改动。
+
+`hdhive/plugin.py` 原本 `re` 只在函数内局部 import，为支持模块级常量补了模块级 `import re`；两处指向同一标准库模块对象，函数内局部 import 原样保留，行为不变。
+
+### 9.4 治理能力增量
+
+- `tools/architecture_report.py` 新增 `loop_literal_regex_calls` 指标并纳入不恶化门槛，基线重建为 **0**（16 → 0）：此后任何人在循环里写 `re.sub("字面量")` 都会被 CI 拦下。门槛由 5 项增至 **6 项**。
+- `tools/verify_patches.py` 新增「问题 22」组 8 条断言：golden 覆盖、16 个常量（AST 计数）、循环内归零、CI 接线、门槛基线、以及 **`execute()` 事务边界未被改成 `execute_many`**。
+- CI verify 新增 1 个 step（22 → 23 步）；`run_all_checks.py` 自动发现把新测试纳入主网，**无需手动接线**。
+- 架构基线因新增指标 + 运行时净增 34 行而显式 `--init` 重建；规模类只报 delta，不 gate。
+
+### 9.5 明确排除（不构成欠账）
+
+| 项 | 排除理由 | 后续前置 |
+| --- | --- | --- |
+| 106 个同函数多写 → `execute_many` | 事务边界 / 失败残留不等价 | 需授权「失败整批回滚」作为行为变更，或逐个证明上层已有事务包裹 |
+| 147 处循环内 DB 访问 | 外提读会改变状态可见性 | 并发写压测 + DB 终态快照 |
+| 842 / 687 / 450 行巨型函数拆分 | 需 DOM / API / DB / provider 四层快照 | pytest + FastAPI 集成环境（8.5） |
+| 内联 JS 23,734 行 / C5 `unsafe-eval` | 移除 `unsafe-eval` 会让 Alpine 表达式失效 | C 批工程环境 |
+| 29 个排除脚本进 CI | 18 个仍因沙箱 / 导入路径失败；CI 保持纯标准库 | 在 CI 装齐全依赖并逐个证明稳定，另起一轮 |
+| B2 / B5 / 迁移型 `ensure_*` | 见 8.5，统一与输出逐字不变互斥 | 见 8.5 |
+
+### 9.6 发版与回归
+
+待 2.1 发版时补齐：commit / annotated tag、6 个版本点、CHANGELOG、README 锁定、CI 结果与完整回归矩阵。

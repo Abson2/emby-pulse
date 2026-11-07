@@ -23,6 +23,10 @@ from app.core.event_bus import bus
 from app.infra.clients.hdhive_site_client import hdhive_site_client
 
 logger = logging.getLogger("uvicorn")
+# 签到循环 / JS 扫描循环内高频使用：模块级预编译
+_CHECKIN_TIME_RE = re.compile(r'^(\d{1,2}):?(\d{2})?')
+_SERVER_REF_RE = re.compile(r'createServerReference\)\("([a-fA-F0-9]{20,50})"')
+
 
 # 影巢站点配置
 HDHIVE_BASE = "https://hdhive.com"
@@ -603,7 +607,7 @@ class HDHiveSignPlugin(PluginBase):
                                 return next_action
                         
                         # 调试：输出 JS 文件中的 createServerReference 调用
-                        all_actions = re.findall(r'createServerReference\)\("([a-fA-F0-9]{20,50})"', js_resp.text)
+                        all_actions = _SERVER_REF_RE.findall(js_resp.text)
                         if all_actions:
                             logger.info(f"[影巢签到] JS {script_src[-30:]} 中的 actions: {all_actions[:3]}")
                             # 记录找到的第一个 action
@@ -1077,7 +1081,7 @@ class HDHiveSignPlugin(PluginBase):
                     now = datetime.datetime.now()
                     current_date = now.strftime("%Y-%m-%d")
                     checkin_time = config.get("checkin_time", "08:00").strip()
-                    time_match = re.match(r'^(\d{1,2}):?(\d{2})?', checkin_time)
+                    time_match = _CHECKIN_TIME_RE.match(checkin_time)
                     checkin_hour = 8
                     checkin_minute = 0
                     if time_match:

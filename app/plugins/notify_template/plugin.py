@@ -8,6 +8,14 @@ import re
 from app.plugins.base import PluginBase
 
 logger = logging.getLogger("uvicorn")
+# 模板逐行过滤循环内 6 处正则：模块级预编译（pattern 与原调用逐字一致）
+_QUALITY_EMPTY_SEP_RE = re.compile(r'质量：</b>\s*[|｜]')
+_QUALITY_EMPTY_EOL_RE = re.compile(r'质量：</b>\s*$')
+_QUALITY_BLANK_PIPE_RE = re.compile(r'质量：</b>\s+\|')
+_ENCODING_EMPTY_EOL_RE = re.compile(r'编码：</b>\s*$')
+_ENCODING_BLANK_EOL_RE = re.compile(r'编码：</b>\s+$')
+_ICON_ONLY_LINE_RE = re.compile(r'^[🎬📺📱💾📼✨⭐📌🕒📝\s<>b/]+(质量|编码)[:：]</b>\s*[|｜]*\s*[⭐📌🕒\s<>b/]*$')
+
 
 # 默认模板
 DEFAULT_TEMPLATES = {
@@ -178,20 +186,20 @@ class NotifyTemplatePlugin(PluginBase):
                 # 检查质量行："质量：</b>  |" 或 "质量：</b>" 后面没有内容
                 if "质量：</b>" in line or "质量:" in line:
                     # 检查是否为空值：质量：</b> 后面只有空格和分隔符
-                    if re.search(r'质量：</b>\s*[|｜]', line) or re.search(r'质量：</b>\s*$', line):
+                    if _QUALITY_EMPTY_SEP_RE.search(line) or _QUALITY_EMPTY_EOL_RE.search(line):
                         continue
                     # 检查是否只有图标和质量标签，没有实际值
-                    if re.search(r'质量：</b>\s+\|', line):
+                    if _QUALITY_BLANK_PIPE_RE.search(line):
                         continue
                 
                 # 检查编码行："编码：</b>" 后面没有内容
                 if "编码：</b>" in line or "编码:" in line:
-                    if re.search(r'编码：</b>\s*$', line) or re.search(r'编码：</b>\s+$', line):
+                    if _ENCODING_EMPTY_EOL_RE.search(line) or _ENCODING_BLANK_EOL_RE.search(line):
                         continue
                 
                 # 检查是否整行只有空的质量/编码信息
                 # 格式如: "🎬 <b>质量：</b>  |  ⭐ 评分："
-                if re.match(r'^[🎬📺📱💾📼✨⭐📌🕒📝\s<>b/]+(质量|编码)[:：]</b>\s*[|｜]*\s*[⭐📌🕒\s<>b/]*$', stripped):
+                if _ICON_ONLY_LINE_RE.match(stripped):
                     continue
                 
                 filtered_lines.append(line)

@@ -16,6 +16,10 @@ from app.infra.db.playback_store import playback_store
 
 
 router = APIRouter()
+# 播放明细逐行解析：模块级预编译（pattern 与原调用一致）
+_PLAY_DATETIME_RE = re.compile(r'(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})')
+_PLAY_DATE_RE = re.compile(r'(\d{4})-(\d{2})-(\d{2})')
+
 
 _check_login_provider = lambda: check_login
 _build_stats_base_filter_provider = lambda: build_stats_base_filter
@@ -144,7 +148,7 @@ def api_user_details(request: Request, user_id: Optional[str] = None):
                 # 小时分布
                 dc = r.get('DateCreated')
                 if dc:
-                    m = re.search(r'(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})', str(dc))
+                    m = _PLAY_DATETIME_RE.search(str(dc))
                     if m:
                         hour = m.group(4)
                         h_data[hour] += 1
@@ -217,7 +221,7 @@ def api_user_details(request: Request, user_id: Optional[str] = None):
                 if u_res.status_code == 200:
                     dc = u_res.json().get("DateCreated")
                     if dc:
-                        m = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(dc))
+                        m = _PLAY_DATE_RE.search(str(dc))
                         if m:
                             fd = datetime.datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
                             overview['account_age_days'] = max(1, (datetime.datetime.now() - fd).days)
@@ -228,7 +232,7 @@ def api_user_details(request: Request, user_id: Optional[str] = None):
                     for u in u_res.json():
                         dc = u.get("DateCreated")
                         if dc:
-                            m = re.search(r'(\d{4})-(\d{2})-(\d{2})', str(dc))
+                            m = _PLAY_DATE_RE.search(str(dc))
                             if m:
                                 dt = datetime.datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
                                 if not earliest_dt or dt < earliest_dt:
