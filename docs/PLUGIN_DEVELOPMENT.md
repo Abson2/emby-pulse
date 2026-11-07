@@ -2,6 +2,7 @@
 
 > 适用版本：2.3 及以上。本文定义「外部插件」的包格式、运行时契约与安全边界。
 > 想把功能需求直接交给 AI 生成插件？见 [给 AI 的话术指引](PLUGIN_AI_PROMPT.md)。
+> 想 5 分钟跑通一个插件？先看 [插件开发 Quickstart](PLUGIN_QUICKSTART.md)。
 > 只关心官方发布流程？见 [plugins/README.md](../plugins/README.md)。
 
 ## 1. 设计前提：导入 ≠ 启用

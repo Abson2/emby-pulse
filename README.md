@@ -70,6 +70,7 @@
 | 求片 → TgtoDrive 同步 | 审批通过写入关键词白名单、删单联动移除；配套 TgtoDrive 侧清理插件 |
 | 公告与消息 | 富文本净化、历史数据兼容、用户级纯文本推送 |
 | 插件日志管控 | 单条 2000 字 / 单插件 500 行 / 留存 30 天 |
+| 插件中心增强 | 插件市场浏览、定时执行（on_schedule）、开发资源（指南 / AI 开发提示词 / zip 与单文件示例）、供插件调用的全局 OpenAPI、导入即时刷新；详见 [插件开发文档](docs/PLUGIN_DEVELOPMENT.md) 与 [Quickstart](docs/PLUGIN_QUICKSTART.md) |
 | 架构与安全性审查 | 低风险重构、安全契约与等价性回归，见 [docs/REFACTOR_2.0.md](docs/REFACTOR_2.0.md) |
 
 > 每一项能力的版本出处、根因与修复细节都在 [CHANGELOG](CHANGELOG.md) 对应版本中，主页不展开。
