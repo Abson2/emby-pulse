@@ -123,7 +123,10 @@ def verify_api_token(token: str) -> Optional[Dict[str, Any]]:
             if datetime.utcnow() > expires_at:
                 return None  # 已过期
     except Exception:
-        # 数据库异常时降级为仅 JWT 校验（保持可用性）
+        # 数据库异常时降级：管理令牌 fail-closed（撤销表查不到即拒绝，避免已撤销令牌复活），
+        # 普通用户令牌保持可用性（仅 JWT 校验）
+        if payload.get("is_admin"):
+            return None
         pass
 
     return payload

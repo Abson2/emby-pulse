@@ -93,9 +93,10 @@ def request_system_login(data: RequestLoginModel, request: Request):
     get_password_hash = _user_password_hash_provider()
     update_password_hash = _update_user_password_hash_provider()
 
-    # 🔒 端口隔离检查：用户社区登录只能从用户端口访问
-    host_header = request.headers.get("host", "")
-    is_admin_port = ":10307" in host_header or host_header.endswith(":10307")
+    # 🔒 端口隔离检查：读 ASGI scope 不可伪造的标记，防止 Host 头/端口伪造绕过。
+    # 用户社区登录仅允许从用户端口（scope 标记存在）访问；管理端/单端口部署标记缺失即拒绝。
+    from app.core.session import USER_PORTAL_SCOPE_FLAG
+    is_admin_port = request.scope.get(USER_PORTAL_SCOPE_FLAG) is not True
 
     # 如果从管理端口访问，拒绝用户社区登录
     if is_admin_port:

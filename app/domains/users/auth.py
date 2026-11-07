@@ -848,11 +848,9 @@ async def api_login(data: LoginModel, request: Request):
     password = data.password
     auth_type = data.auth_type
     
-    # 🔒 端口隔离检查：使用服务器实际端口判断，防止 Host 头伪造
-    _SERVER_PORT = int(os.getenv("PORT", "10307"))
-    _USER_PORT = int(os.getenv("REQUEST_PORT", "10308"))
-    server_port = request.url.port or _SERVER_PORT
-    is_user_port = server_port == _USER_PORT
+    # 🔒 端口隔离检查：读 ASGI scope 不可伪造的标记，防止 Host 头/端口伪造绕过
+    from app.core.session import USER_PORTAL_SCOPE_FLAG
+    is_user_port = request.scope.get(USER_PORTAL_SCOPE_FLAG) is True
 
     # 如果从用户社区端口访问，拒绝后台登录
     if is_user_port and auth_type != "local":

@@ -1,3 +1,3 @@
 """Side-effect-free application version metadata."""
 
-APP_VERSION = "2.3"
+APP_VERSION = "2.4"

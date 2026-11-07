@@ -320,12 +320,12 @@ check("系统设置接口给出可复制的 URL 模板",
 check("系统设置接口不再要求 Emby 配置 Header",
       "请在 Emby 中配置 Header" not in system_router)
 
-check("应用版本升级到 2.3", 'APP_VERSION = "2.3"' in read("app/shared/version.py"))
-check("Dockerfile 版本为 2.3-hardened", "APP_VERSION=2.3-hardened" in dockerfile)
-check("compose 默认拉取 2.3", "IMAGE_TAG:-2.3" in compose)
+check("应用版本升级到 2.4", 'APP_VERSION = "2.4"' in read("app/shared/version.py"))
+check("Dockerfile 版本为 2.4-hardened", "APP_VERSION=2.4-hardened" in dockerfile)
+check("compose 默认拉取 2.4", "IMAGE_TAG:-2.4" in compose)
 check("compose 保留 1.9.10 回退说明（不删除历史版本特性）", "IMAGE_TAG=1.9.10" in compose)
-check("CHANGELOG 含 1.9.x 全系列与 2.0 / 2.0.1 / 2.0.2 / 2.1 / 2.3 发版说明",
-      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7", "## 1.9.8", "## 1.9.9", "## 1.9.10", "## 2.0", "## 2.0.1", "## 2.0.2", "## 2.1", "## 2.3")))
+check("CHANGELOG 含 1.9.x 全系列与 2.0 / 2.0.1 / 2.0.2 / 2.1 / 2.3 / 2.4 发版说明",
+      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7", "## 1.9.8", "## 1.9.9", "## 1.9.10", "## 2.0", "## 2.0.1", "## 2.0.2", "## 2.1", "## 2.3", "## 2.4")))
 check("CI 增加 Bark / Webhook 回归步骤",
       "tests/test_bark_push.py" in read(".github/workflows/docker-publish.yml"))
 
@@ -396,8 +396,8 @@ models_py = read("app/schemas/models.py")
 sys_views = read("app/domains/system/views.py")
 modal_notify = read("templates/request/modal_notify.html")
 
-check("request_app.js 引用带版本号（浏览器缓存破坏，2.3）",
-      "request_app.js?v=2.3" in req_tpl)
+check("request_app.js 引用带版本号（浏览器缓存破坏，2.4）",
+      "request_app.js?v=2.4" in req_tpl)
 # 1.9.6 起通知设置不再由 Alpine 主组件承载（1.9.7 改为页面内原生弹窗）
 check("request_app.js 不再包含任何通知设置 state/方法（1.9.6 起移除）",
       all(x not in req_js for x in (
@@ -694,10 +694,10 @@ check("CI 接入安全契约与富文本净化回归",
       and "tests/test_sanitize_rich_html.py" in ci)
 check("等价性回归扩展第二批第 8 节",
       "== 8. 第二批" in read("tests/test_refactor_2_0_equivalence.py"))
-check("2.3 发版版本点已同步（历史 tag 不重推）",
-      'APP_VERSION = "2.3"' in read("app/shared/version.py")
-      and "IMAGE_TAG:-2.3" in read("docker-compose.yml")
-      and "request_app.js?v=2.3" in read("templates/request.html"))
+check("2.4 发版版本点已同步（历史 tag 不重推）",
+      'APP_VERSION = "2.4"' in read("app/shared/version.py")
+      and "IMAGE_TAG:-2.4" in read("docker-compose.yml")
+      and "request_app.js?v=2.4" in read("templates/request.html"))
 check("CHANGELOG 记录第二批零风险收尾", "第二批" in changelog)
 check("重构文档记录第二批决策与 B0 收口建议撤销",
       "## 7. 第二批零风险加固" in read("docs/REFACTOR_2.0.md")
@@ -716,8 +716,8 @@ check("主页只列功能与用法，不堆按版本罗列的修复史",
 check("主页指向 CHANGELOG / Releases 查看详细更新说明",
       "CHANGELOG.md" in readme and "GitHub Releases" in readme)
 check("主页版本锁定与实际 compose 一致",
-      "IMAGE_TAG:-2.3" in readme
-      and "ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-2.3}" in readme)
+      "IMAGE_TAG:-2.4" in readme
+      and "ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-2.4}" in readme)
 
 print("== 问题 19: 2.0 主线优化 B 批（公共逻辑抽离 / 性能 / 安全） ==")
 LIB_BASE = "app/bot/notification_bot/"
@@ -894,10 +894,10 @@ check("梯队 0 四项能力全部接入 CI verify",
           "tools/architecture_report.py .",
           "tools/bench_hotpaths.py .",
           "tools/run_all_checks.py .")))
-check("2.3 发版：版本点已同步到 2.3（历史 tag 不重推）",
-      'APP_VERSION = "2.3"' in read("app/shared/version.py")
-      and "IMAGE_TAG:-2.3" in read("docker-compose.yml")
-      and "request_app.js?v=2.3" in read("templates/request.html"))
+check("2.4 发版：版本点已同步到 2.4（历史 tag 不重推）",
+      'APP_VERSION = "2.4"' in read("app/shared/version.py")
+      and "IMAGE_TAG:-2.4" in read("docker-compose.yml")
+      and "request_app.js?v=2.4" in read("templates/request.html"))
 check("重构文档新增 8.6 节记录梯队 0 与零运行时改动口径",
       "### 8.6" in read("docs/REFACTOR_2.0.md")
       and "零运行时代码改动" in read("docs/REFACTOR_2.0.md"))
@@ -1055,6 +1055,58 @@ check("2.3 插件导入回归显式接入 CI verify",
 check("2.3 打包工具自检可被全量网自动发现（无参数 rc=0）",
       "def self_check()" in read("tools/pack_plugin.py")
       and "PACK PLUGIN SELF CHECK PASSED" in read("tools/pack_plugin.py"))
+
+print("== 问题 24: 2.4 安全加固（IP 认定 / 端口隔离 / 落盘权限 / token 吊销 / 出站 SSRF / 字段加密） ==")
+rate_lim = read("app/core/rate_limiter.py")
+auth = read("app/domains/users/auth.py")
+auth_router = read("app/domains/media_requests/auth_router.py")
+jwt = read("app/core/jwt_token.py")
+main_py = read("app/main.py")
+outbound = read("app/core/outbound_url.py")
+uns = read("app/domains/users/user_notify_service.py")
+unr = read("app/domains/users/user_notify_router.py")
+ubd = read("app/domains/users/user_bot_dao.py")
+pdao = read("app/plugins/plugin_dao.py")
+secbox = read("app/core/secret_box.py")
+
+check("A1 限速/锁定/审计 IP 优先采用不可伪造的 CF-Connecting-IP",
+      "CF-Connecting-IP" in rate_lim
+      and "X-Forwarded-For" in rate_lim)
+
+check("A2 登录端口隔离改读 ASGI scope 不可伪造标记（防 Host/端口伪造）",
+      "USER_PORTAL_SCOPE_FLAG" in auth
+      and "USER_PORTAL_SCOPE_FLAG" in auth_router
+      and "request.scope.get(USER_PORTAL_SCOPE_FLAG)" in auth
+      and "request.scope.get(USER_PORTAL_SCOPE_FLAG) is not True" in auth_router)
+
+check("A5 进程启动即收敛落盘权限（umask 0o077）",
+      "os.umask(0o077)" in main_py)
+
+check("A6 管理员令牌吊销 fail-closed（DB 异常时拒绝）",
+      'if payload.get("is_admin"):' in jwt
+      and "return None" in jwt)
+
+check("A7 新建出站地址安全校验模块（拦链路本地/回环）",
+      "def assert_safe_outbound(" in outbound
+      and "169.254.0.0/16" in outbound
+      and "127.0.0.0/8" in outbound)
+check("A7 用户通知 Webhook 发送前再校验 + 禁重定向 opener",
+      "assert_safe_outbound(url)" in uns
+      and "_NoRedirect" in uns
+      and "_opener.open" in uns)
+check("A7 用户通知保存前校验 Bark/Webhook 出站地址",
+      "assert_safe_outbound" in unr)
+
+check("A3 Emby 口令在 user_bot_dao 边界透明加解密（零上层改动）",
+      "secret_box.decrypt(row[\"init_password\"]" in ubd
+      and "secret_box.encrypt(init_password)" in ubd)
+check("A4 插件配置在 plugin_dao 边界透明加解密（含第三方凭证）",
+      "secret_box.decrypt(row[\"config\"])" in pdao
+      and "secret_box.encrypt(json.dumps(config" in pdao)
+check("A3/A4 加解密模块基于已声明 pycryptodome 且明文前缀兼容",
+      "from Crypto.Cipher import AES" in secbox
+      and '_PREFIX = "enc:v1:"' in secbox
+      and "startswith(_PREFIX)" in secbox)
 
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:

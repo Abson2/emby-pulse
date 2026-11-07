@@ -1,5 +1,10 @@
 import os
 
+# 🔒 落盘权限加固：进程内新建文件默认 0600 / 目录 0700（容器内 root 照常读写，
+# 但同机其它账号/容器无法读取 data/*.db、备份等敏感文件）。需随 data 一并备份的内容
+# 不受影响；若把 data 挂给 NAS 上别的账号共享读取，请勿启用此项。
+os.umask(0o077)
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException

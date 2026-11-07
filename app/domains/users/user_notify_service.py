@@ -13,12 +13,23 @@ import json
 import logging
 import urllib.request
 
+from app.core.outbound_url import assert_safe_outbound
 from app.domains.users import user_dao
 
 
 logger = logging.getLogger("uvicorn")
 
 _WEBHOOK_TIMEOUT = 10
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """禁止跟随重定向，避免 302 把请求引到内网/回环。"""
+
+    def redirect_request(self, *args, **kwargs):  # noqa: D401
+        return None
+
+
+_opener = urllib.request.build_opener(_NoRedirect())
 
 
 def get_user_notify_settings(user_id: str):
@@ -60,6 +71,8 @@ def push_user_notify(user_id: str, title: str, body: str, flag_key: str = None) 
             if not server or not key:
                 return {"ok": False, "skipped": True, "detail": "Bark 链接无效"}
             try:
+                # 🔒 SSRF 防护：用户自填 Bark 服务器主机发送前校验，拦链路本地/回环
+                assert_safe_outbound(server + "/")
                 from app.domains.notifications.bark_push import send as bark_send
                 return bark_send(
                     title, body,
@@ -73,6 +86,8 @@ def push_user_notify(user_id: str, title: str, body: str, flag_key: str = None) 
             if not url:
                 return {"ok": False, "skipped": True, "detail": "Webhook 未配置"}
             try:
+                # 🔒 SSRF 防护：发送前再校验一次，防止保存后被改 DNS 指向内网/元数据
+                assert_safe_outbound(url)
                 payload = json.dumps(
                     {"title": title, "body": body, "text": f"{title}\n{body}"}
                 ).encode("utf-8")
@@ -80,7 +95,8 @@ def push_user_notify(user_id: str, title: str, body: str, flag_key: str = None) 
                     url, data=payload, method="POST",
                     headers={"Content-Type": "application/json"},
                 )
-                with urllib.request.urlopen(req, timeout=_WEBHOOK_TIMEOUT) as resp:
+                # 禁重定向 opener：避免 302 把请求引到内网/回环
+                with _opener.open(req, timeout=_WEBHOOK_TIMEOUT) as resp:
                     status = resp.status
                 return {"ok": status in (200, 201, 204), "skipped": False, "detail": f"HTTP {status}"}
             except Exception as e:

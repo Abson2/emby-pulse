@@ -57,6 +57,8 @@ msg = read("app/domains/notifications/messages.py")
 ci = read(".github/workflows/docker-publish.yml")
 dockerfile = read("Dockerfile")
 compose = read("docker-compose.yml")
+auth = read("app/domains/users/auth.py")
+auth_router = read("app/domains/media_requests/auth_router.py")
 
 print("== 1. CSRF / 反向代理头 ==")
 check("CSRF 定义 Origin 期望值计算", "_expected_origins" in csrf)
@@ -83,6 +85,11 @@ check("用户端 wrapper 在进入主 app 前打 scope 标记",
       "scope[USER_PORTAL_SCOPE_FLAG] = True" in portal
       and portal.index("scope[USER_PORTAL_SCOPE_FLAG] = True")
           < portal.index("await app(scope, receive, send)"))
+check("端口隔离两端均读不可伪造的 scope 标记（防 Host/端口伪造）",
+      "USER_PORTAL_SCOPE_FLAG" in auth
+      and "request.scope.get(USER_PORTAL_SCOPE_FLAG) is True" in auth
+      and "USER_PORTAL_SCOPE_FLAG" in auth_router
+      and "request.scope.get(USER_PORTAL_SCOPE_FLAG) is not True" in auth_router)
 
 print("== 4. CSP / 安全响应头 ==")
 check("CSP 使用 nonce 化 script-src-elem",

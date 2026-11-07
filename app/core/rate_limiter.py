@@ -129,10 +129,20 @@ rate_limiter = RateLimiter()
 
 
 def get_client_ip(request: Request) -> str:
-    """获取客户端真实 IP，仅从可信代理的 XFF/X-Real-IP 中提取"""
+    """获取客户端真实 IP。
+
+    可信代理（docker 网桥 / 本机回环）回源时，优先采用 Cloudflare 边缘写入、
+    客户端不可伪造的 CF-Connecting-IP；其次保持原行为取 X-Forwarded-For 最左值
+    或 X-Real-IP。直连（peer 为真实私网 IP、非可信代理）原样返回，接口与限流
+    阈值均不变。
+    """
     client_ip = request.client.host if request.client else "unknown"
 
     if client_ip in TRUSTED_PROXIES:
+        # Cloudflare 边缘写入、客户端无法伪造：优先采用，避免 XFF 最左值被伪造绕过限流/锁定
+        cf = (request.headers.get("CF-Connecting-IP") or "").strip()
+        if cf:
+            return cf
         forwarded = request.headers.get("X-Forwarded-For")
         if forwarded:
             return forwarded.split(",")[0].strip()

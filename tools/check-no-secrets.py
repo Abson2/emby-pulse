@@ -40,6 +40,8 @@ DOMAIN_ALLOW = {
     "day.app",
     # 用户明确引用的公开项目（Cloudflare Tunnel 内网穿透介绍），非个人配置
     "naspk.com",
+    # Cloudflare Tunnel 官方文档（README 3.3 链接），非个人配置
+    "cloudflare.com",
 }
 TLD = {
     "com", "org", "net", "io", "cn", "cc", "cd", "dev", "app", "me",

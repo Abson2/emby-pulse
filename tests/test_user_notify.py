@@ -91,6 +91,20 @@ _fake_bark.send = _fake_bark_send
 _orig_bark_mod = sys.modules.get("app.domains.notifications.bark_push")
 sys.modules["app.domains.notifications.bark_push"] = _fake_bark
 
+# A7 出站 SSRF 校验桩：纯逻辑测试不发起真实 DNS / 网络，用无副作用的 no-op
+_fake_core = types.ModuleType("app.core")
+_fake_outbound = types.ModuleType("app.core.outbound_url")
+
+
+def _noop_assert_safe_outbound(url):
+    return None
+
+
+_fake_outbound.assert_safe_outbound = _noop_assert_safe_outbound
+sys.modules.setdefault("app.core", _fake_core)
+sys.modules["app.core.outbound_url"] = _fake_outbound
+_fake_core.outbound_url = _fake_outbound
+
 _spec = importlib.util.spec_from_file_location(
     "app.domains.users.user_notify_service",
     os.path.join(_REPO_ROOT, "app", "domains", "users", "user_notify_service.py"),
@@ -156,13 +170,28 @@ class CallRecorder:
 
 rec = CallRecorder()
 _orig_urlopen = None
+_orig_opener = None
+
+
+class _FakeOpener:
+    """桩 opener：把 `_opener.open(req)` 转给 CallRecorder.urlopen，避免真实网络。
+
+    生产代码用模块级 `urllib.request.build_opener(_NoRedirect())` 防 SSRF 重定向，
+    但本纯逻辑测试不发起真实 DNS / 网络，这里用桩 opener 替换，行为等价（HTTP 200）。
+    """
+
+    def open(self, req, timeout=None):
+        return rec.urlopen(req, timeout=timeout)
 
 
 def setup_module(dao):
-    global _orig_urlopen, _DAO
+    global _orig_urlopen, _orig_opener, _DAO
     _DAO = dao
     _orig_urlopen = urllib.request.urlopen
     urllib.request.urlopen = rec.urlopen
+    # 替换生产侧的 module-level opener，使其走桩而非真实网络
+    _orig_opener = getattr(uns, "_opener", None)
+    uns._opener = _FakeOpener()
 
 
 def teardown_module():
@@ -172,6 +201,8 @@ def teardown_module():
         sys.modules["app.domains.notifications.bark_push"] = _orig_bark_mod
     if _orig_urlopen is not None:
         urllib.request.urlopen = _orig_urlopen
+    if _orig_opener is not None:
+        uns._opener = _orig_opener
 
 
 def test_flag_gating_disabled():

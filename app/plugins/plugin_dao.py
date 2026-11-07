@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timedelta
 
+from app.core import secret_box
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
@@ -41,7 +42,8 @@ def delete_plugin_state(plugin_id: str) -> None:
 def get_plugin_config(plugin_id: str) -> dict:
     row = system_store.fetch_one("SELECT config FROM plugin_state WHERE plugin_id = ?", (plugin_id,))
     try:
-        return json.loads(row["config"]) if row and row["config"] else {}
+        raw = secret_box.decrypt(row["config"]) if row and row["config"] else ""
+        return json.loads(raw) if raw else {}
     except Exception:
         return {}
 
@@ -52,7 +54,7 @@ def save_plugin_config(plugin_id: str, config: dict) -> None:
         INSERT OR REPLACE INTO plugin_state (plugin_id, enabled, config)
         VALUES (?, COALESCE((SELECT enabled FROM plugin_state WHERE plugin_id = ?), 0), ?)
         """,
-        (plugin_id, plugin_id, json.dumps(config, ensure_ascii=False)),
+        (plugin_id, plugin_id, secret_box.encrypt(json.dumps(config, ensure_ascii=False))),
     )
 
 

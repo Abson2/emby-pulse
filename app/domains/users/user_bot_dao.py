@@ -1,3 +1,4 @@
+from app.core import secret_box
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 from app.infra.db.ddl_bootstrap import ensure_registered_tables
@@ -44,7 +45,7 @@ def get_binding_by_emby_id(emby_user_id):
     return {
         "tg_user_id": row["tg_user_id"],
         "emby_username": row["emby_username"],
-        "init_password": row["init_password"] or "",
+        "init_password": secret_box.decrypt(row["init_password"] or ""),
         "tg_username": row["tg_username"] or "",
         "tg_name": row["tg_display_name"] or "",
     }
@@ -69,7 +70,7 @@ def get_binding(tg_user_id):
     return {
         "emby_user_id": row["emby_user_id"],
         "emby_username": row["emby_username"],
-        "init_password": row["init_password"] or "",
+        "init_password": secret_box.decrypt(row["init_password"] or ""),
         "tg_username": row["tg_username"] or "",
         "tg_name": row["tg_display_name"] or "",
     }
@@ -229,7 +230,7 @@ def bind_user(tg_user_id, emby_user_id, emby_username, init_password: str = "", 
             (tg_user_id, tg_username, tg_display_name, emby_user_id, emby_username, init_password)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (str(tg_user_id), tg_username, tg_display_name, emby_user_id, emby_username, init_password),
+            (str(tg_user_id), tg_username, tg_display_name, emby_user_id, emby_username, secret_box.encrypt(init_password)),
         )
         conn.commit()
 
@@ -237,7 +238,7 @@ def bind_user(tg_user_id, emby_user_id, emby_username, init_password: str = "", 
 def update_binding_init_password(tg_user_id, init_password: str) -> None:
     system_store.execute(
         "UPDATE tg_user_bindings SET init_password = ? WHERE tg_user_id = ?",
-        (init_password, str(tg_user_id)),
+        (secret_box.encrypt(init_password), str(tg_user_id)),
     )
 
 

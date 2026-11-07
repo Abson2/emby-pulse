@@ -1,5 +1,72 @@
 # 更新日志
 
+## 2.4
+
+安全加固版：**在 100% 保留既有功能、对外接口、配置键与数据库 schema 不变的前提下**，采纳专家审计中「不影响功能、可机器验证」的安全与瘦身项。核心目标：把"公网被人打、数据被拿走"的真实风险面收口——限速/锁定不再可被伪造 IP 绕过、管理/用户两端会话隔离不再因反代丢端口而失效、落盘文件默认收紧、已撤销的管理令牌不会复活、普通用户无法驱动服务器打内网/云元数据、Emby 口令与插件第三方凭证不再明文落库。
+
+### 1. 客户端 IP 认定加固（A1）
+
+- `app/core/rate_limiter.py::get_client_ip`：可信代理（docker 网桥 / 本机回环）回源时，**优先采用 Cloudflare 边缘写入、客户端不可伪造的 `CF-Connecting-IP`**，其次保持原行为取 `X-Forwarded-For` 最左值或 `X-Real-IP`。
+- 直连（peer 为真实私网 IP、非可信代理）原样返回；**限流阈值、锁定策略、接口行为全部不变**。仅修正了 Cloudflare Tunnel 下"客户端可伪造 XFF 最左值绕过 `/api/login` 10 次/60s 锁定与审计 IP 失真"的缺口。
+- 验收：`curl -H 'X-Forwarded-For: 9.9.9.9'` 走公网域名，审计日志不应出现 `9.9.9.9`；手机 4G 与 WiFi 各登录一次应记录两个不同公网 IP。
+
+### 2. 端口隔离改读不可伪造的 scope 标记（A2）
+
+- `app/domains/users/auth.py`（后台登录）与 `app/domains/media_requests/auth_router.py`（用户社区登录）原依赖 `Host` 里的端口判断用户端/管理端；Cloudflare 回源 `Host` 无端口导致两端隔离失效。
+- 改为读取用户端 wrapper 在 ASGI `scope` 写入的 `USER_PORTAL_SCOPE_FLAG`（源自 socket，无法被 `Host`/`X-Forwarded-*` 伪造）。
+- LAN 直连 10307/10308 时标记与端口判断结果完全一致，门户 UI 无感；**管理 API 仍被 AuthGate wrapper 挡住，不构成越权**。
+
+### 3. 落盘权限收敛（A5）
+
+- `app/main.py` 进程启动即 `os.umask(0o077)`：容器内 root 照常读写，`data/*.db`、备份 xlsx 等新建文件默认 `0600`，同机其它账号/容器无法读取。
+- 若把 `data` 挂给 NAS 上别的账号共享读取，请勿启用此项；`.secret_key`（见下）需随 `data/` 一并备份。
+
+### 4. 管理员令牌吊销 fail-closed（A6）
+
+- `app/core/jwt_token.py::verify_api_token`：数据库异常时，**管理令牌改为拒绝（已撤销的管理令牌不会复活）**，普通用户令牌保持可用性（仅 JWT 校验）。管理端仅在 DB 抽风时收到 401（重试即可）。
+
+### 5. 用户通知出站 SSRF 校验（A7）
+
+- 新增 `app/core/outbound_url.py::assert_safe_outbound`：拦截指向 `169.254.0.0/16`（云元数据）/ `127.0.0.0/8`（回环）/ `::1` / `0.0.0.0/8` 的出站地址。
+- `user_notify_router.py` 保存前校验、`user_notify_service.py` 发送前再校验（防保存后改 DNS），Webhook 改用**禁重定向 opener**（`_NoRedirect`）避免 302 引到内网；公网 https、`192.168.x`、`10.x` 全部照旧。
+- 被拦的仅"故意打元数据/回环"，保留自建 Bark / n8n / HA 场景。
+
+### 6. 敏感字段透明加解密（A3 / A4）
+
+- 新增 `app/core/secret_box.py`（基于已在 `pyproject` 声明的 `pycryptodome`，AES-GCM；密钥 `data/.secret_key`）。
+- **A3**：`user_bot_dao` 对 `tg_user_bindings.init_password`（Emby 口令）在 DAO 边界透明加解密，机器人回显/改密逻辑原样返回明文，**上层一行未改**。
+- **A4**：`plugin_dao` 对 `plugin_state.config`（WebDAV 账号密码、TgtoDrive Token、115 Cookie 等第三方凭证）整段加密落库，读取自动解密。
+- **零迁移**：历史明文以 `enc:v1:` 前缀区分，读取时自动兼容；首次写即转密文。`.secret_key` 丢失只会导致老记录显示"未记录"，不会崩；**务必与 `data/` 一同备份**。
+
+### 7. GitHub 项目介绍补回 Cloudflare Tunnel 链接
+
+- README「3.3 启动与端口」把 "Cloudflare Tunnel" 补为指向官方文档的超链接（此前链接丢失，仅余文本）。
+
+### 8. 明确不采纳项（本次）
+
+- **R1（依赖注入样板 -3000 行）**：收益最大但需 `pytest` + 全新集成测试环境（本项目 CI 刻意保持纯标准库），回归面大，列为后续独立工程项，不在本版落地。
+- **R2（两套注册合并）/ R3（未使用 import 清理）**：属瘦身重构，需 `ruff`/`pytest` 环境与逐文件分类（含 facade 再导出防误删），本版不动以避免引入回归。
+- **A8（硬编码 TMDB Key）**：代码侧改为环境变量取默认值会使"未配 Key 用户看不到封面"，有轻微功能差异；且仓库已公开 Key 必须从 TMDB 后台轮换/删除（属运营动作，非代码修复），本版不擅自改功能，建议单独处理。
+- **R4（去 `aiofiles`/`itsdangerous`）**：二者 `app/` 内 0 引用，但本仓库经 `uv.lock --locked` 构建，移除需离线重算锁文件（本环境不可靠），且其作为"已安装但未导入"的包并非运行期攻击面，安全收益可忽略，故本版保留。
+
+### 9. 回归与验收矩阵
+
+| 项 | 结果 |
+| --- | --- |
+| `tools/run_all_checks.py .`（自动发现） | 148/0（29 排除 / 1 自身） |
+| `tools/verify_patches.py .` | 新增「问题 24」组（A1–A7 / A3-A4 加解密），全绿 |
+| `tests/test_refactor_2_0_equivalence.py` | 88/0（含 2.4 版本点） |
+| `tools/check_security_contracts.py` | 端口隔离读 scope 标记断言新增，全绿 |
+| `compileall` / `node --check`（7 个 JS）/ YAML / 凭证扫描 / `git diff --check` | 全绿 |
+
+**升级后人工验收清单（本版为行为加固，需实机走一遍）**：① 后台 Emby 登录 / 本地登录 / 2FA / 改密 / 用户增删 / 权限；② 门户 `/api/requests/auth` 登录 / 过期账号 / 求片 / 通知设置 / 续费 / 积分；③ Emby 入库通知（Webhook `?token=` 仍可用）；④ Bark/Webhook：公网 https 一条 + 内网 `192.168.x` 一条；⑤ 封面生成 / PWA / 头像 / 图片代理；⑥ 备份创建 / WebDAV 上传 / 恢复（验证 A4 后第三方凭证仍可读）；⑦ TG 机器人 `/my` 回显密码正常（验证 A3 解密链路）；⑧ 审计日志 IP = 真实公网 IP；⑨ 确认已备份 `data/.secret_key`。
+
+### 10. 版本与发版
+
+- 版本号 `2.3` → `2.4`：`app/shared/version.py`、`Dockerfile`（`2.4-hardened`）、`docker-compose.yml`（默认 `IMAGE_TAG:-2.4`）、`templates/request.html`（`request_app.js?v=2.4`）、README、CHANGELOG；`verify_patches.py` 与等价性测试的版本断言同步更新。
+- **`v2.0` / `v2.0.1` / `v2.0.2` / `v2.1` / `v2.3` 历史 tag 与已发布镜像不重推**；`IMAGE_TAG=1.9.10` 回退路径保持不变。
+- **GitHub 主页按既有约定保持简洁**：本版零功能变化，功能清单与当前使用说明不变，仅同步版本锁定与补回 Cloudflare Tunnel 链接；各版本详细更新说明以本文件与 GitHub Releases 为准，主页不展开。
+
 ## 2.3
 
 插件可扩展能力版本：在 100% 保留既有功能（内置插件卡片、对外接口、配置键、数据库 schema 完全不变，内置卡片 DOM 与 v2.1 逐字节一致）的前提下，新增「插件中心导入」能力与 OpenAPI，并配套开发规范与 AI 话术指引。核心目标：为后续功能扩展降低开发成本——主体项目稳定后，重心转向插件开发即可，无需改动核心。
