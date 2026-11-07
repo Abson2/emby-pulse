@@ -531,6 +531,27 @@ B3-B 的调用点计数最初写成 `"ensure_registered_tables(" in src`，结�
 | 29 个排除脚本进 CI | 18 个仍因沙箱 / 导入路径失败；CI 保持纯标准库 | 在 CI 装齐全依赖并逐个证明稳定，另起一轮 |
 | B2 / B5 / 迁移型 `ensure_*` | 见 8.5，统一与输出逐字不变互斥 | 见 8.5 |
 
-### 9.6 发版与回归
+### 9.6 发版 2.1 与回归
 
-待 2.1 发版时补齐：commit / annotated tag、6 个版本点、CHANGELOG、README 锁定、CI 结果与完整回归矩阵。
+**两提交分工**（沿用 2.0.2：优化与发版分离，**发版 commit 零运行时代码改动**）：
+
+- `958401e`：批次 1 优化，14 文件 `+1069 / -23`，其中运行时 7 文件 `+53 / -19`，其余为 golden / 测试 / 治理脚本 / 基线 / 文档。
+- 发版 commit：只改 6 个版本点、CHANGELOG、README 版本锁定、版本断言与本文件 9.6；`app/**` 中**只有** `app/shared/version.py` 的版本常量变化，业务代码一行不动。
+
+**6 个版本点** `2.0.2` → `2.1`：`app/shared/version.py`、`Dockerfile`（`2.1-hardened`）、`docker-compose.yml`（`IMAGE_TAG:-2.1`）、`templates/request.html`（`request_app.js?v=2.1`）、`CHANGELOG.md`（新增 `## 2.1`）、`README.md`（默认拉取与 compose 片段）。`tools/verify_patches.py` 与 `tests/test_refactor_2_0_equivalence.py` 的版本断言同步。
+
+**tag 策略**：创建 annotated tag `v2.1` 并推送；`v2.0` / `v2.0.1` / `v2.0.2` 一律不重推，`IMAGE_TAG=1.9.10` 回退路径保留。主页按既有约定只同步版本锁定，功能清单与用法不展开。
+
+**回归矩阵**：
+
+| 项 | 结果 |
+| --- | --- |
+| `tools/run_all_checks.py .`（自动发现 146 项） | 146/0 |
+| `tools/verify_patches.py .`（问题 21 / 22 组） | 256/0 |
+| `tests/test_loop_regex_equivalence.py` | 53/0 |
+| `tests/test_sanitizer_properties.py` / `test_refactor_2_0_equivalence.py` / `test_b_batch_equivalence.py` | 21/0 / 88/0 / 37/0 |
+| `tools/architecture_report.py` 6 项门槛 | delta 全 0，全绿 |
+| `tools/bench_hotpaths.py` | 4 条确定性契约 + 6 项比值全绿 |
+| `compileall` / `node --check`（7 个 JS）/ compose+workflow YAML / 凭证扫描 / `git diff --check` | 全绿 |
+
+**9.1 完成口径对照**：① 等价 —— golden 前置采集 + 53/0 双向比对 + 88/0 / 37/0 既有等价性回归，运行时改动逐处可证明；② 覆盖 —— 主网 146/0、6 项门槛、256/0 静态断言；③ 边界 —— 9.5 逐条写明排除理由，并固化「事务边界不可改」等 CI 断言；④ 发版 —— 6 个版本点、CHANGELOG、README 锁定、tag 与 CI 三 job 可回溯。四条全部满足，2.1 收口。

@@ -1,5 +1,47 @@
 # 更新日志
 
+## 2.1
+
+可证等价的性能优化与治理能力完善版（v2.0.2 之后）。**零功能变化**：对外接口、原有输入输出行为、配置键、数据库 schema 均未改动，功能与 `2.0.2` / `1.9.10` 完全等价。本版把「完美」定义为可机器判定：等价（golden 前置采集 + 逐字节比对）、覆盖（全量校验网 0 失败 + 6 项架构门槛）、边界（排除项逐条写明理由）、发版（版本点 / tag / CI 可回溯）。完整决策与客观边界见 [docs/REFACTOR_2.0.md](docs/REFACTOR_2.0.md) 第 9 节。
+
+### 1. 运行时优化：21 处循环内 / 重复正则预编译外提
+
+- 改代码前采集 `tests/loop_regex_golden.json`：16 组 pattern/flags/输入/oracle，覆盖 `sub` / `search` / `match` / `findall`，输出含 `group0` / `groups` / `span` 全量序列化，不只是布尔匹配。
+- 7 个文件 `+53 / -19`：16 处循环内字面量正则 + 5 处同文件循环外同 pattern 重复，共 **21 个调用点收敛到 16 个模块级 `re.compile` 常量**。涉及播放去重季号解析、用户明细时间解析、影巢签到时间/资源解析、封面文件名净化、通知模板逐行过滤。
+- `hdhive/plugin.py` 补模块级 `import re`；函数内原有的局部 `import re` 原样保留，两者指向同一标准库模块对象，行为不变。
+- **为什么等价**：`re.compile(p, f).op(...)` 与 `re.op(p, ..., flags=f)` 在标准库语义上完全一致，无副作用、无可观察状态变化；`tests/test_loop_regex_equivalence.py` 53/0 做 golden 行为重放 + 模块级调用双向比对 + AST 形态断言。
+
+### 2. 治理能力完善
+
+- `tools/architecture_report.py` 新增 `loop_literal_regex_calls` 指标并纳入不恶化门槛，基线 **16 → 0**；此后在循环里写 `re.sub("字面量")` 会被 CI 拦下。门槛由 5 项增至 **6 项**。
+- `tools/verify_patches.py` 新增「问题 22」组 8 条断言（**256/0**）：golden 覆盖、16 个常量（AST 计数）、循环内归零、CI 接线、门槛基线、以及 **`execute()` 事务边界未被改成 `execute_many`**。
+- CI verify 新增 1 个 step（22 → 23 步）；新测试由 `tools/run_all_checks.py` 自动发现纳入主网（**146/0**），无需手动接线。
+- `docs/REFACTOR_2.0.md` 新增第 9 节：完成口径、探查数据、等价性证明、治理增量、明确排除项、发版与回归矩阵。
+
+### 3. 探查结论与明确排除（不构成欠账）
+
+- AST 全量重数「同函数内 ≥2 次写」为 **106 个函数**（此前粗估 6 个是低估）。把逐条 `execute()` 改成 `execute_many()` 会把「每条独立提交」变成「整批单事务」，失败时 DB 残留完全不同，**事务边界与异常时机改变**，与逐字节等价互斥；`execute()` 源码一行未动，并把该状态写成 CI 断言。
+- 隔离 venv 装齐 `pytest` / `fastapi` / `PIL` / `anyio` 后重跑 29 个排除脚本：**11 通过 / 18 仍失败**（16 个被本机沙箱 `sitecustomize` 拦截、2 个是 `app` 导入路径）。CI verify 刻意保持纯标准库，不为了扩面引入依赖漂移；11 个作为后续工程环境建设的前置证据。
+- 循环内变量 pattern 调用 11 处（多为动态拼接或安全净化核心）、循环内常量容器赋值 67 处（多数是会被修改的业务 dict，外提会串改）、循环外单次字面量正则 51 处（`re` 模块有内部缓存，收益接近 0 而改动会扩到 30+ 文件）——均按「风险最小」排除。
+- B2 / B5 / 迁移型 `ensure_*` / C 批大重构的前置条件见第 8.5 节，结论不变。
+
+### 4. 回归矩阵
+
+| 项 | 结果 |
+| --- | --- |
+| `tools/run_all_checks.py .`（自动发现） | 146/0（29 排除 / 1 自身） |
+| `tools/verify_patches.py .` | 256/0（问题 21 / 22 组） |
+| `tests/test_loop_regex_equivalence.py` | 53/0 |
+| `tests/test_sanitizer_properties.py` / `test_refactor_2_0_equivalence.py` / `test_b_batch_equivalence.py` | 21/0 / 88/0 / 37/0 |
+| `tools/architecture_report.py` / `tools/bench_hotpaths.py` | 6 项门槛、4 条确定性契约 + 6 项比值全绿 |
+| `compileall` / `node --check`（7 个 JS）/ YAML / 凭证扫描 / `git diff --check` | 全绿 |
+
+### 5. 版本与发版
+
+- 版本号 `2.0.2` → `2.1`：`app/shared/version.py`、`Dockerfile`（`2.1-hardened`）、`docker-compose.yml`（默认 `IMAGE_TAG:-2.1`）、`templates/request.html`（`request_app.js?v=2.1`）、README、CHANGELOG；`verify_patches.py` 与等价性测试的版本断言同步更新。
+- **`v2.0` / `v2.0.1` / `v2.0.2` tag 与已发布镜像不重推**；`IMAGE_TAG=1.9.10` 回退路径保持不变。
+- **GitHub 主页按既有约定保持简洁**：本次零功能变化，功能清单与当前使用说明不变，仅同步版本锁定；各版本详细更新说明以本文件与 GitHub Releases 为准，主页不展开。
+
 ## 2.0.2
 
 主线架构优化收口版（v2.0.1 之后）。**零功能变化**：全部改动为内部等价重构、测试补强与文档同步，对外接口、原有输入输出行为、配置键、数据库 schema 均未改动，功能与 `2.0.1` / `1.9.10` 完全等价。按「风险最小、稳定性、安全性、100% 功能保留」推进，每批独立可 revert。完整决策记录与客观边界见 [docs/REFACTOR_2.0.md](docs/REFACTOR_2.0.md) 第 8 节。
