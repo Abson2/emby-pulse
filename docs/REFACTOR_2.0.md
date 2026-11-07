@@ -533,20 +533,25 @@ B3-B 的调用点计数最初写成 `"ensure_registered_tables(" in src`，结�
 
 ### 9.6 发版 2.1 与回归
 
-**两提交分工**（沿用 2.0.2：优化与发版分离，**发版 commit 零运行时代码改动**）：
+**三提交分工**（沿用 2.0.2：优化与发版分离，**发版 commit 零运行时代码改动**）：
 
 - `958401e`：批次 1 优化，14 文件 `+1069 / -23`，其中运行时 7 文件 `+53 / -19`，其余为 golden / 测试 / 治理脚本 / 基线 / 文档。
-- 发版 commit：只改 6 个版本点、CHANGELOG、README 版本锁定、版本断言与本文件 9.6；`app/**` 中**只有** `app/shared/version.py` 的版本常量变化，业务代码一行不动。
+- `ed87397`：发版 commit，只改 6 个版本点、CHANGELOG、README 版本锁定、版本断言与本文件 9.6；`app/**` 中**只有** `app/shared/version.py` 的版本常量变化，业务代码一行不动。该 commit 推送后 CI verify 因下述历史脚本失败，未产生 Release / 镜像。
+- CI 收口 commit：只改 `tests/test_tgtdrive_monitor.py`（绝对路径 → 按 `__file__` 仓库相对定位）、`tools/run_all_checks.py`（新增可移植性硬门禁）与两份文档；`app/**` 一行不动，业务行为零变化。`v2.1` tag 重建指向此 commit。
 
 **6 个版本点** `2.0.2` → `2.1`：`app/shared/version.py`、`Dockerfile`（`2.1-hardened`）、`docker-compose.yml`（`IMAGE_TAG:-2.1`）、`templates/request.html`（`request_app.js?v=2.1`）、`CHANGELOG.md`（新增 `## 2.1`）、`README.md`（默认拉取与 compose 片段）。`tools/verify_patches.py` 与 `tests/test_refactor_2_0_equivalence.py` 的版本断言同步。
 
 **tag 策略**：创建 annotated tag `v2.1` 并推送；`v2.0` / `v2.0.1` / `v2.0.2` 一律不重推，`IMAGE_TAG=1.9.10` 回退路径保留。主页按既有约定只同步版本锁定，功能清单与用法不展开。
+
+**首次 tag 的 CI 失败与重建**：`ed87397` 推送后 verify job 唯一失败项为 `tests/test_tgtdrive_monitor.py`（145/1）。根因是该老脚本第 40 行硬编码 `/tmp/ep_repo/tgtdrive-monitor/plugin.py`：macOS 的 `/tmp` 是 `/private/tmp` 符号链接，本机通过；CI checkout 在 `/home/runner/work/...`，`importlib` 的 `get_code` 找不到文件直接抛异常。该脚本此前从未进 CI（verify 只显式接 14 个），梯队 0 的全量网首次把它纳入才暴露。因该 tag 尚无 Release、无 GHCR 镜像、无人使用，经确认删除并重建 `v2.1` 指向全绿 commit；**历史 tag 与 `main` 提交历史不动**，并新增门禁防复发。
 
 **回归矩阵**：
 
 | 项 | 结果 |
 | --- | --- |
 | `tools/run_all_checks.py .`（自动发现 146 项） | 146/0 |
+| Python 3.12（CI 同版本）干净 worktree + 主仓复跑 | 146/0；3.13 亦 146/0 |
+| 可移植性门禁探针（注入 `/tmp/ep_repo` 临时脚本） | rc=1 拦下，清理后恢复 146/0 |
 | `tools/verify_patches.py .`（问题 21 / 22 组） | 256/0 |
 | `tests/test_loop_regex_equivalence.py` | 53/0 |
 | `tests/test_sanitizer_properties.py` / `test_refactor_2_0_equivalence.py` / `test_b_batch_equivalence.py` | 21/0 / 88/0 / 37/0 |
@@ -554,4 +559,4 @@ B3-B 的调用点计数最初写成 `"ensure_registered_tables(" in src`，结�
 | `tools/bench_hotpaths.py` | 4 条确定性契约 + 6 项比值全绿 |
 | `compileall` / `node --check`（7 个 JS）/ compose+workflow YAML / 凭证扫描 / `git diff --check` | 全绿 |
 
-**9.1 完成口径对照**：① 等价 —— golden 前置采集 + 53/0 双向比对 + 88/0 / 37/0 既有等价性回归，运行时改动逐处可证明；② 覆盖 —— 主网 146/0、6 项门槛、256/0 静态断言；③ 边界 —— 9.5 逐条写明排除理由，并固化「事务边界不可改」等 CI 断言；④ 发版 —— 6 个版本点、CHANGELOG、README 锁定、tag 与 CI 三 job 可回溯。四条全部满足，2.1 收口。
+**9.1 完成口径对照**：① 等价 —— golden 前置采集 + 53/0 双向比对 + 88/0 / 37/0 既有等价性回归，运行时改动逐处可证明；② 覆盖 —— 主网 146/0、6 项门槛、256/0 静态断言；③ 边界 —— 9.5 逐条写明排除理由，并固化「事务边界不可改」等 CI 断言；④ 发版 —— 6 个版本点、CHANGELOG、README 锁定、tag 与 CI 三 job（verify / build / release）全绿可回溯，Release 由 CI 自动创建。四条全部满足，2.1 收口。

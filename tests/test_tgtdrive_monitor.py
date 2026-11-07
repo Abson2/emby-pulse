@@ -35,9 +35,11 @@ def check(cond, msg):
 # ---------------------------------------------------------------------------
 # 导入插件模块（文件方式，避免污染 repo 包）
 # ---------------------------------------------------------------------------
+# 按仓库相对定位加载：CI checkout 路径与开发机不同，禁止硬编码开发机绝对路径。
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPEC = importlib.util.spec_from_file_location(
     "tgtdrive_monitor_test",
-    "/tmp/ep_repo/tgtdrive-monitor/plugin.py",
+    os.path.join(REPO_ROOT, "tgtdrive-monitor", "plugin.py"),
 )
 mod = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(mod)

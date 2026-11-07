@@ -17,6 +17,7 @@
 - `tools/verify_patches.py` 新增「问题 22」组 8 条断言（**256/0**）：golden 覆盖、16 个常量（AST 计数）、循环内归零、CI 接线、门槛基线、以及 **`execute()` 事务边界未被改成 `execute_many`**。
 - CI verify 新增 1 个 step（22 → 23 步）；新测试由 `tools/run_all_checks.py` 自动发现纳入主网（**146/0**），无需手动接线。
 - `docs/REFACTOR_2.0.md` 新增第 9 节：完成口径、探查数据、等价性证明、治理增量、明确排除项、发版与回归矩阵。
+- 发版期补齐 **CI 可移植性门禁**：梯队 0 把全量网接入 CI 后，首次暴露老脚本 `tests/test_tgtdrive_monitor.py` 硬编码开发机绝对路径 `/tmp/ep_repo/tgtdrive-monitor/plugin.py`——macOS 上 `/tmp` 是 `/private/tmp` 的符号链接故本机通过，CI 的 Linux checkout 无此目录，`importlib.exec_module` 在 `get_code` 阶段失败。改为按 `__file__` 定位仓库内同一文件（加载对象不变，30/0 断言行为不变）；`tools/run_all_checks.py` 新增 `NONPORTABLE_PREFIXES` 硬门禁，任何被发现脚本含开发机 / CI 专有绝对路径即整网失败，探针验证 rc=1 可拦下。
 
 ### 3. 探查结论与明确排除（不构成欠账）
 
@@ -30,6 +31,7 @@
 | 项 | 结果 |
 | --- | --- |
 | `tools/run_all_checks.py .`（自动发现） | 146/0（29 排除 / 1 自身） |
+| Python 3.12（CI 同版本）复跑全量网 / 可移植门禁探针 | 146/0；探针 rc=1 被拦下 |
 | `tools/verify_patches.py .` | 256/0（问题 21 / 22 组） |
 | `tests/test_loop_regex_equivalence.py` | 53/0 |
 | `tests/test_sanitizer_properties.py` / `test_refactor_2_0_equivalence.py` / `test_b_batch_equivalence.py` | 21/0 / 88/0 / 37/0 |
@@ -40,6 +42,7 @@
 
 - 版本号 `2.0.2` → `2.1`：`app/shared/version.py`、`Dockerfile`（`2.1-hardened`）、`docker-compose.yml`（默认 `IMAGE_TAG:-2.1`）、`templates/request.html`（`request_app.js?v=2.1`）、README、CHANGELOG；`verify_patches.py` 与等价性测试的版本断言同步更新。
 - **`v2.0` / `v2.0.1` / `v2.0.2` tag 与已发布镜像不重推**；`IMAGE_TAG=1.9.10` 回退路径保持不变。
+- 首次推送的 `v2.1` 因上述老测试脚本导致 verify job 失败（**未生成 GitHub Release、未推送 GHCR 镜像**）。修复后经确认**删除并重建 `v2.1` annotated tag** 指向全绿 commit；`main` 仅快进一个新提交，`v2.0` 系列历史 tag 与既有提交历史一律不动。
 - **GitHub 主页按既有约定保持简洁**：本次零功能变化，功能清单与当前使用说明不变，仅同步版本锁定；各版本详细更新说明以本文件与 GitHub Releases 为准，主页不展开。
 
 ## 2.0.2

@@ -33,6 +33,12 @@ import time
 SELF = "tools/run_all_checks.py"
 TIMEOUT = 90
 
+# 开发机 / CI 专有的绝对路径前缀。测试脚本里若写死这类路径，本机（macOS 上
+# /tmp 是 /private/tmp 的符号链接）可能碰巧通过，而 CI checkout 在完全不同的
+# 目录下必然在 importlib 加载阶段失败。2.1 发版时 tests/test_tgtdrive_monitor.py
+# 即因此失败；此处把「路径可移植」变成全量网的硬门禁。
+NONPORTABLE_PREFIXES = ("/tmp/ep_repo", "/private/tmp/ep_repo", "/home/runner/work/")
+
 # 全量基线采集（2026-11-07，171 个脚本 / 142 可跑 / 29 失败）中退出码非 0 的
 # 精确清单。失败原因全部是缺第三方依赖，不是断言失败：
 #   pytest / anyio / PIL / fastapi 应用配置依赖（app.core.config 等）。
@@ -106,6 +112,17 @@ def discover(root):
     return [os.path.relpath(p, root).replace(os.sep, "/") for p in paths]
 
 
+def check_portability(root, scripts):
+    bad = []
+    for rel in scripts:
+        with open(os.path.join(root, rel), "r", encoding="utf-8", errors="replace") as fp:
+            src = fp.read()
+        for token in NONPORTABLE_PREFIXES:
+            if token in src:
+                bad.append("%s -> %s" % (rel, token))
+    return bad
+
+
 def run_one(root, rel, env):
     argv = [sys.executable, rel]
     if rel.startswith("tools/"):
@@ -140,6 +157,13 @@ def main():
         return 1
 
     to_run = [p for p in all_scripts if p != SELF and p not in EXCLUDED]
+
+    nonportable = check_portability(root, to_run)
+    if nonportable:
+        print("FAIL: 待运行脚本含开发机 / CI 专有绝对路径，CI checkout 路径不同必然失败:")
+        for item in nonportable:
+            print("  - " + item)
+        return 1
 
     print("== 全量纯标准库校验网 ==")
     print("ROOT      : %s" % root)
