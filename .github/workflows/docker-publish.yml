@@ -76,6 +76,9 @@ jobs:
       - name: 校验 2.1 循环内正则预编译等价性（golden + AST）
         run: python tests/test_loop_regex_equivalence.py
 
+      - name: 校验 2.3 插件导入 / GitHub 发布窗口 / OpenAPI
+        run: python tests/test_plugin_import.py
+
       - name: 架构指标报告与不恶化门槛
         run: python tools/architecture_report.py .
 
@@ -191,6 +194,16 @@ jobs:
           fi
           if grep -q 'Origin 不匹配' /tmp/body; then
             echo "FAIL: 反代下仍触发 CSRF Origin 不匹配"
+            exit 1
+          fi
+
+          # 2.3：OpenAPI 文档默认仅管理员可访问，匿名读取必须被拦下
+          c=$(curl -s -o /tmp/openapi_body -w '%{http_code}' \
+            http://127.0.0.1:10307/openapi.json)
+          echo "GET /openapi.json (anon) -> $c"
+          if [ "$c" != "401" ] && [ "$c" != "403" ]; then
+            echo "FAIL: OpenAPI 文档匿名可访问"
+            cat /tmp/openapi_body
             exit 1
           fi
 

@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Request
+import time
+
+from fastapi import APIRouter, Request, UploadFile, File
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse
 from app.core.config import templates
 from app.domains.users import public_service as user_service
@@ -195,3 +198,120 @@ async def api_preview_notify_template(request: Request):
     
     preview = plugin.preview(template_key, template_text)
     return {"status": "success", "preview": preview}
+
+
+# ==========================================
+# 2.3 插件导入 / 本项目 GitHub 官方发布窗口
+# ==========================================
+# 所有导入接口都在 /api/plugins/ 下，AuthGate 已将其列为管理员专属前缀；
+# 此处再做一次管理员判定作为纵深防御。
+
+_REGISTRY_CACHE = {"at": 0.0, "data": None, "ref": ""}
+_REGISTRY_TTL = 300  # 秒，避免频繁请求 GitHub
+
+
+def _admin_ok(request: Request) -> bool:
+    return bool(user_service.is_admin_user(request))
+
+
+def _import_summary(mf: dict, origin: dict) -> dict:
+    return {
+        "id": mf["id"],
+        "name": mf["name"],
+        "version": mf["version"],
+        "enabled": False,
+        "requires_enable": True,
+        "source": origin.get("source", "local"),
+        "origin": origin,
+        "message": "导入成功；插件默认禁用，需在插件中心显式启用后才会加载代码",
+    }
+
+
+@router.get("/api/plugins/registry")
+def api_plugin_registry(request: Request, ref: str = ""):
+    """读取本项目 GitHub 仓库 plugins/index.json（官方插件发布窗口）。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    from app.plugins import github_source
+
+    now = time.time()
+    if (_REGISTRY_CACHE["data"] is not None
+            and _REGISTRY_CACHE["ref"] == ref
+            and now - _REGISTRY_CACHE["at"] < _REGISTRY_TTL):
+        return {"status": "success", "data": _REGISTRY_CACHE["data"], "cached": True}
+    try:
+        data = github_source.fetch_registry(ref=ref or None)
+    except Exception as exc:
+        return {"status": "error", "message": "读取官方索引失败: %s" % exc}
+    _REGISTRY_CACHE.update({"at": now, "data": data, "ref": ref})
+    return {"status": "success", "data": data, "cached": False}
+
+
+@router.post("/api/plugins/import")
+async def api_import_plugin(request: Request, file: UploadFile = File(...)):
+    """上传 zip 包导入外部插件：只落盘、默认禁用、不执行插件代码。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    from app.plugins import external, plugin_dao
+
+    data = await file.read(external.MAX_ZIP_BYTES + 1)
+    if len(data) > external.MAX_ZIP_BYTES:
+        return {"status": "error", "message": "插件包超过 %d 字节上限" % external.MAX_ZIP_BYTES}
+    overwrite = request.query_params.get("overwrite") == "1"
+    try:
+        result = await run_in_threadpool(
+            external.install_from_zip, data,
+            {"type": "local"}, overwrite,
+        )
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+    mf = result["manifest"]
+    # 关键：无论历史上是否装过同 id 插件，导入后一律回到禁用状态
+    plugin_dao.set_plugin_enabled(mf["id"], False)
+    return {"status": "success", "data": _import_summary(mf, result["origin"])}
+
+
+@router.post("/api/plugins/import/github")
+async def api_import_plugin_from_github(request: Request):
+    """从本项目 GitHub 发布窗口拉取并安装；产物强制 sha256 校验。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    from app.plugins import github_source, plugin_dao
+
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    try:
+        result = await run_in_threadpool(
+            github_source.install_from_github,
+            str(payload.get("plugin_id", "")),
+            payload.get("ref") or None,
+            github_source.DEFAULT_REPO,
+            bool(payload.get("overwrite")),
+        )
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+    mf = result["manifest"]
+    plugin_dao.set_plugin_enabled(mf["id"], False)
+    return {"status": "success", "data": _import_summary(mf, result["origin"])}
+
+
+@router.delete("/api/plugins/{plugin_id}/install")
+def api_uninstall_plugin(plugin_id: str, request: Request):
+    """卸载外部导入的插件；内置插件不可卸载。"""
+    if not _admin_ok(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    from app.plugins import uninstall_plugin, plugin_dao
+
+    try:
+        ok = uninstall_plugin(plugin_id)
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+    if not ok:
+        return {"status": "error", "message": "仅可卸载外部导入的插件"}
+    # 清理启用状态，避免重新导入同 id 时被当作「已启用」自动执行代码
+    plugin_dao.delete_plugin_state(plugin_id)
+    return {"status": "success", "message": "已卸载；重启应用后残留路由将彻底清理"}

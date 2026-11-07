@@ -51,6 +51,11 @@ TLD = {
     "cyou", "sbs", "beauty", "lol", "zip", "mov", "art", "blog", "cash",
 }
 DOMAIN_RE = re.compile(r"\b(?:[a-z0-9-]+\.)+([a-z]{2,})\b", re.I)
+# .zip / .mov 在本仓库同时是插件产物与媒体文件扩展名，DOMAIN_RE 会把
+# "hello_plugin-1.0.0.zip" / "%s-%s.zip" 误判成域名。仅当匹配串嵌在更长的
+# 文件名或格式串中（前一字符是字母数字 / - _ %）才豁免；写成独立 host 的
+# "evil.zip"、https://evil.zip 仍会命中，检测能力不削弱。
+FILE_EXT_TLD = {"zip", "mov"}
 
 # 具体内网主机地址；CIDR 写法（后跟 /）属正常配置项，不命中
 PRIVATE_IP_RE = re.compile(
@@ -172,6 +177,15 @@ def findings_for(rel: str, data: bytes) -> list[str]:
                 continue
             if allowed_domain(m.group(0)):
                 continue
+            # .zip / .mov 同时是插件产物与媒体文件扩展名，DOMAIN_RE 会把
+            # "hello_plugin-1.0.0.zip" / "%s-%s.zip" 里的 .zip 误判成域名。
+            # 仅当该匹配串嵌在更长的文件名 / 格式串中（前一字符为字母数字
+            # 或 - _ %）才豁免；独立写成 host 的 "evil.zip" / "https://evil.zip"
+            # 仍会命中，检测能力不削弱。
+            if m.group(1).lower() in FILE_EXT_TLD and m.start() > 0:
+                prev = text[m.start() - 1]
+                if prev.isalnum() or prev in "-_%":
+                    continue
             out.append("非示例域名 L%d" % (text[:m.start()].count("\n") + 1))
 
         for m in PRIVATE_IP_RE.finditer(text):

@@ -8,11 +8,14 @@ import logging
 from typing import Dict, List, Optional
 from app.plugins.base import PluginBase, _config_cache, _config_cache_lock
 from app.plugins import plugin_dao
+from app.plugins import external
 
 logger = logging.getLogger("uvicorn")
 
 # 全局插件注册表
 _registry: Dict[str, PluginBase] = {}
+# 已安装的外部插件 manifest（2.3）：仅登记元信息，未启用前不执行任何插件代码
+_external_manifests: Dict[str, dict] = {}
 
 
 def _ensure_plugin_table():
@@ -63,8 +66,42 @@ def discover_plugins():
             import traceback
             traceback.print_exc()
 
+    # 2.3：登记外部插件；只有数据库中已启用的才会真正 import 插件代码
+    discover_external_plugins()
+
     # 从数据库恢复启用状态
     _restore_states()
+
+
+def discover_external_plugins():
+    """扫描持久化外部插件目录。
+
+    安全约束：导入包只落盘并登记 manifest，**绝不在此处执行外部代码**；
+    仅当管理员此前已显式启用时，才按需加载并交给 _restore_states() 启用。
+    """
+    global _external_manifests
+    try:
+        _external_manifests = external.list_installed()
+    except Exception as e:
+        logger.error("[🧩 插件] 扫描外部插件目录失败: %s", e)
+        _external_manifests = {}
+        return
+    if not _external_manifests:
+        return
+    try:
+        enabled = {row["plugin_id"] for row in plugin_dao.list_plugin_states() if row["enabled"]}
+    except Exception:
+        enabled = set()
+    for pid in _external_manifests:
+        if pid not in enabled:
+            continue
+        try:
+            instance = external.load_external(pid)
+            instance._external = True
+            _registry[pid] = instance
+            logger.info("🧩 载入外部插件: %s", pid)
+        except Exception as e:
+            logger.error("[🧩 插件] 载入外部插件 %s 失败: %s", pid, e)
 
 
 def _restore_states():
@@ -97,7 +134,49 @@ def _restore_states():
 
 
 def get_all_plugins() -> List[dict]:
-    return [p.get_meta() for p in _registry.values()]
+    """内置 + 已安装的外部插件（未启用的外部插件也列出，便于管理员启用/卸载）。"""
+    result = []
+    for p in _registry.values():
+        meta = p.get_meta()
+        is_external = bool(getattr(p, "_external", False))
+        meta.update({
+            "external": is_external,
+            "installed": True,
+            "loaded": True,
+            "source": external.get_origin(p.id).get("source", "local") if is_external else "builtin",
+            "origin": external.get_origin(p.id) if is_external else {},
+        })
+        result.append(meta)
+    known = {m["id"] for m in result}
+    for pid, mf in _external_manifests.items():
+        if pid not in known:
+            result.append(external.manifest_meta(mf, enabled=False))
+    return result
+
+
+def get_external_manifests() -> Dict[str, dict]:
+    return dict(_external_manifests)
+
+
+def uninstall_plugin(plugin_id: str) -> bool:
+    """卸载外部插件（内置插件永不受影响）；已启用的先停止。"""
+    plugin = _registry.get(plugin_id)
+    if plugin is not None and getattr(plugin, "_external", False):
+        try:
+            plugin.disable()
+        except Exception as e:
+            logger.error("停止外部插件 %s 失败: %s", plugin_id, e)
+        _registry.pop(plugin_id, None)
+    if plugin_id not in _external_manifests:
+        return False
+    try:
+        ok = external.uninstall(plugin_id)
+    except Exception as e:
+        logger.error("卸载外部插件 %s 失败: %s", plugin_id, e)
+        return False
+    if ok:
+        _external_manifests.pop(plugin_id, None)
+    return ok
 
 
 def get_plugin(plugin_id: str) -> Optional[PluginBase]:
@@ -119,6 +198,16 @@ def disable_enabled_plugins() -> None:
 
 def set_plugin_enabled(plugin_id: str, enabled: bool) -> bool:
     plugin = _registry.get(plugin_id)
+    # 2.3：外部插件首次被显式启用时才 import 其代码（导入阶段不执行）
+    if plugin is None and enabled and plugin_id in _external_manifests:
+        try:
+            plugin = external.load_external(plugin_id)
+            plugin._external = True
+            _registry[plugin_id] = plugin
+            logger.info("🧩 按需载入外部插件: %s", plugin_id)
+        except Exception as e:
+            logger.error("[🧩 插件] 按需载入外部插件 %s 失败: %s", plugin_id, e)
+            return False
     if not plugin:
         return False
     if enabled:

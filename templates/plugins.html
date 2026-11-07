@@ -14,10 +14,66 @@
                 </div>
             </div>
         </div>
+        <div class="flex items-center gap-2 shrink-0">
+            <button onclick="openPluginImportModal()" class="px-4 py-2.5 bg-brand-500 text-white font-bold rounded-xl hover:bg-brand-600 transition-colors shadow-lg shadow-brand-500/20 active:scale-95 text-[13px] flex items-center gap-2">
+                <i class="fa-solid fa-file-import"></i>导入插件
+            </button>
+        </div>
     </div>
 
     <div id="plugins-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
         <div class="col-span-full flex justify-center py-16"><i class="fa-solid fa-spinner fa-spin text-gray-300 text-xl"></i></div>
+    </div>
+</div>
+
+<!-- 2.3 插件导入弹窗：只落盘、默认禁用，启用必须由管理员显式操作 -->
+<div id="plugin-import-modal" class="fixed inset-0 z-[210] hidden items-center justify-center p-4 backdrop-blur-sm bg-black/40" onclick="if(event.target===this) closePluginImportModal()">
+    <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[88vh] border border-gray-100 dark:border-white/10">
+        <div class="px-5 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center shrink-0">
+            <h3 class="text-[16px] font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center">
+                    <i class="fa-solid fa-file-import text-white text-[11px]"></i>
+                </div>
+                导入插件
+            </h3>
+            <button onclick="closePluginImportModal()" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="px-5 pt-4 flex gap-2 shrink-0">
+            <button id="pi-tab-local" onclick="switchPluginImportTab('local')" class="px-3 py-2 text-[12px] font-bold rounded-lg transition-all bg-brand-500 text-white">本地 ZIP 包</button>
+            <button id="pi-tab-github" onclick="switchPluginImportTab('github')" class="px-3 py-2 text-[12px] font-bold rounded-lg transition-all bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">GitHub 官方索引</button>
+        </div>
+        <div class="p-5 overflow-y-auto mac-scrollbar flex-1">
+            <div id="pi-panel-local">
+                <label class="text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1.5 block uppercase tracking-wide">选择插件包（.zip，≤ 5 MiB）</label>
+                <input type="file" id="pi-file" accept=".zip,application/zip" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <label class="flex items-center gap-2 mt-3 text-[12px] text-gray-600 dark:text-gray-400 cursor-pointer">
+                    <input type="checkbox" id="pi-overwrite-local" class="w-4 h-4 rounded text-brand-500 border-gray-300">覆盖已安装的同 ID 插件（升级时用）
+                </label>
+                <p class="mt-3 text-[11px] leading-relaxed text-gray-500 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-xl p-3">
+                    <i class="fa-solid fa-shield-halved mr-1"></i>导入只做安全校验与落盘，<b>插件默认禁用、不会执行任何代码</b>。请在插件中心显式启用后再使用；仅导入可信来源的插件包。
+                </p>
+                <div class="mt-4 flex justify-end">
+                    <button id="pi-local-btn" onclick="submitLocalPlugin()" class="px-6 py-2 bg-brand-500 text-white font-bold rounded-xl hover:bg-brand-600 transition-colors shadow-lg shadow-brand-500/20 active:scale-95 text-[14px] disabled:opacity-50">导入</button>
+                </div>
+            </div>
+            <div id="pi-panel-github" class="hidden">
+                <div class="flex gap-2 items-end">
+                    <div class="flex-1 min-w-0">
+                        <label class="text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-1.5 block uppercase tracking-wide">分支 / Tag（留空用 main）</label>
+                        <input type="text" id="pi-ref" placeholder="main" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+                    <button id="pi-refresh-btn" onclick="loadGithubRegistry()" class="px-4 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-[12px] shrink-0"><i class="fa-solid fa-rotate mr-1.5"></i>刷新索引</button>
+                </div>
+                <p class="mt-3 text-[11px] leading-relaxed text-gray-500">
+                    <i class="fa-brands fa-github mr-1"></i>仅读取本项目仓库 <code class="font-mono">plugins/index.json</code>；下载地址由服务端按仓库白名单拼接，产物强制 sha256 校验。
+                </p>
+                <div id="pi-registry-list" class="space-y-2 mt-3"></div>
+                <label class="flex items-center gap-2 mt-3 text-[12px] text-gray-600 dark:text-gray-400 cursor-pointer">
+                    <input type="checkbox" id="pi-overwrite-github" class="w-4 h-4 rounded text-brand-500 border-gray-300">覆盖已安装的同 ID 插件（升级时用）
+                </label>
+            </div>
+            <div id="pi-result" class="hidden mt-4 rounded-xl p-3 text-[12px] leading-relaxed"></div>
+        </div>
     </div>
 </div>
 
@@ -1524,7 +1580,7 @@
                 <div class="col-span-full flex flex-col items-center justify-center py-20 text-center">
                     <div class="w-20 h-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4"><i class="fa-solid fa-puzzle-piece text-3xl text-gray-300 dark:text-gray-600"></i></div>
                     <p class="text-[15px] font-semibold text-gray-500 dark:text-gray-400">暂无可用插件</p>
-                    <p class="text-[12px] text-gray-400 mt-1">插件将在 app/plugins/ 目录下自动发现</p>
+                    <p class="text-[12px] text-gray-400 mt-1">内置插件自动发现，也可点击右上角「导入插件」安装外部插件</p>
                 </div>`;
                 return;
             }
@@ -1533,6 +1589,25 @@
                 const iconGrad = p.icon_color || 'from-violet-500 to-purple-600';
                 const isPro = p.pro_only === true || p.description.includes('Pro');
                 const proBadge = isPro ? '<span class="pro-glow-tag text-[7px] font-black text-white px-1.5 py-0.5 rounded ml-1.5 uppercase leading-tight shrink-0">Pro</span>' : '';
+                // 2.3：以下变量仅供外部导入插件使用；内置插件的卡片 DOM 保持原有输出不变
+                const isExternal = p.external === true;
+                const srcLabel = p.source === 'github' ? 'GitHub' : (p.source === 'local' ? '本地导入' : '外部');
+                const originTitle = (isExternal && p.origin && p.origin.repo)
+                    ? ' title="' + epEsc(p.origin.repo + (p.origin.ref ? '@' + p.origin.ref : '')) + '"' : '';
+                const sourceBadge = isExternal
+                    ? `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 bg-violet-100 dark:bg-violet-500/20 text-violet-600 dark:text-violet-300 border border-violet-200 dark:border-violet-500/30"${originTitle}><i class="fa-solid fa-arrow-down-to-bracket mr-1"></i>${srcLabel}</span>`
+                    : '';
+                // 未启用的外部插件尚未加载代码，配置/日志接口不可用
+                const coreButtons = (isExternal && !p.loaded) ? '' : `
+                            <button onclick="openPluginConfig('${p.id}')" class="text-[12px] font-bold text-gray-500 hover:text-brand-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-gear mr-1.5"></i>配置</button>
+                            <button onclick="togglePluginLogs('${p.id}')" class="text-[12px] font-bold text-gray-500 hover:text-blue-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-file-lines mr-1.5"></i>日志</button>`;
+                const uninstallBtn = isExternal
+                    ? `<button data-plugin-id="${epEsc(p.id)}" onclick="uninstallExternalPlugin(this.dataset.pluginId)" class="text-[12px] font-bold text-gray-400 hover:text-rose-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-trash-can mr-1.5"></i>卸载</button>`
+                    : '';
+                const idAttr = isExternal ? ` data-plugin-id="${epEsc(p.id)}"` : '';
+                const toggleHandler = isExternal
+                    ? 'toggleExternalPlugin(this.dataset.pluginId, this.checked, this)'
+                    : `togglePlugin('${p.id}', this.checked, this, ${p.description.includes('Pro') ? 'true' : 'false'})`;
                 html += `
                 <div class="bg-white dark:bg-[#1C1C1E] rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all p-5 flex flex-col gap-4 relative overflow-hidden">
                     <div class="flex items-start gap-3.5">
@@ -1541,7 +1616,7 @@
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2">
-                                <h3 class="text-[15px] font-bold text-gray-900 dark:text-white truncate">${p.name}</h3>${proBadge}
+                                <h3 class="text-[15px] font-bold text-gray-900 dark:text-white truncate">${p.name}</h3>${proBadge}${sourceBadge}
                                 <span class="text-[9px] font-mono text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded shrink-0">v${p.version}</span>
                             </div>
                             <p class="text-[12px] text-gray-500 mt-1 line-clamp-2 leading-relaxed">${p.description}</p>
@@ -1549,9 +1624,7 @@
                         </div>
                     </div>
                     <div class="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-white/5">
-                        <div class="flex gap-1">
-                            <button onclick="openPluginConfig('${p.id}')" class="text-[12px] font-bold text-gray-500 hover:text-brand-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-gear mr-1.5"></i>配置</button>
-                            <button onclick="togglePluginLogs('${p.id}')" class="text-[12px] font-bold text-gray-500 hover:text-blue-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-file-lines mr-1.5"></i>日志</button>
+                        <div class="flex gap-1">${coreButtons}
                             ${p.id === 'hdhive' && p.enabled ? '<button onclick="openHDHivePanel()" class="text-[12px] font-bold text-gray-500 hover:text-emerald-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-terminal mr-1.5"></i>面板</button>' : ''}
                         ${p.id === 'hdhivesign' && p.enabled ? '<button onclick="openHDHiveSignPanel()" class="text-[12px] font-bold text-gray-500 hover:text-purple-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-calendar-check mr-1.5"></i>签到</button>' : ''}
                         ${p.id === 'keep_alive' && p.enabled ? '<button onclick="openKeepAlivePanel()" class="text-[12px] font-bold text-gray-500 hover:text-rose-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-shield-heart mr-1.5"></i>面板</button>' : ''}
@@ -1564,10 +1637,10 @@
                         ${p.id === 'cover_generator' && p.enabled ? '<button onclick="openCoverGeneratorPanel()" class="text-[12px] font-bold text-gray-500 hover:text-purple-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i>生成</button>' : ''}
                         ${p.id === 'user_backup' && p.enabled ? '<button onclick="openUserBackupPanel()" class="text-[12px] font-bold text-gray-500 hover:text-cyan-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-database mr-1.5"></i>备份</button>' : ''}
                         ${p.id === 'temp_account' && p.enabled ? '<button onclick="openTempAccountPanel()" class="text-[12px] font-bold text-gray-500 hover:text-violet-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-user-clock mr-1.5"></i>管理</button>' : ''}
-                        ${p.id === 'season_poster_updater' && p.enabled ? '<button onclick="openSeasonPosterPanel()" class="text-[12px] font-bold text-gray-500 hover:text-teal-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-photo-film mr-1.5"></i>面板</button>' : ''}
+                        ${p.id === 'season_poster_updater' && p.enabled ? '<button onclick="openSeasonPosterPanel()" class="text-[12px] font-bold text-gray-500 hover:text-teal-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5"><i class="fa-solid fa-photo-film mr-1.5"></i>面板</button>' : ''}${uninstallBtn}
                         </div>
                         <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" class="sr-only peer" ${p.enabled ? 'checked' : ''} onchange="togglePlugin('${p.id}', this.checked, this, ${p.description.includes('Pro') ? 'true' : 'false'})">
+                            <input type="checkbox"${idAttr} class="sr-only peer" ${p.enabled ? 'checked' : ''} onchange="${toggleHandler}">
                             <div class="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-brand-500 shadow-inner"></div>
                         </label>
                     </div>
@@ -5864,6 +5937,166 @@ async function seasonPosterClearLogs() {
         }
     } catch (e) {
         showToast('error', '清空失败', e.message);
+    }
+}
+
+// ==================== 2.3 插件导入：只落盘、默认禁用 ====================
+function epEsc(value) {
+    return String(value === undefined || value === null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function epValidId(value) {
+    return /^[a-z][a-z0-9_]{1,47}$/.test(String(value || ''));
+}
+
+function openPluginImportModal() {
+    const modal = document.getElementById('plugin-import-modal');
+    document.getElementById('pi-result').classList.add('hidden');
+    switchPluginImportTab('local');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closePluginImportModal() {
+    const modal = document.getElementById('plugin-import-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+function switchPluginImportTab(tab) {
+    const isLocal = tab === 'local';
+    const on = 'px-3 py-2 text-[12px] font-bold rounded-lg transition-all bg-brand-500 text-white';
+    const off = 'px-3 py-2 text-[12px] font-bold rounded-lg transition-all bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400';
+    document.getElementById('pi-panel-local').classList.toggle('hidden', !isLocal);
+    document.getElementById('pi-panel-github').classList.toggle('hidden', isLocal);
+    document.getElementById('pi-tab-local').className = isLocal ? on : off;
+    document.getElementById('pi-tab-github').className = isLocal ? off : on;
+    if (!isLocal) loadGithubRegistry();
+}
+
+function piShowResult(kind, text) {
+    const box = document.getElementById('pi-result');
+    const tone = kind === 'ok'
+        ? 'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+        : (kind === 'err'
+            ? 'bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 text-rose-700 dark:text-rose-300'
+            : 'bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300');
+    box.className = 'mt-4 rounded-xl p-3 text-[12px] leading-relaxed ' + tone;
+    box.textContent = text;
+    box.classList.remove('hidden');
+}
+
+async function submitLocalPlugin() {
+    const fileEl = document.getElementById('pi-file');
+    const btn = document.getElementById('pi-local-btn');
+    if (!fileEl.files || !fileEl.files.length) { piShowResult('err', '请先选择 .zip 插件包'); return; }
+    const file = fileEl.files[0];
+    if (file.size > 5 * 1024 * 1024) { piShowResult('err', '插件包超过 5 MiB 上限'); return; }
+    const form = new FormData();
+    form.append('file', file);
+    const overwrite = document.getElementById('pi-overwrite-local').checked;
+    piShowResult('info', '正在校验并安装插件包...');
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/plugins/import' + (overwrite ? '?overwrite=1' : ''), { method: 'POST', body: form });
+        const data = await res.json();
+        if (data.status !== 'success') { piShowResult('err', data.message || '导入失败'); return; }
+        piShowResult('ok', (data.data && data.data.message) || '导入成功，插件默认禁用');
+        fileEl.value = '';
+        loadPlugins();
+    } catch (e) {
+        piShowResult('err', '导入失败: ' + e.message);
+    } finally { btn.disabled = false; }
+}
+
+async function loadGithubRegistry() {
+    const list = document.getElementById('pi-registry-list');
+    const btn = document.getElementById('pi-refresh-btn');
+    const ref = document.getElementById('pi-ref').value.trim();
+    list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]"><i class="fa-solid fa-spinner fa-spin mr-2"></i>读取官方索引中...</div>';
+    if (btn) btn.disabled = true;
+    try {
+        const res = await (await fetch('/api/plugins/registry?ref=' + encodeURIComponent(ref))).json();
+        if (res.status !== 'success') {
+            list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]">' + epEsc(res.message || '读取失败') + '</div>';
+            return;
+        }
+        const items = (res.data && res.data.plugins) || [];
+        if (!items.length) {
+            list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]">官方索引暂无插件。在 plugins/index.json 与 plugins/dist/ 发布后点「刷新索引」。</div>';
+            return;
+        }
+        list.innerHTML = items.map(function (item) {
+            const id = epEsc(item.id);
+            const extra = item.min_app_version ? ' · 需 ' + epEsc(item.min_app_version) : '';
+            return '<div class="flex items-center gap-3 p-3 rounded-xl border border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/20">'
+                + '<div class="flex-1 min-w-0">'
+                + '<div class="flex items-center gap-2"><span class="text-[13px] font-bold text-gray-800 dark:text-gray-100 truncate">' + epEsc(item.name) + '</span>'
+                + '<span class="text-[9px] font-mono text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded shrink-0">v' + epEsc(item.version) + '</span></div>'
+                + '<p class="text-[11px] text-gray-500 mt-1 leading-relaxed">' + epEsc(item.description) + '</p>'
+                + '<p class="text-[10px] text-gray-400 mt-1 font-mono truncate">' + epEsc(item.id) + extra + '</p>'
+                + '</div>'
+                + '<button data-gh-id="' + id + '" onclick="importGithubPlugin(this.dataset.ghId, this)" class="px-3 py-1.5 bg-brand-500 text-white font-bold rounded-lg hover:bg-brand-600 transition-colors text-[11px] shrink-0 disabled:opacity-50">导入</button>'
+                + '</div>';
+        }).join('');
+    } catch (e) {
+        list.innerHTML = '<div class="text-center py-6 text-gray-400 text-[12px]">' + epEsc(e.message) + '</div>';
+    } finally { if (btn) btn.disabled = false; }
+}
+
+async function importGithubPlugin(pluginId, btn) {
+    if (!epValidId(pluginId)) { piShowResult('err', '插件 ID 不合法'); return; }
+    const payload = {
+        plugin_id: pluginId,
+        ref: document.getElementById('pi-ref').value.trim(),
+        overwrite: document.getElementById('pi-overwrite-github').checked
+    };
+    piShowResult('info', '正在从 GitHub 拉取并校验 sha256: ' + pluginId);
+    if (btn) btn.disabled = true;
+    try {
+        const res = await fetch('/api/plugins/import/github', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.status !== 'success') { piShowResult('err', data.message || '导入失败'); return; }
+        piShowResult('ok', (data.data && data.data.message) || '导入成功，插件默认禁用');
+        loadPlugins();
+    } catch (e) {
+        piShowResult('err', '导入失败: ' + e.message);
+    } finally { if (btn) btn.disabled = false; }
+}
+
+async function toggleExternalPlugin(id, enabled, el) {
+    if (!epValidId(id)) { el.checked = !enabled; return; }
+    try {
+        const res = await fetch('/api/plugins/' + encodeURIComponent(id) + '/toggle', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({enabled: enabled})
+        });
+        const data = await res.json();
+        if (data.status !== 'success') {
+            el.checked = !enabled;
+            showToast('error', '操作失败', data.message || '插件启用失败');
+        }
+    } catch (e) {
+        el.checked = !enabled;
+        showToast('error', '操作失败', e.message);
+    }
+    loadPlugins();
+}
+
+async function uninstallExternalPlugin(pluginId) {
+    if (!epValidId(pluginId)) return;
+    if (!confirm('确定卸载插件 ' + pluginId + '？卸载后建议重启应用以彻底清理已加载的代码。')) return;
+    try {
+        const res = await fetch('/api/plugins/' + encodeURIComponent(pluginId) + '/install', { method: 'DELETE' });
+        const data = await res.json();
+        if (data.status !== 'success') { showToast('error', '卸载失败', data.message || ''); return; }
+        showToast('success', '已卸载', data.message || '插件已卸载');
+        loadPlugins();
+    } catch (e) {
+        showToast('error', '卸载失败', e.message);
     }
 }
 </script>

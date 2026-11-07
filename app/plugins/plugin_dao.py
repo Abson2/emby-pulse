@@ -33,6 +33,11 @@ def set_plugin_enabled(plugin_id: str, enabled: bool) -> None:
     )
 
 
+def delete_plugin_state(plugin_id: str) -> None:
+    """2.3：卸载外部插件时清理启用状态，避免重新导入同 id 被自动启用。"""
+    system_store.execute("DELETE FROM plugin_state WHERE plugin_id = ?", (plugin_id,))
+
+
 def get_plugin_config(plugin_id: str) -> dict:
     row = system_store.fetch_one("SELECT config FROM plugin_state WHERE plugin_id = ?", (plugin_id,))
     try:

@@ -320,12 +320,12 @@ check("系统设置接口给出可复制的 URL 模板",
 check("系统设置接口不再要求 Emby 配置 Header",
       "请在 Emby 中配置 Header" not in system_router)
 
-check("应用版本升级到 2.1", 'APP_VERSION = "2.1"' in read("app/shared/version.py"))
-check("Dockerfile 版本为 2.1-hardened", "APP_VERSION=2.1-hardened" in dockerfile)
-check("compose 默认拉取 2.1", "IMAGE_TAG:-2.1" in compose)
+check("应用版本升级到 2.3", 'APP_VERSION = "2.3"' in read("app/shared/version.py"))
+check("Dockerfile 版本为 2.3-hardened", "APP_VERSION=2.3-hardened" in dockerfile)
+check("compose 默认拉取 2.3", "IMAGE_TAG:-2.3" in compose)
 check("compose 保留 1.9.10 回退说明（不删除历史版本特性）", "IMAGE_TAG=1.9.10" in compose)
-check("CHANGELOG 含 1.9.x 全系列与 2.0 / 2.0.1 / 2.0.2 / 2.1 发版说明",
-      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7", "## 1.9.8", "## 1.9.9", "## 1.9.10", "## 2.0", "## 2.0.1", "## 2.0.2", "## 2.1")))
+check("CHANGELOG 含 1.9.x 全系列与 2.0 / 2.0.1 / 2.0.2 / 2.1 / 2.3 发版说明",
+      all(x in read("CHANGELOG.md") for x in ("## 1.9.0", "## 1.9.1", "## 1.9.2", "## 1.9.6", "## 1.9.7", "## 1.9.8", "## 1.9.9", "## 1.9.10", "## 2.0", "## 2.0.1", "## 2.0.2", "## 2.1", "## 2.3")))
 check("CI 增加 Bark / Webhook 回归步骤",
       "tests/test_bark_push.py" in read(".github/workflows/docker-publish.yml"))
 
@@ -396,8 +396,8 @@ models_py = read("app/schemas/models.py")
 sys_views = read("app/domains/system/views.py")
 modal_notify = read("templates/request/modal_notify.html")
 
-check("request_app.js 引用带版本号（浏览器缓存破坏，2.1）",
-      "request_app.js?v=2.1" in req_tpl)
+check("request_app.js 引用带版本号（浏览器缓存破坏，2.3）",
+      "request_app.js?v=2.3" in req_tpl)
 # 1.9.6 起通知设置不再由 Alpine 主组件承载（1.9.7 改为页面内原生弹窗）
 check("request_app.js 不再包含任何通知设置 state/方法（1.9.6 起移除）",
       all(x not in req_js for x in (
@@ -694,10 +694,10 @@ check("CI 接入安全契约与富文本净化回归",
       and "tests/test_sanitize_rich_html.py" in ci)
 check("等价性回归扩展第二批第 8 节",
       "== 8. 第二批" in read("tests/test_refactor_2_0_equivalence.py"))
-check("2.1 发版版本点已同步（历史 tag 不重推）",
-      'APP_VERSION = "2.1"' in read("app/shared/version.py")
-      and "IMAGE_TAG:-2.1" in read("docker-compose.yml")
-      and "request_app.js?v=2.1" in read("templates/request.html"))
+check("2.3 发版版本点已同步（历史 tag 不重推）",
+      'APP_VERSION = "2.3"' in read("app/shared/version.py")
+      and "IMAGE_TAG:-2.3" in read("docker-compose.yml")
+      and "request_app.js?v=2.3" in read("templates/request.html"))
 check("CHANGELOG 记录第二批零风险收尾", "第二批" in changelog)
 check("重构文档记录第二批决策与 B0 收口建议撤销",
       "## 7. 第二批零风险加固" in read("docs/REFACTOR_2.0.md")
@@ -716,8 +716,8 @@ check("主页只列功能与用法，不堆按版本罗列的修复史",
 check("主页指向 CHANGELOG / Releases 查看详细更新说明",
       "CHANGELOG.md" in readme and "GitHub Releases" in readme)
 check("主页版本锁定与实际 compose 一致",
-      "IMAGE_TAG:-2.1" in readme
-      and "ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-2.1}" in readme)
+      "IMAGE_TAG:-2.3" in readme
+      and "ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-2.3}" in readme)
 
 print("== 问题 19: 2.0 主线优化 B 批（公共逻辑抽离 / 性能 / 安全） ==")
 LIB_BASE = "app/bot/notification_bot/"
@@ -894,10 +894,10 @@ check("梯队 0 四项能力全部接入 CI verify",
           "tools/architecture_report.py .",
           "tools/bench_hotpaths.py .",
           "tools/run_all_checks.py .")))
-check("2.1 发版：版本点已同步到 2.1（历史 tag 不重推）",
-      'APP_VERSION = "2.1"' in read("app/shared/version.py")
-      and "IMAGE_TAG:-2.1" in read("docker-compose.yml")
-      and "request_app.js?v=2.1" in read("templates/request.html"))
+check("2.3 发版：版本点已同步到 2.3（历史 tag 不重推）",
+      'APP_VERSION = "2.3"' in read("app/shared/version.py")
+      and "IMAGE_TAG:-2.3" in read("docker-compose.yml")
+      and "request_app.js?v=2.3" in read("templates/request.html"))
 check("重构文档新增 8.6 节记录梯队 0 与零运行时改动口径",
       "### 8.6" in read("docs/REFACTOR_2.0.md")
       and "零运行时代码改动" in read("docs/REFACTOR_2.0.md"))
@@ -950,6 +950,111 @@ check("2.1 未把既有 execute() 改成 execute_many（事务边界语义不变
 check("重构文档新增 2.1 章节记录完成口径与事务边界约束",
       "## 9. 2.1" in read("docs/REFACTOR_2.0.md")
       and "事务边界" in read("docs/REFACTOR_2.0.md"))
+
+print("== 问题 23: 2.3 插件导入 / GitHub 发布窗口 / OpenAPI / 开发规范 ==")
+import hashlib as _hashlib23
+import json as _json23
+
+_p23_ui = read("templates/plugins.html")
+_p23_router = read("app/domains/plugins/router.py")
+_p23_init = read("app/plugins/__init__.py")
+_p23_main = read("app/main.py")
+_p23_ci = read(".github/workflows/docker-publish.yml")
+_p23_ext = read("app/plugins/external.py")
+_p23_gh = read("app/plugins/github_source.py")
+
+check("2.3 四个导入 / 注册表 / 卸载接口齐备",
+      all(s in _p23_router for s in (
+          '@router.get("/api/plugins/registry")',
+          '@router.post("/api/plugins/import")',
+          '@router.post("/api/plugins/import/github")',
+          '@router.delete("/api/plugins/{plugin_id}/install"',
+      )))
+check("2.3 导入后强制禁用、卸载清理启用状态",
+      'set_plugin_enabled(mf["id"], False)' in _p23_router
+      and "delete_plugin_state(plugin_id)" in _p23_router)
+
+# 用 AST 精确判定「导入不执行代码」：只看函数体内的真实调用
+_p23_fns = {
+    n.name: n for n in ast.parse(_p23_ext).body
+    if isinstance(n, ast.FunctionDef)
+}
+
+
+def _p23_has_call(node, attr=None, name=None):
+    for c in ast.walk(node):
+        if not isinstance(c, ast.Call):
+            continue
+        if attr and isinstance(c.func, ast.Attribute) and c.func.attr == attr:
+            return True
+        if name and isinstance(c.func, ast.Name) and c.func.id == name:
+            return True
+    return False
+
+
+check("2.3 install_from_zip 函数体内无任何模块执行（导入不执行代码）",
+      "install_from_zip" in _p23_fns
+      and not _p23_has_call(_p23_fns["install_from_zip"], attr="exec_module")
+      and not _p23_has_call(_p23_fns["install_from_zip"], name="load_external"))
+check("2.3 load_external 是唯一显式执行外部代码的入口",
+      "load_external" in _p23_fns
+      and _p23_has_call(_p23_fns["load_external"], attr="exec_module"))
+check("2.3 加载器仅在显式启用或已启用恢复时载入外部代码",
+      "external.load_external(plugin_id)" in _p23_init
+      and "discover_external_plugins()" in _p23_init
+      and "if pid not in enabled:" in _p23_init)
+
+check("2.3 GitHub 来源：服务端拼 URL + 白名单 + 逐跳重定向 + 禁代理 + sha256",
+      all(s in _p23_gh for s in (
+          "def registry_url(", "def asset_url(", "def assert_safe_url(",
+          "ALLOWED_HOSTS", "validate_repo(", "validate_asset_path(",
+          "MAX_REDIRECTS", "ProxyHandler({})", "sha256_bytes(data)",
+      )))
+_p23_index = _json23.loads(read("plugins/index.json"))
+check("2.3 官方索引 schema / repository 正确且条目强制 sha256",
+      _p23_index.get("schema") == 1
+      and _p23_index.get("repository") == "Abson2/emby-pulse"
+      and bool(_p23_index.get("plugins"))
+      and all(len(e.get("sha256", "")) == 64
+              and e.get("download", "").endswith(".zip")
+              for e in _p23_index["plugins"]))
+for _e23 in _p23_index.get("plugins", []):
+    _p23_asset = os.path.join(ROOT, _e23["download"])
+    _p23_digest = ""
+    if os.path.isfile(_p23_asset):
+        with open(_p23_asset, "rb") as _fp23:
+            _p23_digest = _hashlib23.sha256(_fp23.read()).hexdigest()
+    check("2.3 官方产物 sha256 与索引一致: " + _e23["id"],
+          bool(_p23_digest) and _p23_digest == _e23["sha256"])
+
+check("2.3 OpenAPI 显式启用且文档页默认仅管理员",
+      'openapi_url="/openapi.json"' in _p23_main
+      and "configure_openapi_docs(app)" in _p23_main
+      and "OPENAPI_PUBLIC" in read("app/core/openapi_guard.py")
+      and "is_admin_request" in read("app/core/openapi_guard.py")
+      and "OpenAPIGuardMiddleware" in read("app/bootstrap/middleware.py"))
+check("2.3 CI 容器冒烟验证 OpenAPI 匿名不可读",
+      "/openapi.json" in _p23_ci and "OpenAPI" in _p23_ci)
+check("2.3 插件中心前端具备导入 / 卸载入口且沿用单一 nonce 脚本",
+      'id="plugin-import-modal"' in _p23_ui
+      and "uninstallExternalPlugin(" in _p23_ui
+      and "loadGithubRegistry(" in _p23_ui
+      and _p23_ui.count("<script") == 1)
+check("2.3 远程索引字段统一转义、结果区用 textContent",
+      "epEsc(item.name)" in _p23_ui
+      and "epEsc(item.description)" in _p23_ui
+      and "box.textContent = text" in _p23_ui)
+check("2.3 开发规范 / AI 话术 / 示例插件 / 打包工具齐备",
+      all(os.path.isfile(os.path.join(ROOT, p)) for p in (
+          "docs/PLUGIN_DEVELOPMENT.md", "docs/PLUGIN_AI_PROMPT.md",
+          "examples/hello_plugin/manifest.json", "examples/hello_plugin/plugin.py",
+          "tools/pack_plugin.py", "plugins/README.md",
+      )))
+check("2.3 插件导入回归显式接入 CI verify",
+      "tests/test_plugin_import.py" in _p23_ci)
+check("2.3 打包工具自检可被全量网自动发现（无参数 rc=0）",
+      "def self_check()" in read("tools/pack_plugin.py")
+      and "PACK PLUGIN SELF CHECK PASSED" in read("tools/pack_plugin.py"))
 
 print("\npassed: %d  failed: %d" % (PASSED, len(FAILS)))
 if FAILS:

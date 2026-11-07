@@ -5,6 +5,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.csrf_middleware import CSRFMiddleware
 from app.core.auth_gate_middleware import AuthGateMiddleware
+from app.core.openapi_guard import OpenAPIGuardMiddleware
 from app.core.rate_limiter import RateLimitMiddleware
 from app.core.security_headers_middleware import SecurityHeadersMiddleware
 from app.core.session_middleware import DatabaseSessionMiddleware
@@ -51,6 +52,8 @@ def configure_middlewares(app) -> None:
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RateLimitMiddleware)
     app.add_middleware(CSRFMiddleware)
+    # OpenAPI 文档同样需要读取会话；与 AuthGate 一起放在 DatabaseSession 内层
+    app.add_middleware(OpenAPIGuardMiddleware)
     # 必须在 DatabaseSessionMiddleware 内层，才能读到 request.scope['session']
     app.add_middleware(AuthGateMiddleware)
     app.add_middleware(DatabaseSessionMiddleware)

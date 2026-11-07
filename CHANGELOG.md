@@ -1,5 +1,31 @@
 # 更新日志
 
+## 2.3
+
+插件可扩展能力版本：在 100% 保留既有功能（内置插件卡片、对外接口、配置键、数据库 schema 完全不变，内置卡片 DOM 与 v2.1 逐字节一致）的前提下，新增「插件中心导入」能力与 OpenAPI，并配套开发规范与 AI 话术指引。核心目标：为后续功能扩展降低开发成本——主体项目稳定后，重心转向插件开发即可，无需改动核心。
+
+### 1. 插件导入接口（默认禁用，导入 ≠ 执行代码）
+
+- 四个接口齐备：`POST /api/plugins/import`（本地 zip 上传）、`POST /api/plugins/import/github`（GitHub 拉取）、`GET /api/plugins/registry`（官方索引）、`DELETE /api/plugins/{id}/install`（卸载）。
+- **安全模型**：导入只做校验 + 落盘 + 写 `origin.json`，**不执行任何外部代码**；仅管理员在插件中心显式「启用」或已启用状态恢复时，`load_external()` 才 `import` 外部模块。普通用户不可见、不可访问外部插件。
+- 卸载清理启用状态与落盘文件，已 `import` 的外部模块不残留于 `sys.modules`。
+- 前端插件中心新增「导入插件」入口（local / github 双 tab + 官方索引列表 + 结果区），沿用既有单一 nonce `<script>`；远程字段统一 `epEsc()` 转义、结果区用 `textContent`，杜绝 XSS。
+
+### 2. GitHub 本项目插件发布窗口（供应链安全）
+
+- 服务端按 `repo + ref + 相对路径` 拼 URL，强制仓库白名单 + 域名白名单 + 逐跳重定向校验 + 禁代理；索引条目强制 `sha256`，下载后逐字节校验，任一不符即拒绝。
+- 官方索引 `plugins/index.json` 已收录示例插件 `hello_plugin`，`plugins/dist/hello_plugin-1.0.0.zip` 附带 sha256；未来主体项目完善后重点推进插件发布即可。
+
+### 3. OpenAPI 启用
+
+- `/openapi.json` / `/docs` / `/redoc` 默认仅管理员可访问（复用 `is_admin_request()`）；设置 `OPENAPI_PUBLIC=1` 可显式开放给匿名读取。CI 容器冒烟验证匿名不可读。
+
+### 4. 开发规范与 AI 话术指引
+
+- `docs/PLUGIN_DEVELOPMENT.md`：导入边界、manifest 字段表、PluginBase 运行时契约、API/鉴权/OpenAPI、配置表单、日志、安全边界、打包发布、排障、提交前自检清单。
+- `docs/PLUGIN_AI_PROMPT.md`：自包含【主 Prompt】+【需求填空模板】+【三步验收】+【常见反例】+【进阶话术】，供用户自用 AI 生成功能需求对应的插件。
+- `examples/hello_plugin`：最小可运行示例（配置 + 日志 + 只读 API）；`tools/pack_plugin.py`（纯标准库）打包并固化 sha256，自检可被全量网自动发现。
+
 ## 2.1
 
 可证等价的性能优化与治理能力完善版（v2.0.2 之后）。**零功能变化**：对外接口、原有输入输出行为、配置键、数据库 schema 均未改动，功能与 `2.0.2` / `1.9.10` 完全等价。本版把「完美」定义为可机器判定：等价（golden 前置采集 + 逐字节比对）、覆盖（全量校验网 0 失败 + 6 项架构门槛）、边界（排除项逐条写明理由）、发版（版本点 / tag / CI 可回溯）。完整决策与客观边界见 [docs/REFACTOR_2.0.md](docs/REFACTOR_2.0.md) 第 9 节。

@@ -45,14 +45,53 @@ def create_app() -> FastAPI:
     prepare_runtime()
     app = FastAPI(
         lifespan=build_lifespan(REQUEST_PORT),
+        title="EmbyPulse API",
+        description="EmbyPulse 开放接口与插件开发契约；/docs、/redoc、/openapi.json 默认仅管理员可访问。",
+        version=APP_VERSION,
+        # /docs 与 /redoc 由 configure_openapi_docs() 自定义提供，为内联脚本注入
+        # 每请求的 CSP nonce；openapi.json 由 FastAPI 自动生成。
         docs_url=None,
         redoc_url=None,
+        openapi_url="/openapi.json",
     )
     configure_exception_handlers(app)
     configure_middlewares(app)
     register_static_assets(app)
     register_routes(app)
+    configure_openapi_docs(app)
     return app
+
+
+def configure_openapi_docs(app: FastAPI) -> None:
+    """2.3：启用带 CSP nonce 的 Swagger UI / ReDoc。
+
+    FastAPI 内置文档页含无 nonce 的内联 <script>，会被本项目
+    ``script-src-elem`` 的 nonce 策略拦截；此处生成同一页面并注入 nonce。
+    """
+    from fastapi import Request
+    from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+    from fastapi.responses import HTMLResponse
+
+    def _with_nonce(response, request: Request):
+        nonce = getattr(request.state, "csp_nonce", "")
+        body = response.body.decode("utf-8").replace(
+            "<script>", '<script nonce="%s">' % nonce
+        )
+        return HTMLResponse(body, status_code=response.status_code)
+
+    @app.get("/docs", include_in_schema=False)
+    async def _swagger_ui(request: Request):
+        return _with_nonce(
+            get_swagger_ui_html(openapi_url=app.openapi_url, title=app.title + " - Swagger UI"),
+            request,
+        )
+
+    @app.get("/redoc", include_in_schema=False)
+    async def _redoc(request: Request):
+        return _with_nonce(
+            get_redoc_html(openapi_url=app.openapi_url, title=app.title + " - ReDoc"),
+            request,
+        )
 
 
 def configure_exception_handlers(app: FastAPI) -> None:

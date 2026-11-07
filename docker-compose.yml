@@ -6,10 +6,10 @@ name: embypulse-pro
 
 services:
   embypulse-pro:
-    # 版本锁定：默认拉取 2.1；可在 .env 设置 IMAGE_TAG 指定历史版本（如 1.9.10）或 latest
+    # 版本锁定：默认拉取 2.3；可在 .env 设置 IMAGE_TAG 指定历史版本（如 1.9.10）或 latest
     # 已发布版本：1.5.0 / 1.6.0 / 1.7.0 / 1.8.0 / 1.9.0 / 1.9.1 / 1.9.2 / 1.9.3 / 1.9.4 / 1.9.6 / 1.9.7 / 1.9.8 / 1.9.9 / 1.9.10 / 2.0 / 2.0.1 / 2.0.2 / 2.1（回退 1.5.0 请用 IMAGE_TAG=v1.5.0）
     # 2.0 起为架构优化与安全性审查版，2.0.1 为零风险补丁，2.0.2 为主线优化收口、2.1 为可证等价的性能优化版（均零功能变化）；功能与 1.9.10 等价，如需回退用 IMAGE_TAG=1.9.10
-    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-2.1}
+    image: ghcr.io/abson2/emby-pulse-hardened:${IMAGE_TAG:-2.3}
     container_name: embypulse-pro
     restart: unless-stopped
 

@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "repository": "Abson2/emby-pulse",
+  "description": "EmbyPulse 官方插件发布索引。新增插件请在本文件追加条目，并把 zip 产物放到 plugins/dist/，同时填写 sha256。",
+  "updated_at": "2026-11-07",
+  "plugins": [
+    {
+      "id": "hello_plugin",
+      "name": "示例插件",
+      "version": "1.0.0",
+      "description": "最小可运行示例：演示配置、日志与一个只读 API",
+      "download": "plugins/dist/hello_plugin-1.0.0.zip",
+      "sha256": "d79f77f388b81dca14228a62205aaa099ef83458c7aa1e619b08cbb2d36b2f55",
+      "min_app_version": "2.3"
+    }
+  ]
+}

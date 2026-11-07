@@ -157,3 +157,28 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
             status_code=401 if not logged_in else 403,
             content={"detail": "未登录" if not logged_in else "需要管理员权限"},
         )
+
+
+def is_admin_request(request) -> bool:
+    """管理员身份判定（与 AuthGateMiddleware 中的语义逐字一致）。
+
+    2.3 供 OpenAPIGuardMiddleware 复用，避免文档访问控制另写一套判定逻辑。
+    """
+    session = request.scope.get("session") or {}
+    admin_user = session.get("user")
+    if isinstance(admin_user, dict) and (
+        admin_user.get("auth_type") == "emby"
+        or admin_user.get("role") == "admin"
+    ):
+        return True
+
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        try:
+            from app.core.jwt_token import verify_api_token
+
+            payload = verify_api_token(auth_header[7:].strip())
+            return bool(payload and payload.get("is_admin"))
+        except Exception:
+            return False
+    return False

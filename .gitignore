@@ -37,6 +37,9 @@ __pycache__/
 *.py[cod]
 .venv/
 dist/
+# 例外：plugins/dist/ 是官方插件发布目录（含签名 zip 产物），必须入库
+!plugins/dist/
+!plugins/dist/**
 build/
 *.egg-info/
 
